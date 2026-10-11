@@ -1,5 +1,26 @@
 # Rà soát toàn dự án — bộ cài 1.0.4
 
+## Bổ sung chẩn đoán UI/tunnel sau 1.0.4 — 12/10/2026
+
+Người dùng báo vẫn lỗi hàng loạt checkpoint/LoRA/textual inversion. Link public
+không đọc được bằng công cụ ngoài runtime; chưa có nguyên văn lỗi/traceback mới,
+**không kết luận tunnel hỏng, không tuyên bố đã sửa UI/GPU**. Không tải lại model,
+Torch hoặc cài LoRA/embedding chỉ để làm mất thông báo.
+
+Chẩn đoán chỉ đọc thêm HTTP status local và tunnel (opt-in `--public-url`), Gradio
+client/Pydantic/FastAPI/Starlette metadata, số lượng tài nguyên phụ và stack lỗi
+cuối log (bỏ message/source/private data). URL public chỉ nhận origin HTTPS
+trycloudflare/gradio, không auth/query/path; không theo redirect. Không in body API
+UI. LoRA/TI count 0 là hợp lệ, HTTP error không được đánh đồng với count 0.
+
+**6 nhóm stdlib/HTTP giả lập đạt**, gồm URL guard, redirect/body privacy, chỉ GET,
+counts 0/ẩn tên, bounded-tail/stack privacy và invalid URL không I/O. Chạy lại
+installer **98**, checkpoint **16** (AST Neo), compat **10** (real FastAPI/Gradio)
+và notebook **13** đạt. Source compat/version bộ cài vẫn 1.0.4; đây là bổ sung
+bằng chứng chẩn đoán, không phải một bản vá runtime được xác nhận mới.
+
+---
+
 ## Bổ sung 1.0.4 — model đã đăng ký, nhưng dropdown trống
 
 Ngày **11/10/2026** · setup API **2**, thư viện prompt **1.1.0** giữ nguyên.

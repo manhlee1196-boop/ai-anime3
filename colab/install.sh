@@ -886,7 +886,7 @@ main() {
   if [[ "$MODE" == clean ]]; then stage_clean; return 0; fi
   if [[ "$MODE" == diagnostics ]]; then
     "$PY_BIN" "$REPO_DIR/colab/diagnostics.py" --repo-dir "$REPO_DIR" --forge-dir "$FORGE_DIR" \
-      --model-dir "$MODEL_DIR" --model-file "$MODEL_FILE" --state-dir "$STATE_DIR" --port "$PORT"
+      --model-dir "$MODEL_DIR" --model-file "$MODEL_FILE" --state-dir "$STATE_DIR" --port "$PORT" --runtime-dir "$RUNTIME_DIR"
     return 0
   fi
   if [[ "$MODE" == doctor ]]; then

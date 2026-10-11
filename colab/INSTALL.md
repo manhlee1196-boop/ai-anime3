@@ -246,6 +246,40 @@ choices/value mà browser vẫn trống, cần xem callback/UI: thử nút refre
 Checkpoint, ghi lại nó có hiện model không và gửi traceback gắn với thao tác đó
 trong `forge.log` sau khi che thông tin riêng. Không gửi toàn bộ config/log/token.
 
+### Link mở được nhưng báo lỗi hàng loạt Checkpoint / LoRA / textual inversion
+
+**Đừng tải thêm tài nguyên để che lỗi.** LoRA và textual inversion là tùy chọn;
+API trả danh sách rỗng (HTTP 200, count 0) chỉ có nghĩa chưa cài tài nguyên phụ.
+WAI v17 FP16 không bắt buộc LoRA/textual inversion riêng. HTTP 500/404 hoặc lỗi
+callback đỏ lại là vấn đề cần xác định; không được coi mọi lỗi là bình thường.
+
+Nếu UI vẫn không dùng được sau 1.0.4, **chụp thông báo lỗi nguyên văn**. Mở trang
+Forge và bấm refresh Checkpoint một lần để có traceback mới, rồi chạy một ô sau
+(thay link nếu tunnel đã đổi). Không restart/cài Torch/tải model/sinh ảnh:
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+python3 /content/ai-anime3/colab/diagnostics.py \
+  --public-url "https://YOUR-LINK.trycloudflare.com/"
+```
+
+- `ui_transport_local/public`: HTTP status `/`, `/config`, `/info?all_endpoints=True`,
+  không in response body/header/auth/prompt hoặc theo redirect. Nếu `/info` lỗi dù
+  `/sd-models` đạt thì lỗi API giao diện vẫn tồn tại, chưa thể coi Forge sử dụng được.
+- `venv`: thêm gradio-client/Pydantic/pydantic-core/FastAPI/Starlette để đối chiếu
+  dependency; **không tự hạ/nâng phiên bản dựa trên tên lỗi chung**.
+- `optional_assets`: chỉ đếm LoRA/loaded/skipped embeddings, không in tên riêng.
+- `forge_log_errors`: tối đa 6 traceback trong 256 KiB cuối log, chỉ loại exception,
+  stack và signature có danh mục; bỏ message/source/token/prompt. Không có traceback
+  không chứng minh UI không lỗi: lỗi JavaScript có thể chỉ có ở trình duyệt.
+
+Gửi báo cáo và ảnh thông báo lỗi. Link không mở được từ một công cụ bên ngoài
+không đủ chứng minh tunnel hỏng; so sánh local/public từ chính runtime Colab.
+Nếu dùng đường dẫn/port khác mặc định, truyền `--runtime-dir`, `--forge-dir`,
+`--repo-dir`, `--model-dir`, `--state-dir`, `--port` tương ứng.
+
 ### Không nhận Checkpoint / ô Checkpoint trống dù file đã tải
 
 **Trường hợp cấu hình thiếu key được sửa ở 1.0.2 (giữ trong 1.0.4).** Forge Neo còn lưu checkpoint riêng theo preset:

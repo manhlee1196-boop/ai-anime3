@@ -36,6 +36,7 @@ colab/
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
+  tests/test_ui_diagnostics.py    6 nhóm HTTP/log chỉ đọc, không dump prompt/auth
   tests/test_forge_compat.py      10 nhóm compat trên Neo/FastAPI/Gradio (CPU)
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)

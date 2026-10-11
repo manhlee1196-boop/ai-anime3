@@ -10,8 +10,12 @@ import argparse
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -74,7 +78,100 @@ def checkpoint_ui_summary(config):
     return {"tim_thay_dropdown": bool(checkpoints), "checkpoints": checkpoints}
 
 
-def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port):
+def validate_public_url(value):
+    """Chỉ nhận origin tunnel, không gửi request tới URL chứa auth/query/path."""
+    if not value:
+        return ""
+    parts = urlsplit(value)
+    if (parts.scheme != "https" or parts.username is not None or parts.password is not None
+            or parts.query or parts.fragment or parts.path not in ("", "/")
+            or not re.fullmatch(r"[a-z0-9-]+\.(trycloudflare\.com|gradio\.live)", parts.netloc)):
+        raise ValueError("Chỉ nhận link https trycloudflare.com/gradio.live không chứa auth/query/path.")
+    return "https://" + parts.netloc
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # chỉ ghi status; không theo URL redirect có thể chứa thông tin riêng
+
+
+def http_status(base, endpoint):
+    """Không in response body/header/request hay gọi sinh ảnh."""
+    try:
+        opener = urllib.request.build_opener(_NoRedirect)
+        request = urllib.request.Request(base.rstrip("/") + endpoint, headers={"User-Agent": "wai-readonly-ui-diagnostics"})
+        with opener.open(request, timeout=6) as response:
+            return {"http": response.status}
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        exc.close()
+        return {"http": code}
+    except (OSError, ValueError) as exc:
+        return {"loi": type(exc).__name__}  # không dump URL/body/secret trong exception
+
+
+def ui_transport(base):
+    return {path: http_status(base, path) for path in ("/", "/config", "/info?all_endpoints=True")}
+
+
+def traceback_summary(path):
+    """Đọc tối đa 256 KiB cuối log; chỉ xuất loại exception/stack, bỏ source/message."""
+    path = Path(path)
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - 256 * 1024))
+            text = stream.read(256 * 1024).decode("utf-8", errors="replace")
+    except OSError:
+        return {"co_log": False, "tracebacks": []}
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+    summaries = []
+    for block in text.split("Traceback (most recent call last):")[1:][-6:]:
+        frames = []
+        for filename, line, function in re.findall(r'File "([^"\n]+)", line (\d+), in ([^\n]+)', block):
+            frames.append({"file": "/".join(filename.replace("\\", "/").split("/")[-2:]),
+                           "line": int(line), "function": function.strip()[:100]})
+        error = re.search(r"^((?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)|Error|Exception)):(.*)$", block, re.MULTILINE)
+        signature = "khong_xac_dinh_message_da_an"
+        if error:
+            message = error.group(2).lower()
+            if "'bool'" in message and "not iterable" in message:
+                signature = "schema_bool_not_iterable"
+            elif "out of memory" in message:
+                signature = "out_of_memory"
+            elif "no kernel image" in message:
+                signature = "cuda_kernel_image_missing"
+            elif "no checkpoints found" in message or "no checkpoint found" in message:
+                signature = "checkpoint_not_found"
+            elif "port" in message and "string" in message:
+                signature = "port_schema_type"
+        summaries.append({"exception_type": error.group(1) if error else "chua_co_dong_exception_trong_tail",
+                          "signature": signature, "frames": frames[-8:]})
+    return {"co_log": True, "tracebacks": summaries,
+            "luu_y": "Không in message/source/prompt/token. Lỗi frontend JavaScript có thể không nằm trong log này."}
+
+
+def optional_assets(base):
+    results = {"luu_y": "LoRA và textual inversion là tùy chọn; số lượng 0 không chứng minh WAI bị thiếu."}
+    try:
+        data = api_json(base, "/sdapi/v1/loras", timeout=6)
+        results["loras"] = {"count": len(data)} if isinstance(data, list) else {"loi": "JSON sai kiểu"}
+    except CheckpointError as exc:
+        results["loras"] = {"loi": str(exc)}
+    try:
+        data = api_json(base, "/sdapi/v1/embeddings", timeout=6)
+        if not isinstance(data, dict) or not all(isinstance(data.get(k), dict) for k in ("loaded", "skipped")):
+            results["textual_inversion"] = {"loi": "JSON sai kiểu"}
+        else:
+            results["textual_inversion"] = {k + "_count": len(data[k]) for k in ("loaded", "skipped")}
+    except CheckpointError as exc:
+        results["textual_inversion"] = {"loi": str(exc)}
+    return results
+
+
+def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port, runtime_dir=None, public_url=""):
+
+    public_url = validate_public_url(public_url)  # trước mọi I/O/network nếu CLI URL không hợp lệ
     repo, forge, models, state = map(Path, (repo_dir, forge_dir, model_dir, state_dir))
     cached = _json_file(state / "model.json")
     filename = model_file or cached.get("file") or "waiIllustriousSDXL_v170.safetensors"
@@ -125,7 +222,7 @@ def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port):
     venv = forge / "venv/bin/python"
     version_code = '''import importlib.metadata as m,json,sys
 packages={}
-for name in ('torch','torchvision','gradio','safetensors','huggingface-hub'):
+for name in ('torch','torchvision','gradio','gradio-client','pydantic','pydantic-core','fastapi','starlette','safetensors','huggingface-hub'):
     try: packages[name]=m.version(name)
     except m.PackageNotFoundError: packages[name]='chưa cài'
 print(json.dumps({'python':sys.version,'packages':packages}))'''
@@ -156,6 +253,12 @@ print(json.dumps({'python':sys.version,'packages':packages}))'''
     except CheckpointError as exc:
         api["checkpoint_ui_initial_config"] = {"loi": str(exc)}
     report["api"] = api
+    report["ui_transport_local"] = ui_transport(base)
+    report["optional_assets"] = optional_assets(base)
+    if public_url:
+        report["ui_transport_public"] = ui_transport(public_url)
+    if runtime_dir is not None:
+        report["forge_log_errors"] = traceback_summary(Path(runtime_dir) / "forge.log")
     return report
 
 
@@ -167,8 +270,15 @@ def main():
     parser.add_argument("--model-file", default="")
     parser.add_argument("--state-dir", default="/content/.wai_state")
     parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--runtime-dir", default="/content", help="Thư mục chứa forge.log; chỉ lấy stack đã lọc")
+    parser.add_argument("--public-url", default="", help="Tùy chọn: so sánh status tunnel với local; không in body/auth/prompt")
     args = parser.parse_args()
-    report = collect(args.repo_dir, args.forge_dir, args.model_dir, args.model_file, args.state_dir, args.port)
+    try:
+        public_url = validate_public_url(args.public_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+    report = collect(args.repo_dir, args.forge_dir, args.model_dir, args.model_file, args.state_dir, args.port,
+                     runtime_dir=args.runtime_dir, public_url=public_url)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     for name in ("CIVITAI_TOKEN", "GITHUB_TOKEN", "HF_TOKEN", "FORGE_API_AUTH"):
         token = os.environ.get(name)
