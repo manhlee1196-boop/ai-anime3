@@ -7,3 +7,10 @@ tools/source_merged_2026-10-01.csv
 
 # danh sách tag trung gian do build sinh ra
 tools/work/
+
+# môi trường ảo dùng để thử app Gradio tại chỗ
+.venv/
+
+# hệ thống Colab: file sinh ra khi chạy (xem colab/README.md)
+colab/assets/
+colab/outputs/

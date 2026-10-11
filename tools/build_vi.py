@@ -38,6 +38,7 @@ from vi_extra import (  # noqa: E402
 from vi_extra2 import VI_EXTRA_E621_2, VI_EXTRA_GENERAL_2  # noqa: E402
 from vi_extra3 import EMOTICONS, VI_EXTRA_E621_3, VI_EXTRA_GENERAL_3  # noqa: E402
 from vi_extra4 import VI_EXTRA_SPECIES_2  # noqa: E402
+from vi_extra5 import VI_EXTRA_E621_5, VI_EXTRA_GENERAL_5  # noqa: E402
 
 def _merge(*dicts):
     """Gộp nhiều từ điển; từ điển đứng sau ưu tiên hơn."""
@@ -50,10 +51,12 @@ def _merge(*dicts):
 # category -> từ điển thủ công
 BY_CAT = {
     "0": _merge(VI_GENERAL, VI_EXTRA_GENERAL, VI_EXTRA_GENERAL_2,
-               VI_EXTRA_GENERAL_3, EMOTICONS),   # General (danbooru)
+               VI_EXTRA_GENERAL_3, EMOTICONS,
+               VI_EXTRA_GENERAL_5),               # General (danbooru)
     "5": VI_META,                                   # Meta (danbooru)
     "7": _merge(VI_E621, VI_EXTRA_E621, VI_EXTRA_E621_2,
-               VI_EXTRA_E621_3, EMOTICONS),      # General (e621)
+               VI_EXTRA_E621_3, EMOTICONS,
+               VI_EXTRA_E621_5),                  # General (e621)
     "12": _merge(VI_SPECIES, VI_EXTRA_SPECIES, VI_EXTRA_SPECIES_2),  # Species (e621)
     "14": VI_META,                                  # Meta (e621)
     "15": VI_LORE,                                  # Lore (e621)
@@ -67,7 +70,8 @@ for d in [VI_GENERAL, VI_E621, VI_META, VI_SPECIES, VI_LORE,
           VI_EXTRA_GENERAL, VI_EXTRA_E621, VI_EXTRA_SPECIES,
           VI_EXTRA_GENERAL_2, VI_EXTRA_E621_2,
           VI_EXTRA_GENERAL_3, VI_EXTRA_E621_3, EMOTICONS,
-          VI_EXTRA_SPECIES_2, VI_EXTRA_STEMS]:
+          VI_EXTRA_SPECIES_2, VI_EXTRA_STEMS,
+          VI_EXTRA_GENERAL_5, VI_EXTRA_E621_5]:
     for k, v in d.items():
         MERGED.setdefault(k, v)
 

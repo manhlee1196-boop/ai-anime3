@@ -5,6 +5,25 @@ Repo này chứa danh sách tag hợp nhất **Danbooru + e621** (nguồn:
 [DraconicDragon/dbr-e621-lists-archive](https://github.com/DraconicDragon/dbr-e621-lists-archive))
 ở 4 định dạng, kèm toàn bộ công cụ để tự sinh lại chúng.
 
+## 🎨 Hệ thống tạo ảnh WAI-Illustrious v17 trên Colab
+
+Thư mục [`colab/`](colab/) chứa trọn bộ hệ thống sinh ảnh chạy trên Google Colab, lấy
+**chính kho tag đã dịch của repo này làm bộ nhắc prompt**:
+
+| Thành phần | Nội dung |
+|---|---|
+| Notebook | [`colab/WAI_Illustrious_v17_vi.ipynb`](colab/WAI_Illustrious_v17_vi.ipynb) — mở trong Colab, bật GPU T4, chạy lần lượt 8 ô |
+| Model | WAI-illustrious-SDXL **v17.0** (SDXL 6,5 GB, VAE tích hợp sẵn), tải từ mirror HuggingFace không cần token, có kiểm SHA256 |
+| Backend | **Forge Neo** (`Haoming02/sd-webui-forge-classic` nhánh `neo`) — đúng phần mềm thẻ model khuyến nghị |
+| Bộ nhắc | Gõ tiếng Việt ngay trong ô prompt (tagcomplete đã cấu hình sẵn), hoặc dùng tab **“Prompt VN”** để tra tag, xếp thứ tự prompt chuẩn Illustrious/WAI, sinh negative và sinh ảnh |
+
+Ba cách dùng kho prompt: **tagcomplete** (gõ `áo dài`, `tóc dài` ra tag tiếng Anh),
+**tab Prompt VN** (tra cứu + gom 18 nhóm + dựng prompt có cấu trúc), và
+**gọi API từ notebook** (sinh ảnh hàng loạt). App Gradio cũng chạy độc lập được ngoài
+Colab: `python3 colab/prompt_builder.py --demo`.
+
+Chi tiết đầy đủ, tham số khuyến nghị và bảng xử lý sự cố: [`colab/README.md`](colab/README.md).
+
 ## Các file đầu ra
 
 | File | Nội dung | Dùng để làm gì |
@@ -12,7 +31,7 @@ Repo này chứa danh sách tag hợp nhất **Danbooru + e621** (nguồn:
 | `danbooru_e621.csv` | **Bản gốc**, byte-identical với file nguồn | Nạp vào sd-webui-tagcomplete để autocomplete ra tag tiếng Anh thật (prompt đúng chuẩn) |
 | `danbooru_e621_nounderscore.csv` | Bản gốc nhưng **đã bỏ dấu `_`** (thay bằng khoảng trắng) ở cả cột tag lẫn cột aliases | Đọc/tìm kiếm dễ hơn, hoặc dùng cho công cụ hiển thị tag dạng có khoảng trắng |
 | `danbooru_e621_vi.csv` | **Bản tiếng Việt**, vẫn 4 cột `tag,category,post_count,aliases`; cột aliases giữ nguyên tag tiếng Anh để tra ngược | Tra cứu ý nghĩa tag bằng tiếng Việt |
-| `danbooru_e621_vi_translation.csv` | 2 cột `<English tag>,<Translation>` — **45.443 dòng**, chỉ gồm tag có bản dịch thật | Nạp vào **Translation filename** của sd-webui-tagcomplete: gõ/tìm bằng tiếng Việt vẫn ra tag tiếng Anh, và thấy nghĩa tiếng Việt trong danh sách gợi ý |
+| `danbooru_e621_vi_translation.csv` | 2 cột `<English tag>,<Translation>` — **45.513 dòng**, chỉ gồm tag có bản dịch thật | Nạp vào **Translation filename** của sd-webui-tagcomplete: gõ/tìm bằng tiếng Việt vẫn ra tag tiếng Anh, và thấy nghĩa tiếng Việt trong danh sách gợi ý |
 
 Ba file đầu: UTF-8, xuống dòng LF, **349.714 dòng**, không có dòng tiêu đề.
 
@@ -66,9 +85,9 @@ Category 2, 6, 13 không hợp lệ nên không xuất hiện trong file.
 
 | Category | Số tag | Từ điển | Quy tắc mẫu | Ghép đệ quy | Chưa dịch | Độ phủ (theo post_count) |
 |---|---|---|---|---|---|---|
-| 0 General (dbr) | 41.914 | 3.353 | 3.926 | 16.515 | 18.120 | **97,57%** |
+| 0 General (dbr) | 41.914 | 3.379 | 3.935 | 16.528 | 18.072 | **97,59%** |
 | 5 Meta (dbr) | 605 | 392 | 133 | 23 | 57 | **99,74%** |
-| 7 General (e621) | 34.518 | 1.375 | 5.045 | 14.714 | 13.384 | **97,09%** |
+| 7 General (e621) | 34.518 | 1.382 | 5.045 | 14.718 | 13.373 | **97,09%** |
 | 12 Species (e621) | 5.647 | 869 | 427 | 928 | 3.423 | **98,63%** |
 | 14 Meta (e621) | 393 | 312 | 72 | 3 | 6 | **99,85%** |
 | 15 Lore (e621) | 110 | 44 | 66 | 0 | 0 | **100%** |
@@ -77,7 +96,7 @@ Category 2, 6, 13 không hợp lệ nên không xuất hiện trong file.
 Tag chưa dịch được giữ nguyên tiếng Anh (đã bỏ `_`). Đó gần như toàn bộ là tag rất hiếm
 (post_count thấp, đuôi dài của phân phối) hoặc tên riêng của loài/nhân vật trong từng series.
 
-Tổng cộng **45.443 tag** có bản dịch tiếng Việt thật; phần còn lại là tên riêng
+Tổng cộng **45.513 tag** có bản dịch tiếng Việt thật; phần còn lại là tên riêng
 (artist, copyright, character, 266.527 tag) vốn không dịch.
 
 ## Cách bản dịch được tạo
@@ -153,9 +172,19 @@ tools/
   source_merged_2026-10-01.csv       file nguồn (gitignored)
   dict/
     vi_general.py  vi_e621.py  vi_meta.py   vi_species.py
-    vi_extra.py    vi_extra2.py vi_extra3.py vi_extra4.py
+    vi_extra.py    vi_extra2.py vi_extra3.py vi_extra4.py vi_extra5.py
     vi_morphemes.py vi_vocab.py
   work/                              danh sách tag trung gian (gitignored)
+colab/                               hệ thống tạo ảnh WAI-Illustrious v17 trên Colab
+  WAI_Illustrious_v17_vi.ipynb       notebook chính (mở trong Colab)
+  setup_forge.sh                     script cài đặt theo từng stage
+  prompt_builder.py                  app Gradio độc lập
+  make_notebook.py                   script sinh file .ipynb
+  make_tagcomplete_assets.py         sinh tag hệ thống + bản dịch gộp cho tagcomplete
+  prompt_lib/                        thư viện lõi (index / groups / builder / system_tags)
+  extension/vi-prompt-builder/       extension Forge: tab "Prompt VN"
+  tests/test_prompt_lib.py           bộ kiểm tra hồi quy
+  assets/  outputs/                  file sinh ra khi chạy (gitignored)
 ```
 
 ## Ghi chú về quy ước tên file nguồn
