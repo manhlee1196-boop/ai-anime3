@@ -24,6 +24,7 @@ sys.path.insert(0, BASE)
 sys.path.insert(0, os.path.join(BASE, "dict"))
 
 from vi_rules import translate_by_rules  # noqa: E402
+from vi_compose import Composer  # noqa: E402
 from vi_general import VI_GENERAL  # noqa: E402
 from vi_e621 import VI_E621  # noqa: E402
 from vi_meta import VI_META  # noqa: E402
@@ -35,6 +36,8 @@ from vi_extra import (  # noqa: E402
     VI_EXTRA_STEMS,
 )
 from vi_extra2 import VI_EXTRA_E621_2, VI_EXTRA_GENERAL_2  # noqa: E402
+from vi_extra3 import EMOTICONS, VI_EXTRA_E621_3, VI_EXTRA_GENERAL_3  # noqa: E402
+from vi_extra4 import VI_EXTRA_SPECIES_2  # noqa: E402
 
 def _merge(*dicts):
     """Gộp nhiều từ điển; từ điển đứng sau ưu tiên hơn."""
@@ -46,10 +49,12 @@ def _merge(*dicts):
 
 # category -> từ điển thủ công
 BY_CAT = {
-    "0": _merge(VI_GENERAL, VI_EXTRA_GENERAL, VI_EXTRA_GENERAL_2),   # General (danbooru)
+    "0": _merge(VI_GENERAL, VI_EXTRA_GENERAL, VI_EXTRA_GENERAL_2,
+               VI_EXTRA_GENERAL_3, EMOTICONS),   # General (danbooru)
     "5": VI_META,                                   # Meta (danbooru)
-    "7": _merge(VI_E621, VI_EXTRA_E621, VI_EXTRA_E621_2),         # General (e621)
-    "12": _merge(VI_SPECIES, VI_EXTRA_SPECIES),     # Species (e621)
+    "7": _merge(VI_E621, VI_EXTRA_E621, VI_EXTRA_E621_2,
+               VI_EXTRA_E621_3, EMOTICONS),      # General (e621)
+    "12": _merge(VI_SPECIES, VI_EXTRA_SPECIES, VI_EXTRA_SPECIES_2),  # Species (e621)
     "14": VI_META,                                  # Meta (e621)
     "15": VI_LORE,                                  # Lore (e621)
 }
@@ -60,7 +65,9 @@ TRANSLATABLE = set(BY_CAT)
 MERGED = {}
 for d in [VI_GENERAL, VI_E621, VI_META, VI_SPECIES, VI_LORE,
           VI_EXTRA_GENERAL, VI_EXTRA_E621, VI_EXTRA_SPECIES,
-          VI_EXTRA_GENERAL_2, VI_EXTRA_E621_2, VI_EXTRA_STEMS]:
+          VI_EXTRA_GENERAL_2, VI_EXTRA_E621_2,
+          VI_EXTRA_GENERAL_3, VI_EXTRA_E621_3, EMOTICONS,
+          VI_EXTRA_SPECIES_2, VI_EXTRA_STEMS]:
     for k, v in d.items():
         MERGED.setdefault(k, v)
 
@@ -70,8 +77,21 @@ OUT_VI = os.path.join(ROOT, "danbooru_e621_vi.csv")
 OUT_TRANS = os.path.join(ROOT, "danbooru_e621_vi_translation.csv")
 
 
+# Emoticon: dấu `_` là nét vẽ của khuôn mặt chứ không phải dấu ngăn cách từ,
+# nên GIỮ NGUYÊN (`^_^` mà đổi thành `^ ^` thì hỏng tag).
+# Các tag dạng handle/tên riêng có `_` (h&k_g11, k_98, u2_(5798239)...) vẫn bỏ `_`.
+EMOTICON_KEEP = {k for k in EMOTICONS if "_" in k} | {
+    ">_o", "u_u", "<_<", ">_<;", "o_x", "o_0", "o_<", "<|>_<|>", "<o>_<o>",
+    "\u0ca0_\u0ca0", "m0_0m_c", "0o0_w_o0", "19_0v0", "a-o_a", "t_t", "6_9",
+    "+_-", "3_3", "._.", "t_k", "u_o", "o_3", "x_3", "^o^", "o_o;", "-_-",
+}
+EMOTICON_KEEP = {k.encode().decode("unicode_escape") for k in EMOTICON_KEEP}
+
+
 def spaced(tag):
-    """Bỏ dấu gạch dưới, giữ nguyên ngoặc/gạch chéo/gạch nối/emoticon."""
+    """Bỏ dấu gạch dưới, giữ nguyên ngoặc/gạch chéo/gạch nối và emoticon."""
+    if tag in EMOTICON_KEEP:
+        return tag
     return tag.replace("_", " ")
 
 
@@ -81,8 +101,12 @@ def spaced_aliases(aliases):
     return [a.replace("_", " ") for a in aliases]
 
 
+# bộ ghép đệ quy cho tag tổ hợp chưa có trong từ điển (dùng chung MERGED)
+COMPOSER = Composer(MERGED.get)
+
+
 def translate(tag, cat):
-    """Trả về (bản dịch tiếng Việt, nguồn dịch)."""
+    """Trả về (bản dịch tiếng Việt, nguồn dịch: dict | rule | compose | none)."""
     d = BY_CAT.get(cat)
     if d is not None:
         v = d.get(tag)
@@ -94,6 +118,9 @@ def translate(tag, cat):
     v = translate_by_rules(tag, MERGED.get)
     if v:
         return v, "rule"
+    v = COMPOSER.translate(tag)
+    if v:
+        return v, "compose"
     return None, "none"
 
 
@@ -158,15 +185,18 @@ def main():
     print("Đã ghi {} dòng vào 4 file CSV.".format(rows_out))
     print("File translation: {} dòng có bản dịch tiếng Việt thật.".format(trans_rows))
     print("\nThống kê bản dịch (phủ = % tổng post_count của category):")
-    print("  {:>5} {:>8} {:>10} {:>8} {:>9} {:>8}".format(
-        "cat", "số tag", "từ điển", "quy tắc", "chưa dịch", "phủ"))
+    print("  {:>5} {:>8} {:>9} {:>8} {:>7} {:>9} {:>8}".format(
+        "cat", "số tag", "từ điển", "quy tắc", "tổ hợp", "chưa dịch", "phủ"))
     for c in ["0", "5", "7", "12", "14", "15"]:
-        d, r, n = stats["cat_%s_dict" % c], stats["cat_%s_rule" % c], stats["cat_%s_none" % c]
-        tot = d + r + n
+        d = stats["cat_%s_dict" % c]
+        r = stats["cat_%s_rule" % c]
+        p = stats["cat_%s_compose" % c]
+        n = stats["cat_%s_none" % c]
+        tot = d + r + p + n
         wt = counts["cat_%s_total" % c]
-        wc = counts["cat_%s_dict" % c] + counts["cat_%s_rule" % c]
+        wc = wt - counts["cat_%s_none" % c]
         pct = wc * 100.0 / wt if wt else 0
-        print("  {:>5} {:>8} {:>10} {:>8} {:>9} {:>7.2f}%".format(c, tot, d, r, n, pct))
+        print("  {:>5} {:>8} {:>9} {:>8} {:>7} {:>9} {:>7.2f}%".format(c, tot, d, r, p, n, pct))
     print("  tên riêng (chỉ bỏ dấu gạch dưới): {} tag".format(stats["proper_name"]))
 
 

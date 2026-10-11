@@ -170,7 +170,7 @@ VI_EXTRA_E621_2 = {
     "glistening_thighs": "đùi bóng loáng",
     "male_prey": "con mồi là nam",
     "hyper_muscles": "cơ bắp phóng đại",
-    "egyptian": "phong cách Ai Cập",
+    "egyptian": "Ai Cập",
     "iris": "mống mắt",
     "speedo": "quần bơi speedo",
     "mouth_shot": "xuất tinh vào miệng",

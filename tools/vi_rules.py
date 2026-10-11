@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "dict"))
 
+from vi_compose import _join_dedup as join_dedup  # noqa: E402
 from vi_morphemes import (  # noqa: E402
     COLORS,
     LANGUAGES,
@@ -49,6 +50,13 @@ RE_ON = re.compile(r"^(.+)_on_(.+)$")
 RE_PEN = re.compile(r"^(.+)_penetrating_(.+)$")
 RE_HUMANOID = re.compile(r"^(.+)_humanoid$")
 RE_HUMANOID2 = re.compile(r"^humanoid_(.+)$")
+RE_TAUR = re.compile(r"^(.+)_taur$")
+RE_AMBIENT = re.compile(r"^ambient_(.+)$")
+RE_PRED = re.compile(r"^(.+)_pred$")
+RE_PREY = re.compile(r"^(.+)_prey$")
+RE_TRUE = re.compile(r"^true_(.+)$")
+RE_DOMESTIC = re.compile(r"^domestic_(.+)$")
+RE_FURRED = re.compile(r"^furred_(.+)$")
 RE_AND = re.compile(r"^(.+)_and_(.+)$")
 RE_OF = re.compile(r"^(.+)_of_(.+)$")
 
@@ -223,7 +231,8 @@ def translate_by_rules(tag, lookup):
     # ---- cặp màu: `red_and_white` --------------------------------------------
     m = RE_AND_COLORS.match(tag)
     if m and m.group(1) in COLORS and m.group(2) in COLORS:
-        return "{} và {}".format(COLORS[m.group(1)], COLORS[m.group(2)])
+        return "{} và {}".format(COLORS[m.group(1)].replace("màu ", ""),
+                                 COLORS[m.group(2)].replace("màu ", ""))
 
     # ---- cặp giới tính / loài: `male/female`, `gynomorph/male` ----------------
     m = RE_SLASH.match(tag)
@@ -256,27 +265,65 @@ def translate_by_rules(tag, lookup):
     if m:
         v = lookup(m.group(1))
         if v:
-            return "hình người {}".format(v)
+            return "{} hình người".format(v)
+
+    # ---- `X_taur`, `ambient_X`, `true_X`, `domestic_X`, `furred_X` (Species) --
+    m = RE_TAUR.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} dạng nhân mã".format(v)
+    m = RE_AMBIENT.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} trong bối cảnh".format(v)
+    m = RE_PRED.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} là kẻ ăn thịt".format(v)
+    m = RE_PREY.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} là con mồi".format(v)
+    m = RE_TRUE.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} thật sự".format(v)
+    m = RE_DOMESTIC.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} nhà".format(v)
+    m = RE_FURRED.match(tag)
+    if m:
+        v = lookup(m.group(1))
+        if v:
+            return "{} có lông".format(v)
 
     # ---- màu + danh từ: `red_eyes` -------------------------------------------
     for color in _COLORS_BY_LEN:
+        cv = COLORS[color]
+        # một số màu đã mang sẵn chữ "màu" (màu neon, màu pastel) -> không thêm nữa
+        tail = cv if cv.startswith("màu") else "màu " + cv
         if tag.startswith(color + "_"):
-            rest = tag[len(color) + 1:]
-            v = lookup(rest)
+            v = lookup(tag[len(color) + 1:])
             if v:
-                return "{} màu {}".format(v, COLORS[color])
+                return join_dedup(v, tail)
         if tag.endswith("_" + color):
-            head = tag[: -(len(color) + 1)]
-            v = lookup(head)
+            v = lookup(tag[: -(len(color) + 1)])
             if v:
-                return "{} màu {}".format(v, COLORS[color])
+                return join_dedup(v, tail)
 
     # ---- số đếm + danh từ: `two_boys` ----------------------------------------
     for num in _NUMBERS_BY_LEN:
         if tag.startswith(num + "_"):
             v = lookup(tag[len(num) + 1:])
             if v:
-                return "{} {}".format(NUMBERS[num], v)
+                return join_dedup(NUMBERS[num], v)
 
     # ---- tính từ + danh từ: `long_hair`, `huge_breasts` ----------------------
     for size in _SIZES_BY_LEN:
@@ -284,6 +331,6 @@ def translate_by_rules(tag, lookup):
             v = lookup(tag[len(size) + 1:])
             if v:
                 # tiếng Việt đặt tính từ sau danh từ
-                return "{} {}".format(v, SIZES[size])
+                return join_dedup(v, SIZES[size])
 
     return None
