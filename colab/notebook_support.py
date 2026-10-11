@@ -1,6 +1,6 @@
 """Nội dung dùng chung khi sinh notebook; các ô đã xuất không cần import file này."""
 
-MIN_INSTALLER_VERSION = "1.0.4"
+MIN_INSTALLER_VERSION = "1.0.5"
 
 BOOTSTRAP_SOURCE = r'''import re
 import subprocess
@@ -33,7 +33,7 @@ def download_installer(dest, branch, env):
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".sh.tmp")
     for url in (raw, api):
-        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.4"}
+        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.5"}
         if env.get("GITHUB_TOKEN"):
             headers["Authorization"] = f"Bearer {env['GITHUB_TOKEN']}"
         try:
@@ -51,7 +51,7 @@ def download_installer(dest, branch, env):
         finally:
             if tmp.exists():
                 tmp.unlink()  # chỉ file tạm do ô này tạo; không đụng model/repo/ảnh
-    # Mất mạng chỉ dùng cache nếu phiên bản và cú pháp đều hợp lệ. Không chạy cache 1.0.3 chưa sửa API/dropdown.
+    # Mất mạng chỉ dùng cache nếu phiên bản và cú pháp đều hợp lệ. Không chạy cache 1.0.4 chưa đặt backend headless cho Forge.
     try:
         version = checked_installer_version(dest.read_bytes())
         subprocess.run(["bash", "-n", str(dest)], check=True, capture_output=True)

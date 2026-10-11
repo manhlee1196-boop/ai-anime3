@@ -133,5 +133,48 @@ ValueError: private prompt and token MUST_NOT_APPEAR
             diag.collect(self.root, self.root, self.root, "", self.root, 7860, public_url="https://user:pass@abc.trycloudflare.com")
 
 
+    def test_07_indented_forge_matplotlib_exception_is_classified_without_message(self):
+        log = self.root / "forge.log"
+        log.write_text("""*** Error loading script
+    Traceback (most recent call last):
+      File "/content/venv/lib/python3.13/site-packages/matplotlib/__init__.py", line 1292, in <module>
+        rcParams['backend'] = os.environ.get('MPLBACKEND')
+      File "/content/venv/lib/python3.13/site-packages/matplotlib/__init__.py", line 784, in __setitem__
+        raise ValueError('PRIVATE')
+    ValueError: Key backend: 'module://matplotlib_inline.backend_inline' is not a valid value for backend; PRIVATE
+""")
+        result = diag.traceback_summary(log)
+        self.assertEqual(result["tracebacks"][0]["exception_type"], "ValueError")
+        self.assertEqual(result["tracebacks"][0]["signature"], "matplotlib_backend_invalid")
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertNotIn("module://", json.dumps(result))
+
+    def test_08_network_reason_and_owned_process_graphics_environment_are_private(self):
+        import os, socket, ssl, urllib.error
+        for reason, kind in ((socket.gaierror(-2, "PRIVATE"), "dns"),
+                             (ssl.SSLCertVerificationError(1, "PRIVATE"), "tls_certificate"),
+                             (TimeoutError("PRIVATE"), "timeout"),
+                             (ConnectionRefusedError("PRIVATE"), "connection_refused")):
+            with patch.object(diag.urllib.request, "build_opener") as opener:
+                opener.return_value.open.side_effect = urllib.error.URLError(reason)
+                result = diag.http_status(self.base, "/")
+            self.assertEqual(result["loai"], kind)
+            self.assertNotIn("PRIVATE", json.dumps(result))
+        runtime = self.root / "runtime"; runtime.mkdir()
+        (runtime / "forge.pid").write_text(str(os.getpid()))
+        forge = self.root / "forge"
+        with patch.object(Path, "read_bytes", side_effect=[b"python\0foreign.py\0"]) as reads:
+            result = diag.process_graphics_env(forge, runtime)
+        self.assertEqual(reads.call_count, 1)
+        self.assertEqual(result["forge_process"], "chua_xac_nhan")
+        with patch.object(Path, "read_bytes", side_effect=[
+                b"python\0" + str(forge / "launch.py").encode() + b"\0",
+                b"CIVITAI_TOKEN=PRIVATE\0MPLBACKEND=Agg\0OTHER=PRIVATE\0"]):
+            result = diag.process_graphics_env(forge, runtime)
+        self.assertEqual(result["forge_process"], "Agg")
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertEqual(diag._backend_category("module://PRIVATE"), "backend_khac_da_an")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

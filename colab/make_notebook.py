@@ -1,4 +1,4 @@
-"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.4.
+"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.5.
 
 Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import generator.
 """
@@ -21,7 +21,7 @@ def code(text):
                   "outputs": [], "source": text.splitlines(True)})
 
 
-md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.4
+md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.5
 ### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.513 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
@@ -35,7 +35,11 @@ stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không t�
 4. Mở link public và dùng tab **Prompt VN**. Ô 9/10/11 mặc định chỉ in hướng dẫn,
    không tự sinh ảnh hay mở thêm server.
 
-**API đã có WAI nhưng dropdown Checkpoint trống?** Bản 1.0.4 vá schema cmd-flags
+**Error hàng loạt / traceback Matplotlib backend?** Bản 1.0.5 dùng backend Agg
+riêng cho Forge con, không đổi notebook inline hay tải lại weights/Torch.
+Xem [ô cập nhật chỉ phần mềm](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105).
+
+**API đã có WAI nhưng dropdown Checkpoint trống?** Bản 1.0.5 vá schema cmd-flags
 và khởi tạo sẵn danh sách checkpoint. Dùng [ô cập nhật phần mềm trong runtime hiện tại](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104),
 không tải lại model/Torch hay xóa runtime.
 
@@ -101,8 +105,8 @@ print(f"✔ {MODEL} · model {MODEL_DIR} · Forge {os.environ['FORGE_DIR']} · {
 
 md("""## Ô 2 — Lấy bộ cài mới và repo đúng nhánh
 
-Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.4** và cú pháp trước khi
-chạy. Không chạy cache 1.0.3 cũ. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
+Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.5** và cú pháp trước khi
+chạy. Không chạy cache 1.0.4 cũ. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
 thay Việt → Anh; repo sẵn có được fast-forward khi sạch/cùng nhánh, không reset hard.
 Không đổi sang main/master hoặc xóa repo có thay đổi của bạn.
 """)
@@ -247,7 +251,7 @@ md("""---
 | Triệu chứng | Xử lý |
 |---|---|
 | Không có GPU | Runtime → Change runtime type → GPU T4 rồi chạy lại từ Ô 1 |
-| Không lấy được bộ cài ≥1.0.4 | Kiểm mạng/mở notebook mới; không dùng cache cũ 1.0.3 |
+| Không lấy được bộ cài ≥1.0.5 | Kiểm mạng/mở notebook mới; không dùng cache cũ 1.0.4 |
 | Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
 | Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
 | Tag Việt còn sau chọn | Kiểm tab Prompt VN có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
@@ -263,7 +267,7 @@ file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content`
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.4",
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.5",
                   "collapsed_sections": []},
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"}, "accelerator": "GPU",
@@ -271,4 +275,4 @@ notebook = {
     "cells": cells,
 }
 OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.4")
+print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.5")

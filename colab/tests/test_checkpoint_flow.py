@@ -198,8 +198,9 @@ class CheckpointFlow(unittest.TestCase):
         py.parent.mkdir(parents=True); py.symlink_to(sys.executable)
         env = {**os.environ, "REPO_DIR": str(ROOT), "FORGE_DIR": str(self.forge),
                "MODEL_DIR": str(self.model.parent), "MODEL_FILE": self.model.name, "MODEL_SHA256": self.sha,
-               "WAI_RUNTIME_DIR": str(self.root / "runtime"), "WAI_PROFILE_MODEL_ID": "hswq", "TUNNEL": "none"}
-        result = subprocess.run(["bash", "-c", 'source "$1"; prepare_launch', "test", str(ROOT / "colab/setup_forge.sh")],
+               "WAI_RUNTIME_DIR": str(self.root / "runtime"), "WAI_PROFILE_MODEL_ID": "hswq", "TUNNEL": "none", "MPLBACKEND": "module://matplotlib_inline.backend_inline"}
+        command = """source "$1"; prepare_launch; [[ "$MPLBACKEND" == Agg ]]; "$FORGE_DIR/venv/bin/python" -c 'import os; assert os.environ["MPLBACKEND"] == "Agg"'"""
+        result = subprocess.run(["bash", "-c", command, "test", str(ROOT / "colab/setup_forge.sh")],
                                 env=env, capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(cp.read_object(self.config)["forge_checkpoint_xl"], self.model.name)

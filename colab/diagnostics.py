@@ -11,6 +11,8 @@ import ast
 import json
 import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -107,7 +109,19 @@ def http_status(base, endpoint):
         exc.close()
         return {"http": code}
     except (OSError, ValueError) as exc:
-        return {"loi": type(exc).__name__}  # không dump URL/body/secret trong exception
+        reason = getattr(exc, "reason", exc)
+        kind = "network_unknown"
+        if isinstance(reason, socket.gaierror):
+            kind = "dns"
+        elif isinstance(reason, ssl.SSLCertVerificationError):
+            kind = "tls_certificate"
+        elif isinstance(reason, ssl.SSLError):
+            kind = "tls"
+        elif isinstance(reason, (TimeoutError, socket.timeout)):
+            kind = "timeout"
+        elif isinstance(reason, ConnectionRefusedError):
+            kind = "connection_refused"
+        return {"loi": type(exc).__name__, "loai": kind}  # không dump URL/body/secret trong exception
 
 
 def ui_transport(base):
@@ -131,11 +145,13 @@ def traceback_summary(path):
         for filename, line, function in re.findall(r'File "([^"\n]+)", line (\d+), in ([^\n]+)', block):
             frames.append({"file": "/".join(filename.replace("\\", "/").split("/")[-2:]),
                            "line": int(line), "function": function.strip()[:100]})
-        error = re.search(r"^((?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)|Error|Exception)):(.*)$", block, re.MULTILINE)
+        error = re.search(r"^[ \t]*((?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)|Error|Exception)):(.*)$", block, re.MULTILINE)
         signature = "khong_xac_dinh_message_da_an"
         if error:
             message = error.group(2).lower()
-            if "'bool'" in message and "not iterable" in message:
+            if "key backend" in message and "not a valid value for backend" in message:
+                signature = "matplotlib_backend_invalid"
+            elif "'bool'" in message and "not iterable" in message:
                 signature = "schema_bool_not_iterable"
             elif "out of memory" in message:
                 signature = "out_of_memory"
@@ -149,6 +165,40 @@ def traceback_summary(path):
                           "signature": signature, "frames": frames[-8:]})
     return {"co_log": True, "tracebacks": summaries,
             "luu_y": "Không in message/source/prompt/token. Lỗi frontend JavaScript có thể không nằm trong log này."}
+
+
+def _backend_category(value):
+    if value is None:
+        return "khong_dat"
+    if value.lower() == "agg":
+        return "Agg"
+    if value in ("module://matplotlib_inline.backend_inline", "module://ipykernel.pylab.backend_inline"):
+        return "inline_notebook"
+    return "backend_khac_da_an"
+
+
+def process_graphics_env(forge, runtime):
+    """Không dump environ/cmdline; chỉ phân loại MPLBACKEND của notebook và PID do bộ cài quản lý."""
+    result = {"diagnostics_parent": _backend_category(os.environ.get("MPLBACKEND")),
+              "forge_process": "chua_xac_nhan"}
+    try:
+        pid = (Path(runtime) / "forge.pid").read_text().strip()
+        if not pid.isdecimal() or not 0 < int(pid) < 2**31:
+            return result
+        proc = Path("/proc") / pid
+        command = (proc / "cmdline").read_bytes().split(b"\0")
+        if str(Path(forge) / "launch.py").encode() not in command:
+            return result  # không đọc môi trường process không phải Forge đang quản lý
+        backend = None
+        for item in (proc / "environ").read_bytes().split(b"\0"):
+            key, _separator, value = item.partition(b"=")
+            if key == b"MPLBACKEND":
+                backend = value.decode(errors="replace")
+                break
+        result["forge_process"] = _backend_category(backend)
+    except OSError:
+        pass
+    return result
 
 
 def optional_assets(base):
@@ -222,7 +272,7 @@ def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port, runtime
     venv = forge / "venv/bin/python"
     version_code = '''import importlib.metadata as m,json,sys
 packages={}
-for name in ('torch','torchvision','gradio','gradio-client','pydantic','pydantic-core','fastapi','starlette','safetensors','huggingface-hub'):
+for name in ('torch','torchvision','gradio','gradio-client','pydantic','pydantic-core','fastapi','starlette','matplotlib','matplotlib-inline','pandas','safetensors','huggingface-hub'):
     try: packages[name]=m.version(name)
     except m.PackageNotFoundError: packages[name]='chưa cài'
 print(json.dumps({'python':sys.version,'packages':packages}))'''
@@ -258,6 +308,7 @@ print(json.dumps({'python':sys.version,'packages':packages}))'''
     if public_url:
         report["ui_transport_public"] = ui_transport(public_url)
     if runtime_dir is not None:
+        report["graphics_env"] = process_graphics_env(forge, runtime_dir)
         report["forge_log_errors"] = traceback_summary(Path(runtime_dir) / "forge.log")
     return report
 

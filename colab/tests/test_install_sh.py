@@ -148,7 +148,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.4")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.5")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))

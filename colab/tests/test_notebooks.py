@@ -23,8 +23,8 @@ INSTALLER = (ROOT / "colab/install.sh").read_bytes()
 REAL_RUN = subprocess.run
 
 
-def script(version="1.0.4", broken=False):
-    data = INSTALLER.replace(b'INSTALLER_VERSION="1.0.4"', f'INSTALLER_VERSION="{version}"'.encode())
+def script(version="1.0.5", broken=False):
+    data = INSTALLER.replace(b'INSTALLER_VERSION="1.0.5"', f'INSTALLER_VERSION="{version}"'.encode())
     return data + (b"\nif true; then\n" if broken else b"")
 
 
@@ -80,14 +80,14 @@ class NotebookTests(unittest.TestCase):
                     self.assertEqual(cell["outputs"], [])
             source = "\n".join(code_cells(nb))
             self.assertNotIn("drive.mount", source)
-            self.assertIn('MIN_INSTALLER_VERSION = "1.0.4"', source)
+            self.assertIn('MIN_INSTALLER_VERSION = "1.0.5"', source)
             self.assertIn('"arena/88f01d31-ai-anime3"', source)
         self.assertEqual(len(code_cells(notebook("WAI_v17_1click.ipynb"))), 1)
-        self.assertEqual(MIN_INSTALLER_VERSION, "1.0.4")
+        self.assertEqual(MIN_INSTALLER_VERSION, "1.0.5")
 
     def test_02_download_replaces_old_cache_atomically(self):
-        self.dest.write_bytes(script("1.0.3"))
-        self.assertEqual(self.download([INSTALLER]), "1.0.4")
+        self.dest.write_bytes(script("1.0.4"))
+        self.assertEqual(self.download([INSTALLER]), "1.0.5")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
         self.assertFalse(self.dest.with_suffix(".sh.tmp").exists())
 
@@ -96,7 +96,7 @@ class NotebookTests(unittest.TestCase):
         output = io.StringIO()
         with patch("urllib.request.urlopen", self.fetcher([OSError("offline"), INSTALLER])), contextlib.redirect_stdout(output):
             version = self.namespace["download_installer"](self.dest, "arena/88f01d31-ai-anime3", {"GITHUB_TOKEN": token})
-        self.assertEqual(version, "1.0.4")
+        self.assertEqual(version, "1.0.5")
         self.assertIn("api.github.com", self.requests[1].full_url)
         self.assertIn("arena%2F88f01d31-ai-anime3", self.requests[1].full_url)
         self.assertTrue(all(token not in request.full_url for request in self.requests))
@@ -104,25 +104,25 @@ class NotebookTests(unittest.TestCase):
         self.assertEqual(self.requests[1].get_header("Authorization"), "Bearer " + token)
 
     def test_04_network_failure_old_cache_is_not_executed_or_deleted(self):
-        old = script("1.0.3")
+        old = script("1.0.4")
         self.dest.write_bytes(old)
-        with self.assertRaisesRegex(RuntimeError, ">= 1.0.4"):
+        with self.assertRaisesRegex(RuntimeError, ">= 1.0.5"):
             self.download([OSError("offline"), OSError("offline")])
         self.assertEqual(self.dest.read_bytes(), old)
 
     def test_05_verified_new_cache_can_resume_offline(self):
         self.dest.write_bytes(INSTALLER)
-        self.assertEqual(self.download([OSError("offline"), OSError("offline")]), "1.0.4")
+        self.assertEqual(self.download([OSError("offline"), OSError("offline")]), "1.0.5")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
 
     def test_06_old_or_invalid_network_bytes_never_overwrite_cache(self):
         self.dest.write_bytes(INSTALLER)
-        self.assertEqual(self.download([script("1.0.3"), script(broken=True)]), "1.0.4")
+        self.assertEqual(self.download([script("1.0.4"), script(broken=True)]), "1.0.5")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
         self.assertFalse(self.dest.with_suffix(".sh.tmp").exists())
 
     def test_07_broken_cache_and_no_cache_fail_before_install(self):
-        for data in (None, script(broken=True), b"<!DOCTYPE html>error", script("1.0.3")):
+        for data in (None, script(broken=True), b"<!DOCTYPE html>error", script("1.0.4")):
             with self.subTest(data=data is None):
                 if data is None:
                     self.dest.unlink(missing_ok=True)
@@ -253,13 +253,13 @@ class NotebookTests(unittest.TestCase):
             WAI_DEFAULTS.update(defaults)
 
     def test_12_oneclick_refuses_old_cache_before_starting_installer(self):
-        self.dest.write_bytes(script("1.0.3"))
+        self.dest.write_bytes(script("1.0.4"))
         source = code_cells(notebook("WAI_v17_1click.ipynb"))[0].replace('"/content/install.sh"', repr(str(self.dest)))
         with patch.dict(os.environ, {}, clear=True), \
                 patch("urllib.request.urlopen", self.fetcher([OSError("offline"), OSError("offline")])), \
                 patch("subprocess.Popen", side_effect=AssertionError("Không chạy script cũ")), \
                 contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, ">= 1.0.4"):
+            with self.assertRaisesRegex(RuntimeError, ">= 1.0.5"):
                 exec(compile(source, "oneclick-cell", "exec"), {})
 
     def test_13_final_sample_one_image_hires_and_sanitized_failure(self):

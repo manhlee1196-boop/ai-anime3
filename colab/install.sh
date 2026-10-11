@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.4"
+INSTALLER_VERSION="1.0.5"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -772,6 +772,18 @@ try:
 except (OSError, ValueError, KeyError, AssertionError, TypeError): sys.exit(1)
 PYCFG
 }
+headless_ui_ready() {
+  # CPU/venv riêng, không import Forge/Torch, không sinh ảnh/đọc prompt hay config.
+  env MPLBACKEND=Agg "$FORGE_DIR/venv/bin/python" - <<'PYHEADLESS'
+import pandas as pd
+from pandas.io.formats.style import Styler  # noqa: F401 - import gây lỗi khi inline bị kế thừa
+import gradio as gr
+with gr.Blocks(analytics_enabled=False):
+    gr.Dataframe(value=pd.DataFrame({"test": ["headless"]}), type="pandas")
+print("Pandas Styler + Gradio Dataframe headless khởi tạo được.")
+PYHEADLESS
+}
+
 model_in_api() {
   "$PY_BIN" "$REPO_DIR/colab/checkpoint_tools.py" api "http://127.0.0.1:$PORT" \
     "$MODEL_DIR/$MODEL_FILE" --sha "$MODEL_SHA256" --registry-only
@@ -791,6 +803,7 @@ stage_verify() {
   check "Tagcomplete + extension Prompt VN + bản dịch" extras_ready
   check "Cấu hình tìm bằng tiếng Việt của Forge" valid_tac_config
   check "PyTorch chạy được kernel CUDA" torch_ready
+  check_detail "UI headless: pandas Styler / Gradio Dataframe khởi tạo được" headless_ui_ready
   if [[ -x "$FORGE_DIR/venv/bin/python" ]]; then
     check "prompt_lib và quy trình import được" env PYTHONPATH="$REPO_DIR/colab" "$FORGE_DIR/venv/bin/python" -c 'import prompt_lib; from prompt_lib.editing import convert_tags; from prompt_lib.workflow import validate_generation; assert prompt_lib.SYSTEM_TAGS'
   fi

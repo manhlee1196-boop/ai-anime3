@@ -633,6 +633,11 @@ prepare_launch() {
   ensure_config_version # cũng sửa lần cài v1.0.0 chỉ chạy lại stage launch
   # shellcheck disable=SC1090 # file do stage torch tạo trong runtime của người dùng
   [[ ! -f "$TORCH_ENV_FILE" ]] || source "$TORCH_ENV_FILE"
+  # Colab truyền backend inline vào môi trường con. Venv Forge không phải IPython:
+  # Matplotlib 3.11 có thể lỗi ngay lúc import, kéo theo ControlNet/pandas Styler.
+  # Chỉ đặt cho Forge con; không cài lại Matplotlib hay đổi backend notebook cha.
+  export MPLBACKEND=Agg
+  info "Matplotlib cho Forge: MPLBACKEND=Agg (headless, không cần backend inline Colab)."
   export GRADIO_PACKAGE="gradio==4.40.0 gradio_rangeslider==0.0.8"
   export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD="true"
   COMMANDLINE_ARGS="$(launch_args)"

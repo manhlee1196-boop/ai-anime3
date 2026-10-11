@@ -1,4 +1,45 @@
-# Rà soát toàn dự án — bộ cài 1.0.4
+# Rà soát toàn dự án — bộ cài 1.0.5
+
+## Bổ sung 1.0.5 — backend headless Matplotlib — 12/10/2026
+
+**Diagnostics runtime mới:** compat source true, `/cmd-flags` đúng port integer,
+WAI SDXL có trong registry/chọn XL, config UI có 1 choice/value đúng. Local
+`/`, `/config`, `/info` HTTP 200. LoRA/TI HTTP 200/count 0 (hợp lệ). Public
+URLError chưa rõ loại, không chứng minh tunnel chết. Hai stack import ControlNet
+và Gradio Dataframe/pandas Styler đi tới Matplotlib `__init__.py:1292` / `__setitem__:784`.
+Không có bằng chứng thiếu model, hoặc sinh ảnh GPU thành công.
+
+**Reproduction:** Matplotlib **3.11.2**, venv không có matplotlib-inline, đặt
+`MPLBACKEND=module://matplotlib_inline.backend_inline` tái hiện ValueError `Key backend`
+với chính hai dòng đó. Agg import Matplotlib, pandas Styler và dựng Gradio Dataframe
+đạt. Không cần cài/hạ dependency; đặt Agg chỉ cho process Forge con trong
+`prepare_launch`, dùng chung foreground/background.
+
+- Verify CPU probe pandas Styler/Dataframe dưới Agg. Notebook cha giữ backend inline.
+- Diagnostics thêm package Matplotlib/inline/pandas, nhận exception thụt đầu dòng
+  (parser cũ bỏ sót exception Forge), signature backend invalid, phân loại lỗi
+  mạng DNS/TLS/timeout/refused mà không dump message/body. Kiểm PID ownership trước
+  khi đọc MPLBACKEND, không in cmdline/environ/credential khác.
+- Bootstrap notebook ≥1.0.5; setup API **2** và prompt_lib **1.1.0** không đổi.
+  Cập nhật chỉ launch/verify + restart, không model/Torch/extras.
+
+### Kiểm tra 1.0.5
+
+| Kiểm tra | Kết quả/phạm vi |
+|---|---|
+| Headless backend | **4 nhóm đạt**: reproduction inline 3.11, Agg/real Gradio Dataframe, callback Settings AST Neo với HTTP 200, installer probe không đổi env cha |
+| Matrix callback | Gradio **4.40.0**, Pydantic **2.10.6**, FastAPI **0.127.1**, Starlette **0.50.0** (giống package runtime); Python **3.11** trên sandbox, không Python 3.13/GPU. Không có bằng chứng cần hạ FastAPI/Starlette |
+| Diagnostics | **8 nhóm đạt**; có indent/Matplotlib signature, network reason và đọc env PID sở hữu/ẩn secret |
+| Installer / checkpoint / compat / notebook | **98 + 16 + 10 + 13 đạt**, source Neo/UID/preset/scanner nguyên bản cho các test tương ứng |
+| Prompt / workflow / UI / JS / data | **15 + 10**, UI thật Gradio 4.40/API host giả lập, JS **9** TAC pinned, dữ liệu **3 đạt + 1 bỏ qua** nguồn tải lại |
+
+**Giới hạn:** đã sửa lỗi import tái hiện được, chưa chứng minh mọi badge Error trong
+ảnh đều do nó. GET 200 không chứng minh mọi POST/callback/queue native đạt. Cần người
+dùng mở link mới sau restart, xác nhận process Agg/UI và nếu cần test GPU riêng.
+Không có model weights/GPU trong sandbox, không tuyên bố benchmark hay hoàn thành
+sửa runtime trước khi người dùng chạy cập nhật.
+
+---
 
 ## Bổ sung chẩn đoán UI/tunnel sau 1.0.4 — 12/10/2026
 

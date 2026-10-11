@@ -3,7 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
-Bản hiện tại **1.0.4**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
+Bản hiện tại **1.0.5**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -22,8 +22,8 @@ and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ l
 Đừng dùng bản notebook cũ đã lưu trong Drive nếu muốn nhận các ô mới. Notebook
 không tự xóa repo/model/ảnh hoặc mount Drive.
 
-Cả hai notebook dùng bootstrap có **version guard ≥1.0.4 + Bash syntax check**.
-Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.3.
+Cả hai notebook dùng bootstrap có **version guard ≥1.0.5 + Bash syntax check**.
+Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.4.
 
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.
@@ -200,6 +200,44 @@ Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đ
 chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
 
 
+### Error hàng loạt / Matplotlib backend inline Colab (1.0.5)
+
+Trường hợp đã tái hiện: WAI có trong registry/dropdown, local `/config` và `/info`
+đạt, nhưng log import ControlNet/Gradio Dataframe kết thúc ở Matplotlib
+`__init__.py:1292` và `__setitem__:784`. Đây là hai dòng đọc/validate `MPLBACKEND`
+trong Matplotlib 3.11. Colab có thể truyền `module://matplotlib_inline.backend_inline`
+vào process venv không có backend inline; tái hiện được `ValueError: Key backend`.
+
+Bản 1.0.5 đặt **`MPLBACKEND=Agg` chỉ trong shell khởi động Forge con**, trước khi
+import các extension. Không cài thêm inline backend, không hạ Matplotlib/Gradio/
+FastAPI/Torch, không sửa model hoặc backend hiển thị của notebook cha. Verify thêm
+CPU probe pandas Styler/Gradio Dataframe; probe không chứng minh mọi callback native
+hoặc sinh ảnh GPU đã đạt.
+
+Chạy **trong runtime hiện tại**, không xóa runtime:
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --version
+bash /content/install.sh --only launch,verify --restart
+```
+
+Phiên bản phải là **1.0.5**. Chỉ launch/verify; không chạy model/torch/extras/forge.
+Mở **link public mới**, đóng trang cũ và reload cứng. Log khởi động in
+`MPLBACKEND=Agg`; chẩn đoán mới có `graphics_env.forge_process: Agg` và metadata
+Matplotlib/inline/pandas. `graphics_env.diagnostics_parent: inline_notebook` vẫn
+có thể xuất hiện, vì notebook cha không bị thay đổi — không phải lỗi của Forge con.
+
+Nếu Error còn xuất hiện, chạy `!bash /content/install.sh --diagnostics` và gửi
+`graphics_env`, `forge_log_errors`, `venv`, trạng thái local/public với **link mới**.
+Diagnostic đã đọc được exception thụt đầu dòng của Forge và phân loại
+`matplotlib_backend_invalid`. `URLError` thêm DNS/TLS/timeout/refused nhưng vẫn bỏ
+raw exception/URL/body có thể chứa secret. Không suy ra tunnel chết hoặc mọi lỗi
+Error đều do Matplotlib; cần kiểm tra runtime sau restart, không tải lại weights.
+
 ### API đã có WAI nhưng dropdown trống / cmd-flags 500 (1.0.4)
 
 Nếu diagnostics cho thấy file SDXL hợp lệ, alias đúng và
@@ -282,7 +320,7 @@ Nếu dùng đường dẫn/port khác mặc định, truyền `--runtime-dir`, 
 
 ### Không nhận Checkpoint / ô Checkpoint trống dù file đã tải
 
-**Trường hợp cấu hình thiếu key được sửa ở 1.0.2 (giữ trong 1.0.4).** Forge Neo còn lưu checkpoint riêng theo preset:
+**Trường hợp cấu hình thiếu key được sửa ở 1.0.2 (giữ trong 1.0.5).** Forge Neo còn lưu checkpoint riêng theo preset:
 `forge_checkpoint_xl` mặc định là `None`. Chỉ ghi `sd_model_checkpoint` không đủ:
 `on_preset_change()` có thể đặt lại ô Checkpoint thành trống khi mở UI.
 
@@ -394,6 +432,7 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Civitai 401/403, metadata rỗng | Kiểm tra quyền tải và Secret `CIVITAI_TOKEN`; hoặc chọn FP16. Không tự chuyển phiên bản |
 | SHA256 sai | Stage không nhận file; chạy lại stage model. Nếu dùng mirror riêng, kiểm tra URL + SHA của đúng file |
 | Rớt mạng lúc tải | Chạy lại cùng lệnh; `.part` được giữ để tiếp tục |
+| Error ở nhiều ô / traceback Matplotlib 1292→784 | Cập nhật 1.0.5 + restart, backend Agg chỉ cho Forge con; không cài lại Torch/weights |
 | Forge không thấy model / Checkpoint trống | Cập nhật 1.0.4; API đã có model thì dùng ô software-only ở trên. Kiểm preset `xl` / `forge_checkpoint_xl` và config UI, không tải lại weights theo tên/hash null |
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
