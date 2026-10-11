@@ -162,6 +162,61 @@ phiên mới cần cài/tải lại. Không có thủ thuật giữ runtime luô
 
 ## 6. Xử lý sự cố
 
+### `EOFError` tại `verify_version()` / “Press Enter to Continue…”
+
+**Đã sửa ở bộ cài 1.0.1.** Bản 1.0.0 tạo `config.json` trước lần mở Forge đầu tiên
+nhưng thiếu `VERSION_UID`. Forge tưởng đó là cấu hình của bản cũ, yêu cầu Enter;
+process chạy nền có stdin đóng nên nhận `EOFError`. Đây không phải lỗi checkpoint.
+
+Trong **runtime đang dùng**, chạy ô dưới đây để cập nhật script và chỉ mở lại UI.
+**Không reset runtime, không tải lại model, không cài lại Torch.** Nếu repo có xung đột
+Git, dừng và giữ thay đổi local; không dùng `reset --hard`.
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --only launch,verify --restart
+```
+
+Nếu dùng `REPO_DIR`/`RUNTIME_DIR` khác mặc định, thay hai đường dẫn `/content/ai-anime3`
+và `/content` trong ô cho đúng chỗ đã cài. Copy **cả hai** script để không dùng nhầm
+`/content/setup_forge.sh` cũ nếu nó còn từ notebook chạy từng bước.
+
+Bản sửa đọc `VERSION_UID` từ `modules/launch_utils.py` của chính Forge đã clone, bằng
+AST và không import Torch. Trước cả stage extras và launch, nó khởi tạo cấu hình mới
+hoặc bổ sung UID cho cấu hình tối thiểu do bộ cài tạo. Config đã tồn tại được sao lưu
+thành `config.json.wai-backup-*` trước khi bổ sung; giữ nguyên tagcomplete/CLIP/checkpoint
+và không sửa `ui-config.json`. Không bơm Enter, không vá `input()`, không bỏ guard của Forge.
+
+#### Nếu là cấu hình Forge cũ thật sự
+
+UID khác, UID không hợp lệ hoặc config không UID nhưng có các tùy chọn legacy khác:
+bộ cài **dừng thay vì gắn nhãn phiên bản mới**. Chỉ khi bạn muốn đặt lại tùy chọn UI,
+sao lưu **hai file cấu hình** như Forge đề nghị; không xóa cả thư mục Forge/venv/model.
+Ô sau đổi tên cấu hình vào một thư mục backup rồi cắm lại tagcomplete và mở Forge:
+
+```bash
+%%bash
+set -euo pipefail
+forge=/content/sd-webui-forge-neo
+backup=$(mktemp -d "$forge/config-backup.XXXXXXXX")
+chmod 700 "$backup"
+for name in config.json ui-config.json; do
+  if [[ -f "$forge/$name" ]]; then mv -- "$forge/$name" "$backup/$name"; fi
+done
+printf 'Đã sao lưu cấu hình: %s\n' "$backup"
+bash /content/install.sh --only extras,launch,verify --restart
+```
+
+Chỉ dùng ô reset này **sau khi đã cập nhật script ở trên**, khi Forge không đang chạy
+và bạn chấp nhận đặt lại tùy chọn UI. Với lỗi config mới của bản 1.0.0, **không cần** ô này.
+Có thể tra cứu cấu hình trong backup để thiết lập lại bằng UI; không copy nguyên cấu hình
+legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ảnh được giữ nguyên.
+
+### Các lỗi khác
+
 | Lỗi | Cách xử lý |
 |---|---|
 | Không có GPU | Runtime → Change runtime type → GPU T4; script dừng trước khi tải model |
@@ -173,6 +228,7 @@ phiên mới cần cài/tải lại. Không có thủ thuật giữ runtime luô
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |
+| `EOFError` tại `verify_version()` | Cập nhật cả hai script lên 1.0.1 rồi chỉ chạy launch/verify; xem ô sửa bên trên |
 | `setup_forge.sh` bản cũ | Cập nhật repo sạch cùng nhánh; bộ cài từ chối trộn script không tương thích |
 | Thiếu upscaler anime | `--only extras`; lỗi upscaler là cảnh báo, bộ dựng prompt chọn scaler đang có |
 
@@ -186,7 +242,7 @@ không tạo nội dung tình dục hóa trẻ vị thành niên.
 Từ thư mục gốc repo:
 
 ```bash
-python3 colab/tests/test_install_sh.py       # 80 kiểm tra CLI/fixture/vòng đời cài
+python3 colab/tests/test_install_sh.py       # 95 kiểm tra CLI/fixture/vòng đời cài
 python3 colab/tests/test_prompt_lib.py       # 15 nhóm hồi quy thư viện prompt
 python3 colab/make_install_notebook.py       # sinh lại notebook một ô
 bash -n colab/install.sh
@@ -197,7 +253,16 @@ python colab/tests/test_prompt_ui.py         # UI thật, API và Forge host gi�
 ```
 
 **Đã kiểm tra:** luồng cài/resume bằng stage stub, tải/checksum model nhỏ qua HTTP cục bộ,
-CUDA fallback bằng venv giả lập, và UI trên Gradio **4.40.0 / 6.30.0**.
+CUDA fallback bằng venv giả lập, hồi quy VERSION_UID/EOF với stdin đóng, và UI trên
+Gradio **4.40.0 / 6.30.0**. Test UID có fixture offline; cũng đã chạy lại cùng hàm
+`verify_version()` nguyên bản lấy từ Forge Neo, chỉ trích AST, không import engine.
+Muốn kiểm tra bằng mã upstream đã tải về:
+
+```bash
+FORGE_VERSION_GUARD_SOURCE=/path/to/Forge/modules/launch_utils.py \
+  python3 colab/tests/test_install_sh.py
+```
+
 **Chưa kiểm tra:** chạy toàn bộ hệ thống và sinh ảnh thật trên GPU Colab; sandbox không có GPU
 và không truy cập được nguồn model. Bộ kiểm tra không giả vờ đã benchmark/đã sinh ảnh.
 

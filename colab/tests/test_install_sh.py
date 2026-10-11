@@ -5,9 +5,12 @@ CLI + metadata API bằng fixture + vòng đời cài/resume bằng stage stub. 
 stage model chạy script thật với checkpoint safetensors nhỏ trên HTTP server
 cục bộ trong cùng tiến trình test; server và thư mục tạm được dọn ở cuối.
 Không clone/cài Forge/PyTorch thật và không sửa checkout hiện tại.
+Để chạy cùng guard upstream thật đã tải về (AST, không import torch):
+FORGE_VERSION_GUARD_SOURCE=/path/modules/launch_utils.py python3 colab/tests/test_install_sh.py
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
@@ -134,7 +137,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.0")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.1")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -258,8 +261,145 @@ fi
     check("--cuda cu126 thắng giá trị cu128 đã lưu", r.returncode == 0 and "cu126" in trace.read_text() and "cu128" not in trace.read_text())
 
 
+def test_config_version(tmp):
+    print("4) Forge VERSION_UID / prepare_launch không tương tác")
+    forge = tmp / "version-guard/forge"
+    runtime = tmp / "version-guard/runtime"
+    source = forge / "modules/launch_utils.py"
+    source.parent.mkdir(parents=True)
+    # Fixture rút gọn đúng các nhánh của verify_version(); không import engine GPU.
+    guard = '''
+import json, os
+from types import SimpleNamespace
+from typing import Any, Final
+VERSION_UID: Final[str] = "PY313"
+args = SimpleNamespace(ui_settings_file="config.json")
+def verify_version():
+    if not os.path.isfile(args.ui_settings_file):
+        with open(args.ui_settings_file, "w", encoding="utf-8") as file:
+            json.dump({"VERSION_UID": VERSION_UID}, file)
+        return
+    with open(args.ui_settings_file, encoding="utf-8") as file:
+        settings = json.load(file)
+    if settings.get("VERSION_UID", None) == VERSION_UID:
+        return
+    input("Press Enter to Continue...")
+'''
+    if upstream := os.environ.get("FORGE_VERSION_GUARD_SOURCE"):
+        guard = Path(upstream).read_text(encoding="utf-8")
+        print(f"   Dùng hàm verify_version/UID nguyên bản của Forge: {upstream}")
+    uid_node = next(n for n in ast.parse(guard).body
+                    if (isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name) and n.target.id == "VERSION_UID")
+                    or (isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "VERSION_UID" for t in n.targets)))
+    initial_uid = ast.literal_eval(uid_node.value)
+    declaration = ast.get_source_segment(guard, uid_node)
+    source.write_text(guard, encoding="utf-8")
+    python = forge / "venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(sys.executable)
+    cfg, ui = forge / "config.json", forge / "ui-config.json"
+    original = {"tac_tagFile": "danbooru_e621.csv",
+                "tac_translation.translationFile": "danbooru_e621_vi_translation_wai.csv",
+                "tac_translation.searchByTranslation": True,
+                "tac_translation.oldFormat": False,
+                "clip_stop_at_last_layers": 2, "sd_model_checkpoint": "fixture.safetensors"}
+    cfg.write_text(json.dumps(original, ensure_ascii=False))
+    before = cfg.read_bytes()
+    ui.write_text('{"custom_ui":"giữ nguyên"}')
+    ui_before = ui.read_bytes()
+    model = tmp / "version-guard/models/fixture.safetensors"
+    model.parent.mkdir(parents=True); model.write_bytes(DATA)
+    env = {"FORGE_DIR": str(forge), "WAI_RUNTIME_DIR": str(runtime), "TUNNEL": "none",
+           "MODEL_DIR": str(model.parent), "MODEL_FILE": model.name}
+    # Trích AST UID + hàm nguyên bản: không import các module engine/torch,
+    # không thay input() và vẫn chạy thật với stdin=/dev/null như launch-bg.
+    run_guard = """
+import ast, json, os, sys
+from types import SimpleNamespace
+from typing import Any, Final
+nodes = ast.parse(open(sys.argv[1], encoding="utf-8").read()).body
+uid = next(n for n in nodes
+           if (isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name) and n.target.id == "VERSION_UID")
+           or (isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "VERSION_UID" for t in n.targets)))
+verify = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == "verify_version")
+namespace = {"json": json, "os": os, "Any": Any, "Final": Final,
+             "args": SimpleNamespace(ui_settings_file=sys.argv[2])}
+exec(compile(ast.Module(body=[uid, verify], type_ignores=[]), sys.argv[1], "exec"), namespace)
+namespace["verify_version"]()
+"""
+    def verify():
+        return subprocess.run([sys.executable, "-c", run_guard, str(source), str(cfg)],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
+
+    r = verify()
+    check("Tái hiện config do v1.0.0 tạo → verify_version gặp EOFError", r.returncode != 0 and "EOFError" in r.stderr)
+    r = source_call(SETUP, "prepare_launch", env)
+    check("prepare_launch thật tự bổ sung UID trước khi chạy Forge", r.returncode == 0 and json.loads(cfg.read_text())["VERSION_UID"] == initial_uid, r.stdout+r.stderr)
+    updated = json.loads(cfg.read_text())
+    check("Sửa UID giữ nguyên tagcomplete, checkpoint và CLIP", all(updated.get(k) == v for k, v in original.items()))
+    backups = list(forge.glob("config.json.wai-backup-*"))
+    check("Sao lưu nguyên bản config thiếu UID trước khi sửa", len(backups) == 1 and backups[0].read_bytes() == before)
+    check("Không sửa/xoá ui-config.json hay checkpoint", ui.read_bytes() == ui_before and model.read_bytes() == DATA)
+    r = verify()
+    check("Guard Forge vượt qua với stdin đóng — không cần Enter", r.returncode == 0 and "Press Enter" not in r.stdout, r.stdout+r.stderr)
+    snapshot = cfg.read_bytes()
+    r = source_call(SETUP, "ensure_config_version", env)
+    check("Guard sửa chạy lại idempotent, không tạo backup thừa", r.returncode == 0 and cfg.read_bytes() == snapshot and len(list(forge.glob("config.json.wai-backup-*"))) == 1)
+
+    old = {**original, "VERSION_UID": "LEGACY"}
+    cfg.write_text(json.dumps(old)); before = cfg.read_bytes()
+    r = source_call(SETUP, "prepare_launch", env)
+    check("UID cũ thật sự → không gắn nhãn phiên bản mới để lách guard", r.returncode != 0 and cfg.read_bytes() == before and "Không tự đổi VERSION_UID" in r.stderr, r.stdout+r.stderr)
+    cfg.write_text(json.dumps({**original, "VERSION_UID": None})); before = cfg.read_bytes()
+    r = source_call(SETUP, "ensure_config_version", env)
+    check("UID có mặt nhưng null cũng không tự coi là cấu hình mới", r.returncode != 0 and cfg.read_bytes() == before)
+    legacy = {**original, "legacy_backend_option": True}
+    cfg.write_text(json.dumps(legacy)); before = cfg.read_bytes()
+    r = source_call(SETUP, "ensure_config_version", env)
+    check("Config legacy không UID + tùy chọn khác → giữ nguyên, yêu cầu backup/reset", r.returncode != 0 and cfg.read_bytes() == before)
+    cfg.write_text("{broken-json"); before = cfg.read_bytes()
+    r = source_call(SETUP, "ensure_config_version", env)
+    check("JSON hỏng không bị ghi đè", r.returncode != 0 and cfg.read_bytes() == before)
+
+    cfg.unlink()
+    # Thay UID và kiểu khai báo để chứng minh đọc AST, không hardcode PY313.
+    source.write_text(guard.replace(declaration, 'VERSION_UID = "NEXT_UID_FOR_TEST"', 1), encoding="utf-8")
+    r = source_call(SETUP, "prepare_launch", env)
+    check("Clone mới: UID được đọc từ mã Forge, cả khai báo Assign", r.returncode == 0 and json.loads(cfg.read_text())["VERSION_UID"] == "NEXT_UID_FOR_TEST", r.stdout+r.stderr)
+    r = verify()
+    check("UID khác trong fixture vẫn vượt qua đúng guard của fixture đó", r.returncode == 0, r.stdout+r.stderr)
+    source.write_text('VERSION_UID = "dynamic" + "uid"\n')
+    before = cfg.read_bytes()
+    r = source_call(SETUP, "ensure_config_version", env)
+    check("UID không còn hằng chuỗi → báo lỗi, không đoán/ghi đè", r.returncode != 0 and cfg.read_bytes() == before)
+
+    # Luồng cài mới: chạy stage extras thật, chỉ stub tài nguyên/extension để
+    # không tải mạng hay import Gradio. Config writer của extras phải giữ UID.
+    source.write_text(guard, encoding="utf-8"); cfg.unlink()
+    repo = tmp / "version-guard/repo"
+    (repo / "colab/extension/vi-prompt-builder/scripts").mkdir(parents=True)
+    (repo / "danbooru_e621.csv").write_text("fixture,0,100,\n")
+    (repo / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py").write_text("# fixture\n")
+    (repo / "colab/make_tagcomplete_assets.py").write_text(
+        "from pathlib import Path\n"
+        "p=Path('colab/assets'); p.mkdir(parents=True, exist_ok=True)\n"
+        "(p/'wai-illustrious-system-tags.csv').write_text('fixture,0,100,\\n')\n"
+        "(p/'danbooru_e621_vi_translation_wai.csv').write_text('fixture,nghĩa\\n')\n"
+    )
+    (forge / "extensions/a1111-sd-webui-tagcomplete").mkdir(parents=True)
+    upscaler = forge / "models/ESRGAN"
+    upscaler.mkdir(parents=True)
+    (upscaler / "RealESRGAN_x4plus_anime_6B.pth").write_bytes(b"fixture")
+    r = source_call(SETUP, "stage_extras", {**env, "REPO_DIR": str(repo), "UPSCALER_DIR": str(upscaler)})
+    guard_result = verify()
+    check("Cài mới: stage extras thật tạo config có UID, giữ nó qua writer và vượt guard",
+          r.returncode == 0 and json.loads(cfg.read_text()).get("VERSION_UID") == initial_uid
+          and json.loads(cfg.read_text()).get("tac_translation.searchByTranslation") is True
+          and guard_result.returncode == 0, r.stdout+r.stderr+guard_result.stderr)
+
+
 def test_lifecycle(tmp):
-    print("4) Cài → chạy lại → sửa file thiếu → đổi model (offline)")
+    print("5) Cài → chạy lại → sửa file thiếu → đổi model (offline)")
     home = tmp / "lifecycle"
     repo, forge, state, runtime = (home / x for x in ("repo", "forge", "state", "runtime"))
     colab = repo / "colab"
@@ -382,7 +522,7 @@ esac
 
 
 def test_notebook():
-    print("5) Notebook một ô và nguồn sinh")
+    print("6) Notebook một ô và nguồn sinh")
     r = subprocess.run([sys.executable, str(ROOT / "colab/make_install_notebook.py")],
                        cwd=ROOT, text=True, capture_output=True, timeout=20)
     check("Generator notebook chạy được", r.returncode == 0, r.stderr)
@@ -406,6 +546,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="wai-installer-test-") as directory:
         tmp = Path(directory)
         test_model_and_torch(tmp)
+        test_config_version(tmp)
         test_lifecycle(tmp)
     test_notebook()
     print("\n" + "=" * 68)

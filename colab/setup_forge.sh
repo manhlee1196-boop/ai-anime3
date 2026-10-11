@@ -308,11 +308,101 @@ stage_model() {
   die "Chưa tải được model. Phần tải dở (nếu có) được giữ lại. Kiểm tra mạng/token và chạy lại; hoặc cấp MODEL_URL + MODEL_SHA256."
 }
 
+# ------------------------------------------------------------------- config version
+ensure_config_version() {
+  # verify_version() chạy TRƯỚC prepare_environment()/WebUI. Nếu bộ cài tự tạo
+  # config.json mà thiếu VERSION_UID, một bản cài mới cũng bị coi là bản cũ và
+  # input("Press Enter...") sẽ EOF khi chạy nền. Đọc UID bằng AST, không import
+  # launch_utils (vốn phụ thuộc torch), không hardcode UID và không bỏ qua guard.
+  FORGE_LAUNCH_UTILS="$FORGE_DIR/modules/launch_utils.py" \
+  CONFIG_JSON="$FORGE_DIR/config.json" $PY - <<'PYVERSION'
+import ast
+import json
+import os
+import shutil
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+source = Path(os.environ["FORGE_LAUNCH_UTILS"])
+path = Path(os.environ["CONFIG_JSON"])
+try:
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+except (OSError, SyntaxError) as exc:
+    raise SystemExit(f"Không đọc được VERSION_UID của Forge: {source} ({type(exc).__name__}).")
+
+uid = None
+for node in tree.body:
+    if isinstance(node, ast.AnnAssign):
+        targets, value = [node.target], node.value
+    elif isinstance(node, ast.Assign):
+        targets, value = node.targets, node.value
+    else:
+        continue
+    if any(isinstance(t, ast.Name) and t.id == "VERSION_UID" for t in targets):
+        try:
+            uid = ast.literal_eval(value)
+        except (ValueError, TypeError):
+            raise SystemExit("VERSION_UID của Forge không còn là hằng chuỗi; cần cập nhật bộ cài.")
+if not isinstance(uid, str) or not uid:
+    raise SystemExit("Không tìm thấy VERSION_UID hợp lệ trong mã Forge; không tự đoán phiên bản.")
+
+exists = path.exists()
+try:
+    data = json.loads(path.read_text(encoding="utf-8")) if exists else {}
+except (OSError, ValueError) as exc:
+    raise SystemExit(f"config.json không đọc được; hãy sửa/backup file trước ({type(exc).__name__}).")
+if not isinstance(data, dict):
+    raise SystemExit("config.json phải là JSON object; không tự ghi đè file này.")
+if data.get("VERSION_UID") == uid:
+    print(f"   VERSION_UID={uid} — cấu hình Forge đã đúng phiên bản.")
+    raise SystemExit(0)
+
+# Chỉ tự khởi tạo/sửa cấu hình tối thiểu do bộ cài tạo. Cấu hình Forge cũ thật sự
+# (UID khác hoặc có tùy chọn legacy khác) vẫn phải được người dùng backup/reset;
+# không gắn nhãn phiên bản mới lên nó để lách cảnh báo breaking changes.
+safe_keys = {"VERSION_UID", "sd_model_checkpoint", "clip_stop_at_last_layers"}
+installer_only = all(k in safe_keys or k.startswith("tac_") for k in data)
+if "VERSION_UID" in data or not installer_only:
+    raise SystemExit(
+        "Cấu hình Forge cũ/không do bộ cài tạo: cần sao lưu config.json và ui-config.json "
+        "rồi khởi tạo lại cấu hình theo hướng dẫn colab/INSTALL.md. "
+        "Không tự đổi VERSION_UID của cấu hình cũ; model/ảnh không bị đụng tới."
+    )
+
+path.parent.mkdir(parents=True, exist_ok=True)
+if exists:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup = path.with_name(f"{path.name}.wai-backup-{stamp}-{uuid.uuid4().hex[:8]}")
+    shutil.copy2(path, backup)
+    backup.chmod(0o600)
+    print(f"   Backup cấu hình trước khi bổ sung UID: {backup}")
+data["VERSION_UID"] = uid
+# Cùng filesystem, ghi nguyên tử; không để lại config.json tải/ghi dở.
+tmp = None
+try:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=f".{path.name}.wai-", delete=False) as f:
+        tmp = Path(f.name)
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(path)
+finally:
+    if tmp is not None:
+        tmp.unlink(missing_ok=True)
+print(f"   Đã khởi tạo VERSION_UID={uid}; giữ nguyên tagcomplete/checkpoint/CLIP.")
+PYVERSION
+}
+
 # ------------------------------------------------------------------- extras
 stage_extras() {
   step "Cắm kho prompt tiếng Việt vào Forge"
   [[ -d "$FORGE_DIR" ]] || die "Chạy stage 'forge' trước."
   [[ -f "$REPO_DIR/danbooru_e621.csv" ]] || die "Chạy stage 'repo' trước (thiếu kho prompt ở $REPO_DIR)."
+  ensure_config_version
 
   # 1) upscaler cho hires fix — Forge Neo đặt tên scaler THEO TÊN FILE, nên file
   #    RealESRGAN_x4plus_anime_6B.pth sẽ hiện ra đúng là "RealESRGAN_x4plus_anime_6B".
@@ -500,6 +590,7 @@ prepare_launch() {
   mkdir -p "$RUNTIME_DIR"
   cd "$FORGE_DIR" || die "thiếu $FORGE_DIR"
   [[ -x "$FORGE_DIR/venv/bin/python" ]] || die "Chưa có venv của Forge. Chạy stage forge trước."
+  ensure_config_version # cũng sửa lần cài v1.0.0 chỉ chạy lại stage launch
   # shellcheck disable=SC1090 # file do stage torch tạo trong runtime của người dùng
   [[ ! -f "$TORCH_ENV_FILE" ]] || source "$TORCH_ENV_FILE"
   export GRADIO_PACKAGE="gradio==4.40.0 gradio_rangeslider==0.0.8"

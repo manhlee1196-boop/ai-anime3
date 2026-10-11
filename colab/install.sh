@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.0"
+INSTALLER_VERSION="1.0.1"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"

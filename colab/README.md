@@ -24,7 +24,7 @@ colab/
     scripts/vi_prompt_tab.py
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
-  tests/test_install_sh.py       80 kiểm tra bộ cài (không cần GPU/mạng)
+  tests/test_install_sh.py       95 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test UI, API/Forge host giả lập
   assets/                        file sinh ra khi chạy (không đưa vào git)
   outputs/                       ảnh sinh ra từ notebook (không đưa vào git)
@@ -45,6 +45,10 @@ Hoặc dán một dòng vào Colab:
 Model tải vào `.part`, chỉ nhận khi SHA256 khớp; chạy lại không cài/khởi động trùng.
 Chẩn đoán: `!bash /content/install.sh --doctor`. Chi tiết chọn model, Secrets, sửa lỗi:
 **[`INSTALL.md`](INSTALL.md)**.
+
+Nếu bản cài cũ dừng ở `verify_version()` với `EOFError`, xem
+[ô sửa VERSION_UID](INSTALL.md#eoferror-tại-verify_version--press-enter-to-continue):
+bộ cài 1.0.1 chỉ cần cập nhật script và mở lại UI, không tải lại checkpoint.
 
 ## Notebook chi tiết — chạy từng bước
 
@@ -159,7 +163,7 @@ và `make_tagcomplete_assets.py` xuất chúng thành extra file để vẫn đ�
 ## Kiểm tra
 ```bash
 python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ từng dòng
-python3 colab/tests/test_install_sh.py      # 80 kiểm tra bộ cài, fixture/offline
+python3 colab/tests/test_install_sh.py      # 95 kiểm tra bộ cài, fixture/offline
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
 python3 colab/make_tagcomplete_assets.py   # sinh lại assets/, tự assert không trùng khoá
 bash -n colab/setup_forge.sh               # kiểm tra cú pháp script
