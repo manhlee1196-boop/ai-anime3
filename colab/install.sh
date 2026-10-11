@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.2"
+INSTALLER_VERSION="1.0.3"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -345,6 +345,7 @@ repo_ready() {
   local f
   for f in danbooru_e621.csv danbooru_e621_nounderscore.csv danbooru_e621_vi.csv \
     danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py \
+    colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
     colab/checkpoint_tools.py colab/diagnostics.py; do
     [[ -s "$REPO_DIR/$f" ]] || return 1
   done
@@ -354,7 +355,8 @@ extras_ready() {
   for f in a1111-sd-webui-tagcomplete/tags/danbooru_e621.csv \
            a1111-sd-webui-tagcomplete/tags/wai-illustrious-system-tags.csv \
            a1111-sd-webui-tagcomplete/tags/danbooru_e621_vi_translation_wai.csv \
-           vi-prompt-builder/scripts/vi_prompt_tab.py; do
+           vi-prompt-builder/scripts/vi_prompt_tab.py \
+           vi-prompt-builder/javascript/vi_prompt.js; do
     [[ -s "$ext/$f" ]] || return 1
   done
   [[ -s "$FORGE_DIR/config.json" && -s "$FORGE_DIR/styles.csv" ]]
@@ -487,7 +489,7 @@ stage_repo() {
         warn "Không cập nhật được (mạng hoặc lịch sử phân kỳ); giữ checkout hiện có."
       fi
     fi
-    repo_ready || die "Repo cũ/thiếu checkpoint_tools.py hoặc diagnostics.py. Cập nhật cùng nhánh, giữ thay đổi local; không reset hard."
+    repo_ready || die "Repo cũ/thiếu thư viện prompt/quy trình hoặc helper checkpoint. Cập nhật cùng nhánh, giữ thay đổi local; không reset hard."
     ok "Dùng kho prompt sẵn có: $REPO_DIR (không xoá thay đổi của bạn)."
     return 0
   fi
@@ -789,7 +791,7 @@ stage_verify() {
   check "Cấu hình tìm bằng tiếng Việt của Forge" valid_tac_config
   check "PyTorch chạy được kernel CUDA" torch_ready
   if [[ -x "$FORGE_DIR/venv/bin/python" ]]; then
-    check "prompt_lib import được" env PYTHONPATH="$REPO_DIR/colab" "$FORGE_DIR/venv/bin/python" -c 'import prompt_lib; assert prompt_lib.SYSTEM_TAGS'
+    check "prompt_lib và quy trình import được" env PYTHONPATH="$REPO_DIR/colab" "$FORGE_DIR/venv/bin/python" -c 'import prompt_lib; from prompt_lib.editing import convert_tags; from prompt_lib.workflow import validate_generation; assert prompt_lib.SYSTEM_TAGS'
   fi
   if [[ ! -s "$FORGE_DIR/models/ESRGAN/RealESRGAN_x4plus_anime_6B.pth" ]]; then
     warn "Chưa có upscaler anime (không chặn cài); tải lại với --only extras."

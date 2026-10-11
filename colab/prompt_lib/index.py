@@ -2,7 +2,7 @@
 
 Nạp từ chính các file CSV đã build ở thư mục gốc repo:
 - `danbooru_e621.csv`              : tag, category, post_count, aliases (bản gốc)
-- `danbooru_e621_vi_translation.csv`: tag gốc, bản dịch tiếng Việt (45.443 dòng)
+- `danbooru_e621_vi_translation.csv`: tag gốc, bản dịch tiếng Việt (45.513 dòng)
 - `system_tags.SYSTEM_TAGS`        : tag hệ thống Illustrious/WAI không có trong CSV
 
 Tìm kiếm không phân biệt dấu tiếng Việt ("ao dai" vẫn ra "áo dài").
@@ -149,6 +149,11 @@ class TagIndex:
         self._vi_items = [(norm(v), t) for t, v in self._vi.items()]
         # bản CÓ DẤU để ưu tiên khớp chính xác ("váy" không bị lẫn với "vảy", "vây")
         self._vi_raw = [(v.strip().lower(), t) for t, v in self._vi.items()]
+        self._exact_vi = defaultdict(list)
+        self._exact_vi_raw = defaultdict(list)
+        for tag, meaning in self._vi.items():
+            self._exact_vi[norm(meaning)].append(tag)
+            self._exact_vi_raw[unicodedata.normalize("NFC", meaning.strip().casefold())].append(tag)
         self._en_keys = sorted((norm(t), t) for t in self._info)
         self._en_norm = [k for k, _ in self._en_keys]
         self._by_count = sorted(self._info, key=lambda t: -self._info[t][1])
@@ -173,6 +178,33 @@ class TagIndex:
 
     def info_of(self, tag):
         return self._info.get(tag) or self._info.get(tag.replace(" ", "_"))
+
+    def exact_tag(self, text):
+        """Canonical chỉ khi khớp đầy đủ; không lấy prefix/fuzzy làm bản dịch.
+
+        Giữ tag/tên Anh đã biết; với đầu vào Việt, ưu tiên khớp dấu (váy ≠ vảy).
+        Không đoán khi nghĩa có nhiều tag; người dùng chọn kết quả cụ thể.
+        """
+        raw = unicodedata.normalize("NFC", str(text or "").strip().casefold())
+        key = norm(raw)
+        if not key:
+            return None
+        # Bảo vệ tag/tên Anh có sẵn: hat ≠ hát, bat ≠ bắt, may ≠ mây.
+        literal = raw.replace(" ", "_")
+        if literal in self._info:
+            return literal
+        if raw in self._info:
+            return raw
+        candidates = (self._exact_vi_raw.get(raw, []) if unaccent(raw) != raw
+                      else self._exact_vi.get(key, []))
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            return None
+        i = bisect.bisect_left(self._en_norm, key)
+        if i < len(self._en_norm) and self._en_norm[i] == key:
+            return self._en_keys[i][1]
+        return self._alias.get(key)
 
     def group_of(self, tag):
         info = self.info_of(tag)

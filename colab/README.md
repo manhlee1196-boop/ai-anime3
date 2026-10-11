@@ -12,7 +12,7 @@ colab/
   make_install_notebook.py      sinh notebook một ô
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
   diagnostics.py                chẩn đoán checkpoint/venv/GPU/API chỉ đọc
-  AUDIT.md                      báo cáo rà soát toàn dự án 1.0.2
+  AUDIT.md                      báo cáo rà soát 1.0.3 + checkpoint 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
@@ -22,13 +22,17 @@ colab/
     index.py                       mục lục tra cứu 2 chiều Việt <-> Anh
     groups.py                      phân loại tag + thứ tự prompt chuẩn Illustrious
     builder.py                     ghép prompt / negative / payload cho API
+    editing.py                     thay Việt → Anh, giữ cú pháp/mục khác
+    workflow.py                    preset, validation, metadata seed theo ảnh
     system_tags.py                 tag hệ thống WAI-Illustrious + preset tham số
   extension/vi-prompt-builder/   extension Forge: thêm tab "Prompt VN"
     scripts/vi_prompt_tab.py
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
-  tests/test_install_sh.py       95 kiểm tra bộ cài (không cần GPU/mạng)
+  tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
+  tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
+  tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
   assets/                        file sinh ra khi chạy (không đưa vào git)
@@ -106,10 +110,23 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
 - Khớp đủ mọi từ theo bất kỳ thứ tự nào: “nhìn người xem” vẫn ra `looking_at_viewer`
   dù bản dịch là “nhìn vào người xem”.
 - Duyệt theo 18 nhóm (Trang phục, Ngoại hình, Tư thế, Bối cảnh, Góc máy, 18+…).
-- Bấm một dòng kết quả → tag tự thêm vào danh sách, **không trùng lặp**.
+- Bấm một dòng kết quả: nếu đã có mục Việt tương ứng thì **thay tại chỗ**,
+  nếu chưa có thì thêm tag. Ví dụ `1girl, (áo dài:1.2), long_hair` →
+  `1girl, (ao_dai:1.2), long_hair`; không còn cả Việt + Anh.
+- Có nút **Thay mục Việt → tag Anh** để chuyển nhiều mục đã biết một lần;
+  mục chưa xác định, LoRA, wildcard và trọng số được giữ nguyên, không tự đoán fuzzy.
+- Nếu mục Việt và tag Anh cùng tồn tại, chỉ bỏ bản trùng đúng mục đã chuyển
+  với cùng trọng số; không khử trùng các mục khác trong ô nhập. Tag Anh có sẵn
+  được ưu tiên giữ đúng nghĩa (`hat` không bị hiểu thành “hát”).
+- Tagcomplete trong txt2img/img2img có adapter lấy toàn cụm Việt ở con trỏ,
+  không chỉ từ cuối; không chỉnh sửa mã của extension tagcomplete.
 - Ghép prompt theo thứ tự Illustrious/WAI, sinh negative theo mức phân loại đã chọn.
-- Hai lối ra: **📋 Đưa vào txt2img** (điền thẳng vào ô prompt bằng JS, không cần API)
-  hoặc **🖼️ Sinh ảnh** (gọi `/sdapi/v1/txt2img` với đúng tham số v17).
+- Hai lối ra: **Đưa vào txt2img** mặc định ghép/thay mục tương ứng, giữ mục khác;
+  **Thay toàn bộ** phải bật rõ ràng, có **Hoàn tác** trong phiên trình duyệt.
+  Nút chỉ chuyển prompt, **không chuyển tham số sampling**; chỉnh chúng tại txt2img.
+- **Sinh ảnh** ngay trong tab dùng quy trình/seed và tham số API đã chọn.
+  Chỉ một tác vụ API của app/tab chạy đồng thời; không chặn được người dùng khác
+  gọi API trực tiếp hoặc một app độc lập khác.
 - Có công tắc ẩn/hiện tag 18+ khi tìm, duyệt và bốc ngẫu nhiên.
 
 ### 3. App Gradio độc lập
@@ -138,6 +155,34 @@ Một cô gái đứng dưới cơn mưa hoa anh đào, masterpiece, best qualit
 newest, highres, absurdres, rating_general, general, 1girl, long_hair, red_eyes,
 ao_dai, holding_sword, cherry_blossoms, from_behind
 ```
+
+## Quy trình tối ưu (bản 1.0.3)
+
+| Mức | FP16 gốc | FP8/INT8 | HSWQ turbo | Hires |
+|---|---|---|---|---|
+| Nháp | 18 bước / CFG 6 | 18 / CFG 6.5 | 10 / CFG 1 | Tắt |
+| Chuẩn | 25 / CFG 6 | 25 / CFG 6.5 | 10 / CFG 1 | Tắt |
+| Hoàn thiện | 25 / CFG 6 | 25 / CFG 6.5 | 10 / CFG 1 | 1.5×, denoise .35; 20 bước (HSWQ 10) |
+
+Các số trên là preset ứng dụng, **không phải benchmark/đo chất lượng tối ưu tuyệt đối**.
+Biến môi trường profile đã tinh chỉnh được ưu tiên. Không đổi model hoặc bật dtype FP8 tự động.
+
+1. Dựng prompt ngắn; tiếng Việt là đầu vào tra tag, câu tự nhiên nên viết tiếng Anh.
+2. Thử bố cục ở **Nháp**, mặc định 832×1216 (dọc, gần 1 megapixel).
+   Có thể chọn 1024×1024 hoặc 1024×1344 khi còn VRAM.
+3. Chọn ảnh trong Gallery → **Dùng seed của ảnh đã chọn**. Không dùng seed của ảnh lưới.
+4. Chuyển **Chuẩn** hoặc **Hoàn thiện**; giữ cùng prompt, kích thước gốc và seed.
+   Khi đổi mức, app giữ sampler bạn chọn; Hoàn thiện tự đặt **1 ảnh/lượt**.
+   Preset áp lại steps/CFG; thay steps/Hires vẫn có thể đổi chi tiết.
+   Đổi kích thước có thể đổi bố cục dù cùng seed.
+5. Hires 1.5× chỉ cho ảnh đã chọn; tránh Hires ngay từ mọi bản nháp. Ngân sách app
+   chặn ảnh Hires >4 megapixel, không phải bảo đảm T4 sẽ không OOM.
+
+Nhiều ảnh gửi `batch_size=1, n_iter=N` (tuần tự). Có hàng đợi riêng cho sinh ảnh;
+không hỏi danh sách upscaler khi Hires tắt. Ảnh API được lưu theo thiết lập outputs
+của Forge; mặc định dự án vẫn `/content`. Có cảnh báo tham số không hợp lệ và lỗi hết VRAM.
+Chưa kiểm chứng tốc độ/chất lượng WAI thật vì sandbox không có GPU/trọng số.
+Phạm vi kiểm thử và giới hạn tích hợp native: [AUDIT.md](AUDIT.md#bổ-sung-103--quy-trình-và-sửa-prompt).
 
 ## Tham số WAI-Illustrious v17.0 (từ thẻ model)
 
@@ -177,10 +222,13 @@ và `make_tagcomplete_assets.py` xuất chúng thành extra file để vẫn đ�
 ## Kiểm tra
 ```bash
 python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ từng dòng
-python3 colab/tests/test_install_sh.py      # 95 kiểm tra bộ cài, fixture/offline
+python3 colab/tests/test_install_sh.py      # 98 kiểm tra bộ cài, fixture/offline
 python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
 python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
+python3 colab/tests/test_prompt_workflow.py # 10 nhóm CPU, không cần Gradio
+node colab/tests/test_vi_prompt_js.cjs      # DOM stub/bridge/token, không cần browser
+# Có source TAC đã tải: TAC_AUDIT_SOURCE=/path/tagAutocomplete.js node colab/tests/test_vi_prompt_js.cjs
 python3 colab/make_tagcomplete_assets.py   # sinh lại assets/, tự assert không trùng khoá
 bash -n colab/setup_forge.sh               # kiểm tra cú pháp script
 ```

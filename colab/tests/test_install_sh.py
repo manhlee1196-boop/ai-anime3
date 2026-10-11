@@ -137,7 +137,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.2")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.3")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -380,6 +380,10 @@ namespace["verify_version"]()
     (repo / "colab/extension/vi-prompt-builder/scripts").mkdir(parents=True)
     (repo / "danbooru_e621.csv").write_text("fixture,0,100,\n")
     (repo / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py").write_text("# fixture\n")
+    for name in ("prompt_lib/editing.py", "prompt_lib/workflow.py", "extension/vi-prompt-builder/javascript/vi_prompt.js"):
+        path = repo / "colab" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# fixture\n")
     (repo / "colab/make_tagcomplete_assets.py").write_text(
         "from pathlib import Path\n"
         "p=Path('colab/assets'); p.mkdir(parents=True, exist_ok=True)\n"
@@ -396,6 +400,16 @@ namespace["verify_version"]()
           r.returncode == 0 and json.loads(cfg.read_text()).get("VERSION_UID") == initial_uid
           and json.loads(cfg.read_text()).get("tac_translation.searchByTranslation") is True
           and guard_result.returncode == 0, r.stdout+r.stderr+guard_result.stderr)
+    installed_js = forge / "extensions/vi-prompt-builder/javascript/vi_prompt.js"
+    source_js = repo / "colab/extension/vi-prompt-builder/javascript/vi_prompt.js"
+    check("Stage extras chép cả adapter JS và marker repo", installed_js.read_bytes() == source_js.read_bytes()
+          and (forge / "extensions/vi-prompt-builder/.repo_root").read_text().strip() == str(repo))
+    before = cfg.read_bytes(), installed_js.read_bytes()
+    (repo / "colab/prompt_lib/workflow.py").unlink()
+    r = source_call(SETUP, "stage_extras", {**env, "REPO_DIR": str(repo), "UPSCALER_DIR": str(upscaler)})
+    check("Repo thiếu workflow → dừng sớm, giữ config/extension đang có", r.returncode != 0
+          and "thiếu colab/prompt_lib/workflow.py" in r.stderr
+          and before == (cfg.read_bytes(), installed_js.read_bytes()), r.stdout + r.stderr)
 
 
 def test_lifecycle(tmp):
@@ -408,7 +422,8 @@ def test_lifecycle(tmp):
     for name in ("checkpoint_tools.py", "diagnostics.py"):
         shutil.copy2(ROOT / "colab" / name, colab / name)
     for f in ("danbooru_e621.csv", "danbooru_e621_nounderscore.csv", "danbooru_e621_vi.csv",
-              "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py"):
+              "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py",
+              "colab/prompt_lib/editing.py", "colab/prompt_lib/workflow.py"):
         p = repo / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("fixture\n")
     trace, ready = home / "trace", home / "api-ready"
     downloads = []
@@ -448,9 +463,10 @@ case "$1" in
   model) exec bash "$REAL_SETUP" model ;;
   extras)
     d="$FORGE_DIR/extensions/a1111-sd-webui-tagcomplete/tags"
-    mkdir -p "$d" "$FORGE_DIR/extensions/vi-prompt-builder/scripts"
+    mkdir -p "$d" "$FORGE_DIR/extensions/vi-prompt-builder/scripts" "$FORGE_DIR/extensions/vi-prompt-builder/javascript"
     for f in danbooru_e621.csv wai-illustrious-system-tags.csv danbooru_e621_vi_translation_wai.csv; do echo fixture > "$d/$f"; done
     echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/scripts/vi_prompt_tab.py"
+    echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/javascript/vi_prompt.js"
     echo style > "$FORGE_DIR/styles.csv"
     echo '{"tac_tagFile":"danbooru_e621.csv","tac_translation.translationFile":"danbooru_e621_vi_translation_wai.csv","tac_translation.searchByTranslation":true,"tac_translation.oldFormat":false}' > "$FORGE_DIR/config.json"
     echo "fixture credential: ${CIVITAI_TOKEN:-}; ?token=${CIVITAI_TOKEN:-}" ;;
@@ -483,6 +499,10 @@ esac
         missing.unlink(); trace.write_text("")
         r = cli(base, env, install)
         check("Marker cũ nhưng file dịch mất → tự cắm lại extras", r.returncode == 0 and missing.exists() and "extras" in trace.read_text(), r.stdout + r.stderr)
+        missing_js = forge / "extensions/vi-prompt-builder/javascript/vi_prompt.js"
+        missing_js.unlink(); trace.write_text("")
+        r = cli(base, env, install)
+        check("Marker cũ nhưng adapter JS mất → tự cắm lại extras", r.returncode == 0 and missing_js.exists() and "extras" in trace.read_text(), r.stdout + r.stderr)
         trace.write_text("")
         r = cli(["--model", "fp8", "--only", "model", "--model-url", url, "--model-sha", SHA, "--no-launch"], env, install)
         check("Đổi FP8 không bỏ qua stage model bởi marker FP16", r.returncode == 0 and trace.read_text().splitlines() == ["model"], r.stdout + r.stderr)

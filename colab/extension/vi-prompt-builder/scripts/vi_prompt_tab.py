@@ -68,6 +68,10 @@ if LIB_DIR:
                             UPSCALERS, WAI_DEFAULTS, PromptBuilder, TagIndex)
 
     from prompt_lib.api import decode_generation_response
+    from prompt_lib.editing import replace_or_append, convert_tags
+    from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
+                                     workflow_settings, workflow_note, validate_generation,
+                                     generation_metadata, generation_error, seed_at)
 
     INDEX = TagIndex(CSV_ROOT)
     BUILDER = PromptBuilder(INDEX)
@@ -89,13 +93,33 @@ def _tags(results):
 
 
 def _merge(selected, new_tags):
-    current = [p.strip() for p in str(selected or "").split(",") if p.strip()]
-    have = {p.split(":")[0].strip().strip("()").lower() for p in current}
     for tag in new_tags:
-        if tag and tag.lower() not in have:
-            current.append(tag)
-            have.add(tag.lower())
-    return ", ".join(current)
+        selected = replace_or_append(selected, tag, INDEX)
+    return selected
+
+
+def do_convert(selected):
+    converted, changes, unknown = convert_tags(selected, INDEX)
+    note = "✅ Đã thay " + str(len(changes)) + " mục Việt/alias → Anh, giữ tag khác và trọng số."
+    if unknown:
+        note += " Chưa xác định: " + ", ".join(unknown) + "; giữ nguyên, hãy chọn kết quả cụ thể."
+    return converted, note
+
+
+def use_image_seed(metadata, image_index):
+    seed = seed_at(metadata, image_index)
+    if seed is None:
+        return gr.skip(), "Chọn một ảnh đã sinh trước (không chọn ảnh lưới)."
+    return seed, f"🔒 Dùng lại seed {seed}; giữ kích thước gốc/prompt để so sánh."
+
+
+def on_image_pick(evt: gr.SelectData):
+    return evt.index if isinstance(evt.index, int) else evt.index[0]
+
+
+def set_workflow(label, sampler=None):
+    count = 1 if WORKFLOW_PRESETS.get(label) == "final" else gr.skip()
+    return (*workflow_settings(label, sampler=sampler), workflow_note(label), count)
 
 
 def _forge_url():
@@ -143,7 +167,7 @@ def on_pick(state, selected, evt: gr.SelectData):
     if not (0 <= int(row) < len(tags)):
         return selected, ""
     tag = tags[int(row)]
-    return _merge(selected, [tag]), f"Đã thêm `{tag}` — {INDEX.label_of(tag)}"
+    return _merge(selected, [tag]), f"Đã chọn/thay `{tag}` — {INDEX.label_of(tag)}"
 
 
 def do_random(n, allow_nsfw, selected):
@@ -157,7 +181,7 @@ def do_random(n, allow_nsfw, selected):
 def do_build(selected, description, rating_label, quality, negative_preset,
              extra_pos, extra_neg, artist_prefix):
     if BUILDER is None:
-        return "", "", "", LOST_NOTE
+        return "", "", [], LOST_NOTE, ""
     rating_id = RATING_BY_LABEL.get(rating_label, "general")
     out = BUILDER.assemble(selected, description=description, rating_id=rating_id,
                            quality_preset=quality, extra_positive=extra_pos,
@@ -168,31 +192,37 @@ def do_build(selected, description, rating_label, quality, negative_preset,
     if out["unresolved"]:
         note += ("\n\n⚠️ Không tra được, giữ nguyên như bạn gõ: "
                  + ", ".join(f"`{t}`" for t in out["unresolved"]))
-    return out["prompt"], out["negative"], rows, note
+    return out["prompt"], out["negative"], rows, note, out["vi_preview"]
 
 
 def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
-                enable_hr, hr_scale, denoise, upscaler):
+                enable_hr, hr_scale, denoise, upscaler, hr_steps=None, batch=1):
     """Sinh ảnh qua API của chính Forge (cần bật --api)."""
     import time
 
     if not (prompt or "").strip():
-        return [], "Chưa có prompt. Bấm **Dựng prompt** trước."
+        return [], "Chưa có prompt. Bấm **Dựng prompt** trước.", {}
     overrides = {
-        "steps": int(steps), "cfg_scale": float(cfg_scale), "sampler_name": sampler,
-        "seed": int(seed), "batch_size": 1, "enable_hr": bool(enable_hr),
-        "hr_scale": float(hr_scale), "denoising_strength": float(denoise),
-        "hr_upscaler": upscaler, "hr_second_pass_steps": WAI_DEFAULTS["hr_second_pass_steps"],
+        "steps": steps, "cfg_scale": cfg_scale, "sampler_name": sampler,
+        "seed": seed, "batch_size": 1, "n_iter": batch, "enable_hr": bool(enable_hr),
+        "hr_scale": hr_scale, "denoising_strength": denoise,
+        "hr_upscaler": upscaler, "hr_second_pass_steps": WAI_DEFAULTS["hr_second_pass_steps"] if hr_steps is None else hr_steps,
         "override_settings": {"clip_stop_at_last_layers": WAI_DEFAULTS["clip_skip"]},
     }
     if size_label in SIZE_PRESETS:
         overrides["width"], overrides["height"] = SIZE_PRESETS[size_label]
-    payload = BUILDER.payload(prompt, negative, overrides)
+    overrides.update(save_images=True, send_images=True)
+    try:
+        payload = validate_generation(BUILDER.payload(prompt, negative, overrides))
+    except (TypeError, ValueError) as exc:
+        return [], f"❌ Tham số không hợp lệ: {exc}", {}
     url_base = _forge_url()
 
     # Forge Neo đặt tên upscaler theo tên file, khác A1111 -> hỏi backend rồi tự sửa
     swapped = ""
     try:
+        if not payload.get("enable_hr"):
+            raise ValueError("Hires tắt; không cần hỏi upscaler")
         r = requests.get(url_base + "/sdapi/v1/upscalers", timeout=10)
         r.raise_for_status()
         available = [u.get("name") for u in r.json() if u.get("name")]
@@ -211,15 +241,14 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
         r = requests.post(url, json=payload, timeout=1800)
         r.raise_for_status()
     except Exception as exc:                      # noqa: BLE001
-        return [], (f"❌ Gọi API thất bại: `{type(exc).__name__}: {exc}`\n\n"
-                    f"URL: `{url}` — Forge phải chạy với cờ `--api`.")
+        return [], generation_error(exc), {}
     try:
         images, info = decode_generation_response(r.json())
     except Exception as exc:                      # noqa: BLE001
-        return [], f"❌ Response ảnh của Forge không hợp lệ: `{type(exc).__name__}: {exc}`"
+        return [], f"❌ Response ảnh của Forge không hợp lệ: `{type(exc).__name__}: {exc}`", {}
     return images, swapped + (f"✅ {len(images)} ảnh trong {time.time() - started:.1f}s · "
                     f"seed `{info.get('seed')}` · {info.get('width')}×{info.get('height')} · "
-                    f"CFG {info.get('cfg_scale')} · {info.get('steps')} bước")
+                    f"CFG {info.get('cfg_scale')} · {info.get('steps')} bước"), generation_metadata(info, payload, len(images))
 
 
 LOST_NOTE = (
@@ -263,10 +292,11 @@ def build_tab():
                     btn_browse = gr.Button("📚 Duyệt")
                 results = gr.Dataframe(
                     headers=["tag", "nghĩa tiếng Việt", "category", "số ảnh", "nhóm"],
-                    interactive=False, label="BẤM VÀO MỘT DÒNG để thêm tag")
+                    interactive=False, label="BẤM VÀO MỘT DÒNG để chọn/thay tag")
                 note = gr.Markdown("")
 
                 selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3)
+                btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh")
                 with gr.Row():
                     btn_random = gr.Button("🎲 Ngẫu nhiên")
                     rnd_n = gr.Slider(4, 20, value=8, step=1, label="Số tag")
@@ -275,16 +305,16 @@ def build_tab():
             state = gr.State([])
 
             with gr.Column(scale=5):
-                description = gr.Textbox(label="Câu mô tả tự nhiên (Illustrious hiểu được)",
-                                         placeholder="Một cô gái áo dài dưới mưa hoa anh đào")
+                description = gr.Textbox(label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
+                                         placeholder="A girl in an ao dai under cherry blossoms")
                 with gr.Row():
                     rating = gr.Dropdown(RATING_CHOICES, value=RATING_CHOICES[0],
                                          label="Mức phân loại")
                     quality = gr.Dropdown(list(QUALITY_PRESETS),
-                                          value="WAI khuyến nghị (đầy đủ)",
+                                          value="Ngắn gọn",
                                           label="Tag chất lượng")
                 neg_preset = gr.Dropdown(list(NEGATIVE_PRESETS),
-                                         value="Chuẩn cộng đồng (đầy đủ)",
+                                         value="WAI khuyến nghị (ngắn)",
                                          label="Negative mẫu")
                 with gr.Row():
                     artist_prefix = gr.Dropdown(["", "artist:", "@"], value="",
@@ -302,15 +332,19 @@ def build_tab():
 
                 # Điền thẳng vào ô txt2img bằng JS (xem javascript/vi_prompt.js)
                 btn_fill = gr.Button("📋 Đưa vào txt2img", variant="secondary")
-                fill_note = gr.Markdown("")
+                replace_all = gr.Checkbox(label="Thay toàn bộ prompt đích (mặc định chỉ ghép/thay mục trùng)", value=False)
+                btn_undo = gr.Button("↩️ Hoàn tác điền txt2img")
+                fill_note = gr.Markdown("", elem_id="vi_prompt_fill_note")
 
-                gr.Markdown("### Sinh ảnh ngay (API)")
+                gr.Markdown("### Nháp → Chuẩn → Hoàn thiện (API)")
+                mode = gr.Dropdown(list(WORKFLOW_PRESETS), value=DEFAULT_WORKFLOW, label="Quy trình")
+                mode_note = gr.Markdown(workflow_note(DEFAULT_WORKFLOW))
                 with gr.Row():
                     size = gr.Dropdown(list(SIZE_PRESETS),
-                                       value="Chân dung 1024×1344 (khuyến nghị)",
+                                       value="Dọc cao 832×1216",
                                        label="Kích thước")
                     sampler = gr.Dropdown(
-                        ["Euler a", "Euler", "DPM++ 2M Karras", "DPM++ 2M SDE Karras"],
+                        SAMPLERS,
                         value=WAI_DEFAULTS["sampler_name"], label="Sampler")
                 with gr.Row():
                     steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
@@ -319,16 +353,22 @@ def build_tab():
                                           label="CFG (theo biến thể model)")
                     seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)", precision=0)
                 with gr.Row():
-                    enable_hr = gr.Checkbox(label="Hires. fix", value=True)
+                    enable_hr = gr.Checkbox(label="Hires. fix (sau khi chọn ảnh/seed)", value=False)
                     hr_scale = gr.Slider(1.0, 2.0, value=WAI_DEFAULTS["hr_scale"],
                                          step=0.05, label="Hires scale")
                     denoise = gr.Slider(0.1, 0.8, value=WAI_DEFAULTS["denoising_strength"],
                                         step=0.05, label="Denoising")
                     upscaler = gr.Dropdown(UPSCALERS, value=WAI_DEFAULTS["hr_upscaler"],
                                            label="Upscaler")
+                with gr.Row():
+                    hr_steps = gr.Slider(0, 40, value=WAI_DEFAULTS["hr_second_pass_steps"], step=1, label="Hires steps")
+                    batch = gr.Slider(1, 4, value=1, step=1, label="Số ảnh tuần tự (batch=1)")
                 btn_generate = gr.Button("🖼️ Sinh ảnh", variant="primary")
                 gallery = gr.Gallery(label="Kết quả", columns=2, height=480)
                 gen_note = gr.Markdown("")
+                generation_state = gr.State({})
+                image_index = gr.State(0)
+                btn_seed = gr.Button("🔒 Dùng seed của ảnh đã chọn")
 
         btn_search.click(do_search, [query, cats, limit, allow_nsfw],
                          [results, state, note])
@@ -337,27 +377,28 @@ def build_tab():
         btn_browse.click(do_browse, [group_box, limit, allow_nsfw],
                          [results, state, note])
         results.select(on_pick, [state, selected], [selected, picked])
+        btn_convert.click(do_convert, [selected], [selected, picked], queue=False)
+        mode.change(set_workflow, [mode, sampler], [steps, cfg_scale, sampler, enable_hr, hr_scale,
+                                                  hr_steps, denoise, mode_note, batch], queue=False)
+        gallery.select(on_image_pick, None, [image_index], queue=False)
+        btn_seed.click(use_image_seed, [generation_state, image_index], [seed, gen_note], queue=False)
         btn_random.click(do_random, [rnd_n, allow_nsfw, selected], [selected, picked])
         btn_clear.click(lambda: ("", "Đã xoá."), None, [selected, picked])
 
         btn_build.click(do_build,
                         [selected, description, rating, quality, neg_preset,
                          extra_pos, extra_neg, artist_prefix],
-                        [prompt_out, negative_out, group_table, build_note])
-        btn_build.click(lambda p: (BUILDER.assemble(p, rating_id="general")["vi_preview"]
-                                   if p and BUILDER else ""),
-                        [prompt_out], [vi_preview])
+                        [prompt_out, negative_out, group_table, build_note, vi_preview])
 
         # Điền vào txt2img: chạy hoàn toàn ở phía trình duyệt, không cần Python
-        btn_fill.click(fn=None, inputs=[prompt_out, negative_out], outputs=None,
+        btn_fill.click(fn=None, inputs=[prompt_out, negative_out, replace_all], outputs=None,
                        js="viPromptFill")
-        btn_fill.click(lambda: "📋 Đã điền vào ô **txt2img**. Chuyển sang tab txt2img "
-                               "và bấm Generate.", None, [fill_note])
+        btn_undo.click(fn=None, inputs=None, outputs=None, js="viPromptUndo")
 
         btn_generate.click(do_generate,
                            [prompt_out, negative_out, size, steps, cfg_scale, sampler,
-                            seed, enable_hr, hr_scale, denoise, upscaler],
-                           [gallery, gen_note])
+                            seed, enable_hr, hr_scale, denoise, upscaler, hr_steps, batch],
+                           [gallery, gen_note, generation_state], concurrency_limit=1, concurrency_id="wai_gpu")
     return tab
 
 

@@ -1,4 +1,57 @@
-# Rà soát toàn dự án — bộ cài 1.0.2
+# Rà soát toàn dự án — bộ cài 1.0.3
+
+## Bổ sung 1.0.3 — quy trình và sửa prompt
+
+Ngày **11/10/2026** · `prompt_lib` **1.1.0** · setup API **2** giữ nguyên.
+
+- Chọn tag hoặc bấm chuyển Việt → Anh sẽ thay đúng body tại chỗ, giữ trọng số,
+  emphasis lồng nhau, khoảng trắng và mục chưa biết. LoRA/wildcard/schedule không
+  bị dịch nhầm. Nếu Việt và Anh cùng có sẵn, chỉ bỏ bản target trùng cùng vỏ trọng
+  số; không khử trùng các mục không liên quan trong ô nhập.
+- Tra chính xác, không dùng prefix/fuzzy để tự dịch. Giữ tag/tên Anh đã biết
+  (`hat` ≠ “hát”, `bat` ≠ “bắt”, `may` ≠ “mây”); hỗ trợ Unicode NFC/NFD.
+- Adapter tagcomplete dùng toàn cụm Việt ở con trỏ thay vì từ cuối; không sửa mã
+  upstream. Giữ sanitizer, underscore/escaping và queue của TAC; tránh chèn dấu
+  phẩy vào trong trọng số/emphasis. Hook có retry qua `onUiUpdate`, không dùng timer.
+- Điền txt2img mặc định ghép/thay tương ứng; thay toàn bộ phải bật rõ ràng. Hoàn
+  tác lưu snapshot cả positive và negative, kể cả khi một ô không đổi ở lần sau.
+  **Chỉ chuyển prompt, không chuyển tham số sampling sang txt2img native.**
+- Hai UI có Nháp/Chuẩn/Hoàn thiện theo FP16, FP8/INT8 và HSWQ; mặc định Hires tắt,
+  832×1216. Đổi mức giữ sampler đang chọn; Hoàn thiện đặt 1 ảnh/lượt. Giữ seed của
+  ảnh đã chọn, không dùng seed của ảnh lưới; seed thiếu/hỏng không làm lệch index.
+- Sinh nhiều ảnh tuần tự (`batch_size=1, n_iter=N`), concurrency của app/tab là 1.
+  Validation từ chối NaN/sai kích thước/seed và Hires >4 megapixel; không bảo đảm
+  chống OOM. Giữ clip stop bằng options override/restore, sampler và scheduler riêng.
+- Bộ cài kiểm cả thư viện mới và adapter JS; stage extras thiếu source sẽ dừng
+  trước khi thay extension. Cập nhật bằng extras/launch/verify, không cài lại model/Torch.
+
+### Kết quả chạy lại 1.0.3
+
+| Kiểm tra | Kết quả và phạm vi |
+|---|---|
+| Bộ cài | **98/98**; có guard UID upstream, copy JS/marker và repo thiếu workflow giữ nguyên extension/config |
+| Checkpoint | **16 nhóm đạt**; có hàm preset/scanner/selector nguyên bản của Forge ở revision ghi bên dưới; engine/cache vẫn giả lập |
+| Prompt library / workflow | **15 + 10 nhóm đạt**; gồm kiểm canonical của toàn bộ index, NFD, giữ tag khác, trọng số lồng nhau, seed/preset/validation |
+| Cả hai UI | **Gradio 4.40.0 và 6.30.0 đạt**; dựng UI thật, API/Forge host/PNG giả lập |
+| JavaScript | **9 nhóm đạt**, dùng hàm insertion TAC nguyên bản; supporting DOM/globals/queues giả lập. Có NFD/không dấu, weight, paired undo, load-order retry |
+| Trình duyệt app độc lập | **Chromium + Gradio thật đạt**: 6 lượt click chuyển tag, gồm bỏ trùng đúng target, giữ tag Anh, NFD, whitespace/weight và LoRA/schedule. Không gọi GPU |
+| Dữ liệu | **3 nhóm đạt, 1 bỏ qua** đối chiếu nguồn gốc vì file nguồn tải lại được không có trong checkout; toàn bộ CSV hiện có vẫn được kiểm |
+| Cú pháp | Python/notebook AST, Node, Bash/ShellCheck và `git diff --check` |
+
+Mã TAC đối chiếu: [commit 4170882f90b47be130a0ff9314f663c230b9153d](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete/tree/4170882f90b47be130a0ff9314f663c230b9153d).
+Đây là revision được kiểm thử, **không phải pin dependency của bộ cài**.
+
+**Giới hạn:** chưa chạy toàn bộ Forge + TAC trong trình duyệt native hoặc sinh ảnh
+WAI trên GPU thật; không có benchmark tốc độ/VRAM/chất lượng. Preset là lựa chọn
+ứng dụng, không phải tối ưu tuyệt đối. API client độc lập vẫn có thể dùng GPU đồng
+thời; thay prompt/kích thước/sampler/steps/Hires có thể đổi kết quả dù giữ seed.
+
+---
+
+## Rà soát checkpoint nền 1.0.2
+
+Phần dưới giữ kết quả/phát hiện của đợt 1.0.2 để đối chiếu; số kiểm tra hiện tại
+được ghi ở bảng 1.0.3 phía trên.
 
 Ngày: **11/10/2026**. Phạm vi: bộ cài và resume, tải/checksum checkpoint, cấu hình/scan/
 preset Forge Neo, notebook một ô + chi tiết, tagcomplete, thư viện prompt, cả hai UI,

@@ -3,7 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
-Bản hiện tại **1.0.2**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
+Bản hiện tại **1.0.3**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -170,6 +170,27 @@ phiên mới cần cài/tải lại. Không có thủ thuật giữ runtime luô
 
 ## 6. Xử lý sự cố
 
+### Cập nhật quy trình/đổi Việt → Anh (1.0.3)
+
+Bản mới dùng toàn cụm Việt ở con trỏ của tagcomplete và thay mục tương ứng khi
+chọn tag trong tab Prompt VN. Có nút đổi nhiều tag, hoàn tác điền txt2img, ba mức
+Nháp/Chuẩn/Hoàn thiện và dùng lại seed. Không chỉnh sửa mã tagcomplete upstream.
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --only extras,launch,verify --restart
+```
+
+Không tải lại checkpoint/Torch; bộ cài đọc lại biến thể/thư mục đã lưu.
+**Reload cứng trang Forge** sau restart để nạp JS mới. Nếu dùng `REPO_DIR` khác,
+thay `/content/ai-anime3` bằng đường dẫn repo của bạn.
+Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đưa vào txt2img
+chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
+
+
 ### Không nhận Checkpoint / ô Checkpoint trống dù file đã tải
 
 **Đã sửa ở 1.0.2.** Forge Neo còn lưu checkpoint riêng theo preset:
@@ -302,7 +323,7 @@ không tạo nội dung tình dục hóa trẻ vị thành niên.
 Từ thư mục gốc repo:
 
 ```bash
-python3 colab/tests/test_install_sh.py       # 95 kiểm tra CLI/fixture/vòng đời cài
+python3 colab/tests/test_install_sh.py       # 98 kiểm tra CLI/fixture/vòng đời cài
 python3 colab/tests/test_checkpoint_flow.py  # 16 nhóm checkpoint/preset/API/alias
 python3 colab/tests/test_data_integrity.py   # 4 nhóm, kiểm toàn bộ 349.714 dòng CSV
 python3 colab/tests/test_prompt_lib.py       # 15 nhóm hồi quy thư viện prompt

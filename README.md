@@ -28,7 +28,7 @@ Colab: `python3 colab/prompt_builder.py --demo`.
 cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
 Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
-> **Bộ cài 1.0.2:** sửa Checkpoint trống do preset Forge Neo, kiểm container/SHA/đường dẫn/chọn model; có `--diagnostics` và `--smoke-test`. [Báo cáo rà soát](colab/AUDIT.md).
+> **Bộ cài 1.0.3:** thêm quy trình Nháp → Chuẩn → Hoàn thiện, seed ảnh đã chọn, sinh tuần tự tiết kiệm VRAM; sửa thay toàn cụm Việt → Anh mà không sót chữ Việt/mất tag khác. Giữ toàn bộ bản sửa checkpoint 1.0.2. [Hướng dẫn](colab/README.md#quy-trình-tối-ưu-bản-103) · [Rà soát checkpoint](colab/AUDIT.md).
 
 Chi tiết hệ thống/bộ dựng prompt: [`colab/README.md`](colab/README.md).
 

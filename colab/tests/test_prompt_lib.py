@@ -237,7 +237,7 @@ def main():
                                 "hr_upscaler", "hr_scale", "hr_second_pass_steps",
                                 "denoising_strength"}, True)
     check("payload không chứa khoá ngoài API",
-          set(builder.payload(prompt, neg)) - {"prompt", "negative_prompt"} <= set(WAI_DEFAULTS), True)
+          set(builder.payload(prompt, neg)) - {"prompt", "negative_prompt", "override_settings", "override_settings_restore_afterwards"} <= set(WAI_DEFAULTS), True)
 
     print("\n" + "=" * 68)
     if FAILS:

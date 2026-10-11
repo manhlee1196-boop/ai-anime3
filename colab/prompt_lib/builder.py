@@ -8,6 +8,8 @@ import io
 import re
 
 from . import groups as G
+from .editing import split_prompt, piece_body, rewrite_piece
+from .index import norm
 from .system_tags import (NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
                           WAI_DEFAULTS, pick_upscaler)
 
@@ -26,7 +28,7 @@ def parse_pieces(text, index=None):
     - Nếu một mảnh không phải tag đã biết mà là tiếng Việt thì thử tra ngược.
     """
     pieces, specials, unresolved = [], [], []
-    for chunk in str(text or "").split(","):
+    for chunk in split_prompt(text):
         chunk = chunk.strip()
         if not chunk:
             continue
@@ -34,19 +36,23 @@ def parse_pieces(text, index=None):
             specials.append((chunk, None))
             continue
 
+        # Dịch body, không tháo emphasis/weight lồng nhau hay khoảng trắng.
+        original_tag = _resolve(piece_body(chunk)[0], index)
+        if original_tag:
+            chunk = rewrite_piece(chunk, original_tag)
         weight = None
         body = chunk
         if body.startswith("(") and body.endswith(")"):
             inner = body[1:-1]
             m = WEIGHT_RE.match(inner)
-            if m:
+            if m and _as_weight(m.group("w")) is not None:
                 body, weight = m.group("body").strip(), _as_weight(m.group("w"))
         else:
             m = WEIGHT_RE.match(body)
             if m and index is not None:
                 cand = m.group("body").strip()
                 # chỉ coi là trọng số nếu phần còn lại đúng là một tag đã biết
-                if index.info_of(cand) or index.info_of(cand.replace(" ", "_")):
+                if index.info_of(cand) and _as_weight(m.group("w")) is not None:
                     body, weight = cand, _as_weight(m.group("w"))
 
         key = body.strip()
@@ -55,9 +61,12 @@ def parse_pieces(text, index=None):
         tag = _resolve(key, index)
         if tag:
             pieces.append((tag, weight))
+        elif original_tag:
+            # Dạng (tag), ((tag):1.2), ... không bị mất vỏ hoặc báo unknown giả.
+            pieces.append((chunk, None))
         else:
             unresolved.append(key)
-            pieces.append((key.replace(" ", "_"), weight))
+            pieces.append((key, weight))
     return pieces, specials, unresolved
 
 
@@ -73,15 +82,7 @@ def _resolve(key, index):
     """Trả về tag tiếng Anh đúng chuẩn nếu tra được, ngược lại None."""
     if index is None:
         return None
-    underscored = key.replace(" ", "_")
-    if index.info_of(underscored):
-        return underscored
-    if index.info_of(key):
-        return key
-    hits = index.search(key, limit=1)
-    if hits and hits[0].score >= 900:     # chỉ nhận khớp chắc chắn
-        return hits[0].tag
-    return None
+    return index.exact_tag(key)
 
 
 def render(tag, weight=None):
@@ -99,7 +100,7 @@ class PromptBuilder:
     def bucket(self, pieces):
         buckets = {g: [] for g in G.GROUP_ORDER}
         for tag, weight in pieces:
-            group = self.index.group_of(tag)
+            group = self.index.group_of(piece_body(tag)[0])
             buckets.setdefault(group, []).append((tag, weight))
         return buckets
 
@@ -127,8 +128,13 @@ class PromptBuilder:
                 ordered.append(tag.strip())
 
         # tag chất lượng & phân loại luôn đi đầu (quy ước NoobAI/Illustrious)
-        push(_split(quality))
-        push(rating["positive"])
+        user_quality = buckets.get("quality") or []
+        user_rating = buckets.get("rating") or []
+        explicit = {norm(piece_body(t)[0]) for t, _ in user_quality + user_rating}
+        push(t for t in _split(quality) if norm(t) not in explicit)
+        push(render(t, w) for t, w in user_quality)
+        push(t for t in rating["positive"] if norm(t) not in explicit)
+        push(render(t, w) for t, w in user_rating)
 
         for group in G.GROUP_ORDER:
             if group in ("quality", "rating"):
@@ -176,7 +182,7 @@ class PromptBuilder:
         joined = ", ".join(p for p in parts if p and p.strip())
         # khử trùng lặp, giữ thứ tự
         seen, out = set(), []
-        for piece in joined.split(","):
+        for piece in split_prompt(joined):
             key = piece.strip().lower()
             if key and key not in seen:
                 seen.add(key)
@@ -195,7 +201,7 @@ class PromptBuilder:
         for piece in ordered:
             if piece == "BREAK":
                 continue
-            tag = re.sub(r"^\(|:\d+(?:\.\d+)?\)$", "", piece).strip()
+            tag = piece_body(piece)[0]
             vi = self.index.vi_of(tag)
             if not vi:
                 continue
@@ -217,11 +223,20 @@ class PromptBuilder:
             body[key] = value
         # Neo API nhận sampler và scheduler riêng; giữ lựa chọn UI cũ nhưng
         # không gửi "DPM++ 2M Karras" như một tên sampler không tồn tại.
-        combined = {"DPM++ 2M Karras": "DPM++ 2M", "DPM++ 2M SDE Karras": "DPM++ 2M SDE"}
+        combined = {"DPM++ 2M Karras": "DPM++ 2M", "DPM++ 2M SDE Karras": "DPM++ 2M SDE",
+                    "DPM++ 3M SDE Karras": "DPM++ 3M SDE"}
         if body.get("sampler_name") in combined:
             body["sampler_name"] = combined[body["sampler_name"]]
             if not (overrides or {}).get("scheduler"):
                 body["scheduler"] = "Karras"
+        # clip_skip không phải tham số processing của Neo: dùng options override.
+        clip = body.pop("clip_skip", WAI_DEFAULTS["clip_skip"])
+        settings = dict(body.get("override_settings") or {})
+        settings.setdefault("clip_stop_at_last_layers", clip)
+        body["override_settings"] = settings
+        body["override_settings_restore_afterwards"] = True
+        if not body.get("scheduler"):
+            body["scheduler"] = "Automatic"
         if not body.get("enable_hr"):
             for key in ("hr_upscaler", "hr_scale", "hr_second_pass_steps",
                         "denoising_strength"):
@@ -258,4 +273,4 @@ class PromptBuilder:
 
 
 def _split(text):
-    return [p.strip() for p in str(text or "").split(",") if p.strip()]
+    return [p.strip() for p in split_prompt(text) if p.strip()]

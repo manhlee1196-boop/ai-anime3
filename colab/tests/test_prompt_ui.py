@@ -35,7 +35,8 @@ def cfg_slider(ui):
 def main():
     app.INDEX = app.TagIndex(ROOT)
     app.BUILDER = app.PromptBuilder(app.INDEX)
-    slider = cfg_slider(app.build_ui())
+    app_ui = app.build_ui()
+    slider = cfg_slider(app_ui)
     assert slider["minimum"] <= 1.0 <= slider["maximum"] and slider["value"] == 1.0
     assert "hswq" in app.profile_note()
     print(f"✔ App Gradio {gr.__version__}: HSWQ CFG=1 / steps=10, UI hợp lệ")
@@ -49,12 +50,25 @@ def main():
     spec = importlib.util.spec_from_file_location("vi_prompt_tab_test", path)
     extension = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(extension)
-    slider = cfg_slider(extension.build_tab())
+    extension_ui = extension.build_tab()
+    slider = cfg_slider(extension_ui)
     assert slider["value"] == 1.0 and slider["minimum"] <= 1.0
     built = extension.do_build("1girl, ao_dai, long_hair", "", extension.RATING_CHOICES[0],
                                "WAI khuyến nghị (đầy đủ)", "Chuẩn cộng đồng (đầy đủ)", "", "", "")
     assert isinstance(built[2], list) and all(isinstance(row, list) and len(row) == 2 for row in built[2])
-    print("✔ Tab Prompt VN: dựng UI và bảng nhóm đúng định dạng Dataframe")
+    for module, ui in ((app, app_ui), (extension, extension_ui)):
+        assert module._merge("1girl, (áo dài:1.2), long_hair", ["ao_dai"]) == "1girl, (ao_dai:1.2), long_hair"
+        assert module.do_convert("1girl, áo dài, tóc dài")[0] == "1girl, ao_dai, long_hair"
+        components = ui.get_config_file()["components"]
+        assert any(c["props"].get("label") == "Quy trình" for c in components)
+        assert all(not c["props"].get("value") for c in components
+                   if c["type"] == "checkbox" and c["props"].get("label", "").startswith("Hires"))
+        assert len(module.set_workflow("Hoàn thiện — Hires 1.5×")) == 9
+        assert module.set_workflow("Hoàn thiện — Hires 1.5×", "DPM++ 2M Karras")[2] == "DPM++ 2M Karras"
+        assert module.set_workflow("Hoàn thiện — Hires 1.5×")[-1] == 1
+        assert module.do_convert("1girl, 1girl, áo dài, ao_dai, (tóc dài:1.2)")[0] == "1girl, 1girl, ao_dai, (long_hair:1.2)"
+        assert module.set_workflow("Hoàn thiện — Hires 1.5×")[0:2] == (10, 1.0)
+    print("✔ Tab/app: đổi Việt tại chỗ, workflow/HSWQ, Hires mặc định tắt")
 
     buffer = io.BytesIO()
     Image.new("RGB", (8, 8), "white").save(buffer, format="PNG")
@@ -83,7 +97,7 @@ def main():
     old_get, old_post = extension.requests.get, extension.requests.post
     try:
         extension.requests.get, extension.requests.post = get, post
-        images, note = extension.do_generate(built[0], built[1], "Vuông 1024×1024",
+        images, note, meta = extension.do_generate(built[0], built[1], "Vuông 1024×1024",
                                               10, 1.0, "Euler a", 1, True, 1.5, 0.4,
                                               "RealESRGAN_x4plus_anime_6B")
     finally:
@@ -96,18 +110,29 @@ def main():
     # App độc lập cũng phải đi hết đường sinh ảnh, không chỉ dựng được UI.
     try:
         app.requests.get, app.requests.post = get, post
-        images, note = app.do_generate("masterpiece, landscape", "lowres", "Vuông 1024×1024",
+        images, note, meta = app.do_generate("masterpiece, landscape", "lowres", "Vuông 1024×1024",
                                       10, 1.0, "DPM++ 2M Karras", 1, 1, True, 1.5, 10, 0.4,
                                       "RealESRGAN_x4plus_anime_6B", "http://127.0.0.1:7860")
         assert len(images) == 1 and isinstance(images[0], Image.Image)
         assert "seed `1`" in note
         assert captured[-1]["sampler_name"] == "DPM++ 2M" and captured[-1]["scheduler"] == "Karras"
+        assert captured[-1]["override_settings"]["clip_stop_at_last_layers"] == 2
+        assert "clip_skip" not in captured[-1]
+        assert app.use_image_seed(meta, 0)[0] == 1
+        count = len(captured)
+        images, note, _ = app.do_generate("landscape", "", "Vuông 1024×1024", 0, float("nan"), "Euler a", 1, 1,
+                                         False, 1.5, 10, 0.4, "None", "http://127.0.0.1:7860")
+        assert images == [] and "không hợp lệ" in note and len(captured) == count
+        images, note, _ = app.do_generate("landscape", "", "Vuông 1024×1024", 10, 1, "Euler a", 1, 3,
+                                         False, 1.5, 10, 0.4, "None", "http://127.0.0.1:7860")
+        assert captured[-1]["batch_size"] == 1 and captured[-1]["n_iter"] == 3
+        assert captured[-1]["save_images"] is True
         api_options["sd_model_checkpoint"] = None
         connected, note = app.forge_alive()
         assert not connected and "chưa chọn Checkpoint" in note
         api_options["sd_model_checkpoint"] = "fixture.safetensors"
         app.requests.post = lambda *args, **kwargs: Response({"images": [], "info": "{}"})
-        images, note = app.do_generate("landscape", "", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1,
+        images, note, meta = app.do_generate("landscape", "", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1,
                                       False, 1.5, 10, 0.4, "None", "http://127.0.0.1:7860")
         assert images == [] and "không hợp lệ" in note
     finally:
