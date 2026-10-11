@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# file nguồn tải lại được (xem README để lấy lệnh curl)
+tools/source_merged_2026-10-01.csv
+
+# danh sách tag trung gian do build sinh ra
+tools/work/
