@@ -14,6 +14,12 @@ Nguồn tham khảo đã kiểm chứng:
   > normal > low > worst; tag thẩm mỹ "very awa" / "worst aesthetic".
 """
 
+import json
+import math
+import os
+from pathlib import Path
+
+
 # ---------------------------------------------------------------- tag hệ thống
 # tag -> (nghĩa tiếng Việt, nhóm)
 # Nhóm dùng để xếp thứ tự prompt, xem groups.py
@@ -193,6 +199,103 @@ WAI_DEFAULTS = {
     "hr_second_pass_steps": 20,
     "denoising_strength": 0.4,
 }
+
+# --------------------------------------------------------------------- profile
+# Tham số khuyến nghị THEO BIẾN THỂ model — khớp với catalog trong colab/install.sh.
+# Bản HSWQ turbo là merge tăng tốc (DMD2) nên CFG/steps khác hẳn bản FP16: dùng
+# CFG 6 với nó sẽ cháy ảnh. colab/install.sh export WAI_PROFILE_* lúc cài, nhờ vậy
+# chọn `--model hswq` thì bộ dựng prompt tự đổi tham số, không phải sửa tay.
+MODEL_PROFILES = {
+    "fp16": {
+        "label": "WAI-illustrious-SDXL v17.0 FP16 (bản gốc của WAI0731)",
+        "steps": 25, "cfg_scale": 6.0, "sampler_name": "Euler a", "clip_skip": 2,
+        "hr_second_pass_steps": 20,
+    },
+    "fp8": {
+        "label": "WAI v17.0 FP8 e4m3 (lượng tử hoá, nhẹ VRAM)",
+        "steps": 25, "cfg_scale": 6.5, "sampler_name": "Euler a", "clip_skip": 2,
+        "hr_second_pass_steps": 20,
+    },
+    "int8": {
+        "label": "WAI v17.0 INT8 convrot (lượng tử hoá 8-bit)",
+        "steps": 25, "cfg_scale": 6.5, "sampler_name": "Euler a", "clip_skip": 2,
+        "hr_second_pass_steps": 20,
+    },
+    "hswq": {
+        "label": "WAI v17.0 HSWQ turbo r32 (DMD2 — sinh nhanh)",
+        "steps": 10, "cfg_scale": 1.0, "sampler_name": "Euler a", "clip_skip": 2,
+        "hr_second_pass_steps": 10,
+    },
+}
+DEFAULT_PROFILE_ID = "fp16"
+
+# Các khoá được phép ghi vào WAI_DEFAULTS. Cố ý hẹp: KHÔNG cho thêm khoá lạ vào
+# dict này vì builder.payload() gửi nguyên dict đó lên /sdapi/v1/txt2img.
+_PROFILE_KEYS = ("steps", "cfg_scale", "sampler_name", "clip_skip", "hr_second_pass_steps")
+_ENV_CAST = {
+    "WAI_PROFILE_CFG": ("cfg_scale", float),
+    "WAI_PROFILE_STEPS": ("steps", int),
+    "WAI_PROFILE_SAMPLER": ("sampler_name", str),
+}
+
+
+def apply_model_profile(defaults=None, env=None):
+    """Ghi tham số của biến thể model đang cài vào dict mặc định (sửa tại chỗ).
+
+    Nguồn ưu tiên: biến môi trường lẻ (WAI_PROFILE_CFG/STEPS/SAMPLER) > catalog
+    MODEL_PROFILES theo WAI_PROFILE_MODEL_ID > giữ nguyên giá trị sẵn có.
+
+    Trả về ``(profile_id, {khoá: giá trị đã ghi})``; profile_id là "" nếu môi trường
+    không khai báo biến thể nào (khi đó mặc định fp16 được giữ nguyên).
+    """
+    env = dict(os.environ) if env is None else dict(env)
+    target = WAI_DEFAULTS if defaults is None else defaults
+    mid = (env.get("WAI_PROFILE_MODEL_ID") or "").strip().lower()
+    prof = MODEL_PROFILES.get(mid)
+    applied = {}
+    if prof:
+        for key in _PROFILE_KEYS:
+            if key in prof:
+                applied[key] = prof[key]
+    for env_key, (key, cast) in _ENV_CAST.items():
+        raw = (env.get(env_key) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = cast(raw)
+            if key == "cfg_scale" and (not math.isfinite(value) or not 0 <= value <= 30):
+                continue
+            if key == "steps" and not 1 <= value <= 200:
+                continue
+            applied[key] = value
+        except (ValueError, TypeError):
+            continue
+    if applied:
+        target.update(applied)
+    return (mid if prof else ""), applied
+
+
+def profile_environment():
+    """Đọc profile JSON do bộ cài lưu; biến môi trường lần này luôn được ưu tiên.
+
+    Chỉ đọc dữ liệu, không source/eval file. App độc lập không phải kế thừa
+    environment của tiến trình Bash đã cài model.
+    """
+    env = {}
+    path = Path(os.environ.get("WAI_PROFILE_FILE") or
+                Path(__file__).resolve().parents[1] / "assets" / "model_profile.json")
+    keys = {"WAI_PROFILE_MODEL_ID", *_ENV_CAST}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            env.update({k: str(v) for k, v in data.items() if k in keys and isinstance(v, (str, int, float))})
+    except (OSError, ValueError):
+        pass
+    env.update({k: v for k, v in os.environ.items() if k in keys})
+    return env
+
+
+ACTIVE_PROFILE_ID, ACTIVE_PROFILE_OVERRIDES = apply_model_profile(env=profile_environment())
 
 # Kích thước chuẩn của SDXL/Illustrious (model yêu cầu > 1024x1024)
 SIZE_PRESETS = {

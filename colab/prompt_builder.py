@@ -27,12 +27,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 
-from prompt_lib import (GROUP_LABELS, BROWSE_GROUPS, CATEGORY_NAMES, NEGATIVE_PRESETS,  # noqa: E402
+from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY_NAMES,  # noqa: E402
+                        MODEL_PROFILES, NEGATIVE_PRESETS,
                         QUALITY_PRESETS, RATINGS, SIZE_PRESETS, UPSCALERS, WAI_DEFAULTS,
                         PromptBuilder, TagIndex, pick_upscaler)
 
 INDEX = None
 BUILDER = None
+
+
+def profile_note():
+    """Dòng ghi chú biến thể model đang áp dụng (do colab/install.sh export).
+
+    Chọn `--model hswq` khi cài thì tham số mặc định đã tự đổi thành CFG 1.0 /
+    steps 10; dòng này nói rõ cho người dùng biết vì sao số khác thẻ model FP16.
+    """
+    from prompt_lib.system_tags import profile_environment
+    mid = ACTIVE_PROFILE_ID or profile_environment().get("WAI_PROFILE_MODEL_ID") or "fp16"
+    prof = MODEL_PROFILES.get(mid)
+    label = prof["label"] if prof else "Checkpoint tuỳ chỉnh (kiểm tra tham số theo thẻ model của bạn)"
+    return (
+        f"\n_Biến thể model: **{mid}** — {label} "
+        f"(mặc định CFG {WAI_DEFAULTS['cfg_scale']}, steps {WAI_DEFAULTS['steps']}, "
+        f"{WAI_DEFAULTS['sampler_name']}, clip skip {WAI_DEFAULTS['clip_skip']})._\n"
+    )
 CFG = {"forge_url": "http://127.0.0.1:7860", "demo": False}
 
 # --- Lớp tương thích Gradio -------------------------------------------------
@@ -291,6 +309,7 @@ def build_ui():
             f"**{INDEX.stats()['có_nghĩa_tiếng_việt']:,} tag đã có nghĩa tiếng Việt**. "
             "Gõ tiếng Việt (không cần đúng dấu) → nhận tag tiếng Anh → ghép prompt "
             "đúng thứ tự mà model họ Illustrious hiểu tốt nhất."
+            + profile_note()
         )
 
         with gr.Tabs():
@@ -372,10 +391,10 @@ def build_ui():
                                  "DPM++ 3M SDE Karras", "UniPC"],
                                 value=WAI_DEFAULTS["sampler_name"], label="Sampler")
                         with gr.Row():
-                            steps = gr.Slider(10, 40, value=WAI_DEFAULTS["steps"], step=1,
+                            steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
                                               label="Số bước (thẻ model: 15–30)")
-                            cfg_scale = gr.Slider(3, 9, value=WAI_DEFAULTS["cfg_scale"],
-                                                  step=0.5, label="CFG (thẻ model: 5–7)")
+                            cfg_scale = gr.Slider(0.5, 12, value=WAI_DEFAULTS["cfg_scale"],
+                                                  step=0.5, label="CFG (theo biến thể model)")
                         with gr.Row():
                             seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)",
                                              precision=0)

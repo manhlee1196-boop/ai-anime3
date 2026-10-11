@@ -63,7 +63,7 @@ BLOCKS_THEME = {"theme": gr.themes.Soft()} if GRADIO_MAJOR < 6 else {}
 
 if LIB_DIR:
     sys.path.insert(0, LIB_DIR)
-    from prompt_lib import (BROWSE_GROUPS, CATEGORY_NAMES, GROUP_LABELS,  # noqa: E402
+    from prompt_lib import (ACTIVE_PROFILE_ID, MODEL_PROFILES, BROWSE_GROUPS, CATEGORY_NAMES, GROUP_LABELS,  # noqa: E402
                             NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
                             UPSCALERS, WAI_DEFAULTS, PromptBuilder, TagIndex)
 
@@ -166,7 +166,7 @@ def do_build(selected, description, rating_label, quality, negative_preset,
     if out["unresolved"]:
         note += ("\n\n⚠️ Không tra được, giữ nguyên như bạn gõ: "
                  + ", ".join(f"`{t}`" for t in out["unresolved"]))
-    return out["prompt"], out["negative"], "\n".join(rows), note
+    return out["prompt"], out["negative"], rows, note
 
 
 def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
@@ -181,7 +181,7 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
         "steps": int(steps), "cfg_scale": float(cfg_scale), "sampler_name": sampler,
         "seed": int(seed), "batch_size": 1, "enable_hr": bool(enable_hr),
         "hr_scale": float(hr_scale), "denoising_strength": float(denoise),
-        "hr_upscaler": upscaler, "hr_second_pass_steps": 20,
+        "hr_upscaler": upscaler, "hr_second_pass_steps": WAI_DEFAULTS["hr_second_pass_steps"],
         "override_settings": {"clip_stop_at_last_layers": WAI_DEFAULTS["clip_skip"]},
     }
     if size_label in SIZE_PRESETS:
@@ -213,8 +213,19 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
         return [], (f"❌ Gọi API thất bại: `{type(exc).__name__}: {exc}`\n\n"
                     f"URL: `{url}` — Forge phải chạy với cờ `--api`.")
     data = r.json()
-    images = [base64.b64decode(b.split(",", 1)[-1]) for b in data.get("images", [])]
+    import io
+    import json
+    from PIL import Image
+    images = [Image.open(io.BytesIO(base64.b64decode(b.split(",", 1)[-1]))).copy()
+              for b in data.get("images", [])]
     info = data.get("info", {})
+    if isinstance(info, str):
+        try:
+            info = json.loads(info)
+        except ValueError:
+            info = {}
+    if not isinstance(info, dict):
+        info = {}
     return images, swapped + (f"✅ {len(images)} ảnh trong {time.time() - started:.1f}s · "
                     f"seed `{info.get('seed')}` · {info.get('width')}×{info.get('height')} · "
                     f"CFG {info.get('cfg_scale')} · {info.get('steps')} bước")
@@ -239,7 +250,9 @@ def build_tab():
             f"Kho nhắc: **{len(INDEX):,} tag** Danbooru + e621, "
             f"**{INDEX.stats()['có_nghĩa_tiếng_việt']:,} tag có nghĩa tiếng Việt**. "
             "Gõ tiếng Việt → bấm vào dòng kết quả để thêm tag → **Dựng prompt** → "
-            "điền vào txt2img hoặc sinh ảnh ngay."
+            "điền vào txt2img hoặc sinh ảnh ngay.\n\n"
+            f"Biến thể: **{ACTIVE_PROFILE_ID or 'fp16'}** · "
+            f"CFG {WAI_DEFAULTS['cfg_scale']} · {WAI_DEFAULTS['steps']} bước."
         )
 
         with gr.Row():
@@ -309,10 +322,10 @@ def build_tab():
                         ["Euler a", "Euler", "DPM++ 2M Karras", "DPM++ 2M SDE Karras"],
                         value=WAI_DEFAULTS["sampler_name"], label="Sampler")
                 with gr.Row():
-                    steps = gr.Slider(10, 40, value=WAI_DEFAULTS["steps"], step=1,
-                                      label="Steps (15–30)")
-                    cfg_scale = gr.Slider(3, 9, value=WAI_DEFAULTS["cfg_scale"], step=0.5,
-                                          label="CFG (5–7)")
+                    steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
+                                      label="Steps (theo biến thể model)")
+                    cfg_scale = gr.Slider(0.5, 12, value=WAI_DEFAULTS["cfg_scale"], step=0.5,
+                                          label="CFG (theo biến thể model)")
                     seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)", precision=0)
                 with gr.Row():
                     enable_hr = gr.Checkbox(label="Hires. fix", value=True)

@@ -16,7 +16,10 @@
 #
 #  Mọi đường dẫn/URL đều ghi đè được bằng biến môi trường (xem khối CONFIG).
 # =============================================================================
-set -uo pipefail
+# shellcheck disable=SC2034 # marker API được install.sh đọc trước khi gọi stage
+SETUP_API_VERSION=1
+set -Eeuo pipefail
+trap 'rc=$?; printf "\n✖ Stage %s lỗi (dòng %s, mã %s). Không đánh dấu hoàn tất.\n" "${1:-all}" "$LINENO" "$rc" >&2; exit "$rc"' ERR
 
 # ------------------------------------------------------------------- CONFIG
 FORGE_DIR="${FORGE_DIR:-/content/sd-webui-forge-neo}"
@@ -29,17 +32,35 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"          # chỉ cần nếu repo để private
 PORT="${PORT:-7860}"
 TUNNEL="${TUNNEL:-share}"                 # share | cloudflared | none
 VRAM_FLAG="${VRAM_FLAG:-}"                # ví dụ: --lowvram  (T4 16GB thường để trống)
+RUNTIME_DIR="${WAI_RUNTIME_DIR:-/content}"
+TORCH_ENV_FILE="${TORCH_ENV_FILE:-$RUNTIME_DIR/.wai_torch_env}"
+FORGE_LOG="$RUNTIME_DIR/forge.log"
+FORGE_PID_FILE="$RUNTIME_DIR/forge.pid"
+TUNNEL_LOG="$RUNTIME_DIR/cloudflared.log"
+TUNNEL_PID_FILE="$RUNTIME_DIR/cloudflared.pid"
+LAUNCH_TIMEOUT="${LAUNCH_TIMEOUT:-1200}"
+EXTRA_FORGE_ARGS="${EXTRA_FORGE_ARGS:-}"
 
 MODEL_DIR="${MODEL_DIR:-$FORGE_DIR/models/Stable-diffusion}"
 MODEL_FILE="${MODEL_FILE:-waiIllustriousSDXL_v170.safetensors}"
-MODEL_SHA256="${MODEL_SHA256:-f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04}"
-CIVITAI_VERSION_ID="${CIVITAI_VERSION_ID:-2883731}"
+MODEL_LABEL="${MODEL_LABEL:-WAI-illustrious-SDXL v17.0 FP16 (6,5 GB)}"
+MODEL_SHA256="${MODEL_SHA256-f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04}"
+# Ngưỡng dung lượng tối thiểu để coi file tải dở là hỏng (byte).
+MODEL_MIN_BYTES="${MODEL_MIN_BYTES:-6800000000}"
+CIVITAI_VERSION_ID="${CIVITAI_VERSION_ID-2883731}"
 CIVITAI_TOKEN="${CIVITAI_TOKEN:-}"
-# Mirror HuggingFace tải không cần token; đã đối chiếu SHA256 với bản Civitai gốc.
-MODEL_URLS=(
-  "https://huggingface.co/LyliaEngine/waiIllustriousSDXL_v170/resolve/main/waiIllustriousSDXL_v170.safetensors"
-  "https://huggingface.co/Coercer/Modified_VeryFast_Models_DMD2/resolve/main/Orig_Models_Pruned/waiIllustriousSDXL_v170.safetensors"
-)
+# MODEL_URL (cách nhau bằng dấu cách) ghi đè TOÀN BỘ danh sách nguồn — dùng khi
+# cài biến thể khác FP16, để không tải nhầm mirror FP16 vào tên file FP8.
+# Để trống thì dùng mirror HuggingFace của bản FP16 (tải không cần token,
+# SHA256 đã đối chiếu với bản Civitai gốc).
+if [[ ${MODEL_URL+x} ]]; then
+  read -r -a MODEL_URLS <<< "$MODEL_URL"
+else
+  MODEL_URLS=(
+    "https://huggingface.co/LyliaEngine/waiIllustriousSDXL_v170/resolve/main/waiIllustriousSDXL_v170.safetensors"
+    "https://huggingface.co/Coercer/Modified_VeryFast_Models_DMD2/resolve/main/Orig_Models_Pruned/waiIllustriousSDXL_v170.safetensors"
+  )
+fi
 UPSCALER_DIR="${UPSCALER_DIR:-$FORGE_DIR/models/ESRGAN}"
 UPSCALER_URL="${UPSCALER_URL:-https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth}"
 TAC_REPO="${TAC_REPO:-https://github.com/DominikDoom/a1111-sd-webui-tagcomplete}"
@@ -50,7 +71,7 @@ c()   { printf '\033[%sm%s\033[0m\n' "$1" "$2"; }
 info(){ c '1;36' "▶ $*"; }
 ok()  { c '1;32' "✔ $*"; }
 warn(){ c '1;33' "⚠ $*"; }
-die() { c '1;31' "✖ $*"; exit 1; }
+die() { c '1;31' "✖ $*" >&2; exit 1; }
 step(){ echo; c '1;35' "═══ $* ═══"; }
 
 need() { command -v "$1" >/dev/null 2>&1 || die "thiếu lệnh '$1' — hãy cài trước."; }
@@ -58,6 +79,7 @@ need() { command -v "$1" >/dev/null 2>&1 || die "thiếu lệnh '$1' — hãy c�
 # ------------------------------------------------------------------- gpu
 stage_gpu() {
   step "Kiểm tra môi trường Colab"
+  mkdir -p "$RUNTIME_DIR"
   command -v nvidia-smi >/dev/null 2>&1 || die "Không thấy nvidia-smi: hãy bật GPU (Runtime > Change runtime type > T4/L4/A100)."
   nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
   echo
@@ -66,9 +88,9 @@ stage_gpu() {
   CUDA_MAJOR="${CUDA_VER%%.*}"
   echo "Driver hỗ trợ CUDA: ${CUDA_VER:-không rõ}"
   if [[ "${CUDA_MAJOR:-0}" -ge 13 ]]; then
-    echo "TORCH_INDEX=cu130" > /content/.wai_torch_env
+    echo "TORCH_INDEX=cu130" > "$TORCH_ENV_FILE"
   else
-    echo "TORCH_INDEX=cu128" > /content/.wai_torch_env
+    echo "TORCH_INDEX=cu128" > "$TORCH_ENV_FILE"
     warn "Driver chưa hỗ trợ CUDA 13 -> sẽ dùng wheel cu128 (tự động dự phòng nếu vẫn lỗi)."
   fi
   echo
@@ -80,29 +102,32 @@ stage_gpu() {
 
 # ------------------------------------------------------------------- repo
 stage_repo() {
-  step "Lấy kho prompt (repo này)"
-  if [[ -f "$REPO_DIR/danbooru_e621.csv" ]]; then
-    ok "Đã có sẵn $REPO_DIR — bỏ qua clone."
-    return 0
+  step "Lấy kho prompt"
+  if [[ -s "$REPO_DIR/danbooru_e621.csv" ]]; then
+    ok "Kho prompt đã có ở $REPO_DIR — không clone/reset lại."; return 0
   fi
   need git
-  local url="$REPO_URL"
+  [[ ! -e "$REPO_DIR" || -z "$(ls -A "$REPO_DIR" 2>/dev/null)" ]] \
+    || die "Thư mục $REPO_DIR có dữ liệu nhưng thiếu CSV. Không tự xoá; kiểm tra lại đường dẫn/nhánh."
+  mkdir -p "$(dirname "$REPO_DIR")"
+  local tmp auth rc=0
+  tmp=$(mktemp -d "$(dirname "$REPO_DIR")/.wai-repo.XXXXXX")
   if [[ -n "$GITHUB_TOKEN" ]]; then
-    url="${REPO_URL/https:\/\/github.com\//https://oauth2:${GITHUB_TOKEN}@github.com/}"
-    info "Dùng token GitHub để clone (repo private)."
+    auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+      GIT_CONFIG_VALUE_0="Authorization: Basic $auth" \
+      git clone --quiet --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$tmp" 2>/dev/null || rc=$?
+  else
+    git clone --quiet --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$tmp" 2>/dev/null || rc=$?
   fi
-  # thử nhánh đã cấu hình, rồi main, rồi master — vì nhánh làm việc có thể đã được gộp
-  local branch cloned=1
-  for branch in "$REPO_BRANCH" main master; do
-    info "Thử clone nhánh '$branch' ..."
-    if git clone --depth 1 --branch "$branch" "$url" "$REPO_DIR" 2>/dev/null; then
-      cloned=0; ok "Đã clone nhánh '$branch' vào $REPO_DIR"; break
-    fi
-    rm -rf "$REPO_DIR"
-  done
-  [[ $cloned -eq 0 ]] || die "Không clone được $REPO_URL. Nếu repo để private, hãy đặt GITHUB_TOKEN ở ô Cấu hình, hoặc chép 4 file CSV vào $REPO_DIR thủ công."
-  [[ -f "$REPO_DIR/danbooru_e621.csv" ]] || die "Clone xong nhưng thiếu danbooru_e621.csv trong $REPO_DIR."
-  ls -lh "$REPO_DIR"/*.csv | awk '{print "   ", $9, $5}'
+  if (( rc )); then
+    rm -rf -- "$tmp"
+    die "Không clone được đúng nhánh $REPO_BRANCH. Kiểm tra URL/nhánh/quyền đọc repo."
+  fi
+  [[ ! -d "$REPO_DIR" ]] || rmdir -- "$REPO_DIR"
+  mv "$tmp" "$REPO_DIR"
+  [[ -s "$REPO_DIR/danbooru_e621.csv" ]] || die "Repo không có kho prompt; kiểm tra nhánh."
+  ok "Clone xong kho prompt."
 }
 
 # ------------------------------------------------------------------- forge
@@ -117,11 +142,13 @@ stage_forge() {
   fi
   cd "$FORGE_DIR" || die "không vào được $FORGE_DIR"
 
-  info "Cài uv (trình quản lý gói nhanh)"
-  $PY -m pip install --quiet --upgrade uv 2>/dev/null \
-    || pip install --quiet --upgrade uv --break-system-packages 2>/dev/null \
-    || curl -LsSf https://astral.sh/uv/install.sh | sh
+  [[ -s "$FORGE_DIR/launch.py" ]] || die "Thư mục Forge thiếu launch.py; không coi clone dở là đã cài."
   export PATH="$HOME/.local/bin:$PATH"
+  if ! command -v uv >/dev/null 2>&1; then
+    info "Cài uv (trình quản lý gói nhanh)"
+    $PY -m pip install --quiet uv 2>/dev/null \
+      || curl -LsSf https://astral.sh/uv/install.sh | sh
+  fi
   need uv
 
   if [[ ! -x "$FORGE_DIR/venv/bin/python" ]]; then
@@ -136,30 +163,54 @@ stage_torch() {
   step "Cài PyTorch phù hợp với driver"
   local venvpy="$FORGE_DIR/venv/bin/python"
   [[ -x "$venvpy" ]] || die "Chạy stage 'forge' trước."
-  source /content/.wai_torch_env 2>/dev/null || TORCH_INDEX=cu130
+  local requested="${TORCH_INDEX:-}"
+  # shellcheck disable=SC1090 # file do stage torch tạo trong runtime của người dùng
+  [[ ! -f "$TORCH_ENV_FILE" ]] || source "$TORCH_ENV_FILE"
+  TORCH_INDEX="${requested:-${TORCH_INDEX:-cu130}}"
+  case "$TORCH_INDEX" in cu130|cu128|cu126) ;; *) die "TORCH_INDEX không hợp lệ: $TORCH_INDEX" ;; esac
 
-  # Danh sách ứng viên: đúng bản Forge Neo khuyến nghị trước, rồi lùi dần.
-  local candidates=()
-  case "$TORCH_INDEX" in
-    cu130) candidates=("cu130|torch==2.13.0+cu130 torchvision==0.28.0+cu130") ;;
-    *)     candidates=("cu128|torch torchvision") ;;
-  esac
-  candidates+=("cu128|torch torchvision" "cu126|torch torchvision")
+  # Thứ tự thử: bắt đầu từ bản hợp với driver (TORCH_INDEX) rồi lùi dần, khử trùng lặp.
+  local order=(cu130 cu128 cu126)
+  local i start=0
+  for i in "${!order[@]}"; do
+    [[ "${order[$i]}" == "$TORCH_INDEX" ]] && { start=$i; break; }
+  done
+  local candidates=() idx
+  for ((i = start; i < ${#order[@]}; i++)); do
+    idx="${order[$i]}"
+    if [[ "$idx" == "cu130" ]]; then
+      candidates+=("cu130|torch==2.13.0+cu130 torchvision==0.28.0+cu130")
+    else
+      candidates+=("$idx|torch torchvision")
+    fi
+  done
 
-  local check='import torch,sys
-print("torch", torch.__version__)
-sys.exit(0 if torch.cuda.is_available() else 3)'
+  local check='import torch,torchvision
+print("torch", torch.__version__, "torchvision", torchvision.__version__)
+assert torch.cuda.is_available(), "CUDA không khả dụng"
+x = torch.ones(16, device="cuda")
+assert x.sum().item() == 16
+# is_available() có thể True ngay cả khi wheel không chứa kernel cho GPU T4.
+torch.cuda.synchronize()'
 
-  local idx pkgs
+  if [[ "${FORCE_TORCH:-0}" != 1 ]] && "$venvpy" -c "$check" >/dev/null 2>&1; then
+    ok "PyTorch đang có đã chạy được kernel CUDA — giữ nguyên."
+    return 0
+  fi
+
+  local pkgs
+  local -a packages=()
   for entry in "${candidates[@]}"; do
     idx="${entry%%|*}"; pkgs="${entry#*|}"
     info "Thử $idx: pip install $pkgs"
-    "$venvpy" -m pip install --quiet $pkgs --index-url "https://download.pytorch.org/whl/$idx" \
+    read -r -a packages <<< "$pkgs"
+    "$venvpy" -m pip install --quiet --upgrade --force-reinstall --no-cache-dir "${packages[@]}" --index-url "https://download.pytorch.org/whl/$idx" \
       || { warn "cài $idx thất bại, thử bản khác"; continue; }
     if "$venvpy" -c "$check"; then
       ok "PyTorch $idx dùng được với GPU này."
       # ghi lại để launch.py không cài đè bản khác
-      cat > /content/.wai_torch_env <<EOF
+      mkdir -p "$(dirname "$TORCH_ENV_FILE")"
+      cat > "$TORCH_ENV_FILE" <<EOF
 TORCH_INDEX=$idx
 export TORCH_INDEX_URL="https://download.pytorch.org/whl/$idx"
 export TORCH_COMMAND="pip install $pkgs --index-url https://download.pytorch.org/whl/$idx"
@@ -174,54 +225,87 @@ EOF
 }
 
 # ------------------------------------------------------------------- model
-fetch() {  # fetch <url> <đích> [header] — thử aria2c -> wget -> curl
+fetch() {  # fetch <url> <đích tạm> [header]; giữ phần đã tải khi mất mạng
   local url="$1" dest="$2" hdr="${3:-}" dir base
   dir="$(dirname "$dest")"; base="$(basename "$dest")"
   mkdir -p "$dir"
+  local headers=()
+  [[ -z "$hdr" ]] || headers=("--header=$hdr")
   if command -v aria2c >/dev/null 2>&1; then
-    aria2c -x16 -s16 -k1M -c --file-allocation=none --console-log-level=warn \
-      ${hdr:+--header="$hdr"} -d "$dir" -o "$base" "$url" && return 0
-    warn "aria2c lỗi, thử wget ..."
+    if aria2c -x8 -s8 -k1M -c --allow-overwrite=true --auto-file-renaming=false \
+      --file-allocation=none --console-log-level=warn --summary-interval=10 \
+      --connect-timeout=20 --timeout=60 --max-tries=3 --retry-wait=3 \
+      "${headers[@]}" -d "$dir" -o "$base" "$url"; then
+      return 0
+    fi
+    warn "aria2c lỗi, thử wget (tiếp tục phần đã tải) ..."
   fi
   if command -v wget >/dev/null 2>&1; then
-    wget -c -O "$dest" ${hdr:+--header="$hdr"} "$url" && return 0
+    if wget --continue --timeout=60 --tries=3 --no-verbose \
+      "${headers[@]}" -O "$dest" "$url"; then return 0; fi
     warn "wget lỗi, thử curl ..."
   fi
-  curl -L -C - -o "$dest" ${hdr:+-H "$hdr"} "$url"
+  headers=()
+  [[ -z "$hdr" ]] || headers=(-H "$hdr")
+  curl --fail --location --show-error --connect-timeout 20 --max-time 3600 \
+    --retry 3 --retry-delay 3 -C - -o "$dest" "${headers[@]}" "$url"
+}
+
+model_valid() {
+  [[ -f "$1" ]] || return 1
+  local bytes
+  bytes=$(stat -c '%s' "$1")
+  (( bytes >= MODEL_MIN_BYTES )) || return 1
+  # SHA256 mới là điều kiện xác minh đầy đủ, không coi kích thước 97% là "tải xong".
+  if [[ -n "$MODEL_SHA256" ]]; then
+    echo "$MODEL_SHA256  $1" | sha256sum -c --status || return 1
+  elif [[ "${ALLOW_UNVERIFIED_MODEL:-0}" != "1" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 stage_model() {
-  step "Tải WAI-illustrious-SDXL v17.0 (6,5 GB)"
+  step "Tải $MODEL_LABEL"
+  [[ "$MODEL_FILE" == *.safetensors && "$MODEL_FILE" != */* && "$MODEL_FILE" != .* ]] \
+    || die "MODEL_FILE phải là tên file .safetensors, không phải đường dẫn."
+  [[ "$MODEL_MIN_BYTES" =~ ^[0-9]+$ ]] || die "MODEL_MIN_BYTES phải là số nguyên."
+  [[ -z "$MODEL_SHA256" || "$MODEL_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || die "SHA256 không hợp lệ."
+  [[ -n "$MODEL_SHA256" || "${ALLOW_UNVERIFIED_MODEL:-0}" == "1" ]] \
+    || die "Thiếu SHA256: cấp MODEL_SHA256, hoặc cho phép bằng ALLOW_UNVERIFIED_MODEL=1 (không khuyến nghị)."
   mkdir -p "$MODEL_DIR"
-  local dest="$MODEL_DIR/$MODEL_FILE"
+  local dest="$MODEL_DIR/$MODEL_FILE" partial="$MODEL_DIR/$MODEL_FILE.part"
 
-  if [[ -f "$dest" ]] && du -b "$dest" | awk '{exit !($1>6000000000)}'; then
-    info "File đã có, kiểm tra SHA256 ..."
-    if echo "$MODEL_SHA256  $dest" | sha256sum -c --status 2>/dev/null; then
-      ok "Model sẵn sàng: $dest"; return 0
-    fi
-    warn "SHA256 sai -> tải lại."
-    rm -f "$dest"
+  if model_valid "$dest"; then
+    ok "Model đã có và xác minh đạt: $dest"; return 0
   fi
+  [[ ! -f "$dest" ]] || warn "File đã có nhưng kiểm tra không đạt — sẽ thay bằng bản tải đã xác minh."
 
-  # gộp danh sách: mirror HF + Civitai (nếu có token)
-  local urls=("${MODEL_URLS[@]}")
-  [[ -n "$CIVITAI_TOKEN" ]] && urls+=("https://civitai.com/api/download/models/$CIVITAI_VERSION_ID")
-
-  local url
-  for url in "${urls[@]}"; do
-    info "Thử tải: ${url:0:78}..."
-    local hdr=""
-    [[ "$url" == *civitai.com* ]] && hdr="Authorization: Bearer $CIVITAI_TOKEN"
-    fetch "$url" "$dest" "$hdr" || { warn "tải lỗi, thử nguồn khác"; continue; }
-    info "Đang kiểm SHA256 (mất ~20 giây) ..."
-    if echo "$MODEL_SHA256  $dest" | sha256sum -c --status 2>/dev/null; then
-      ok "Tải xong và SHA256 khớp: $MODEL_SHA256"; ls -lh "$dest"; return 0
+  # Giữ .part + .aria2 khi ngắt mạng/ô Colab. Chỉ đổi tên sau khi SHA256 khớp,
+  # nên Forge không bao giờ thấy checkpoint đang tải dở.
+  local url host hdr
+  for url in "${MODEL_URLS[@]}"; do
+    host="$($PY -c 'from urllib.parse import urlsplit; import sys; print(urlsplit(sys.argv[1]).hostname or "nguồn tùy chỉnh")' "$url")"
+    info "Tải từ $host (không in URL/token vào log) ..."
+    hdr=""
+    if [[ "$host" == "civitai.com" || "$host" == "civitai.red" ]]; then
+      [[ -z "$CIVITAI_TOKEN" ]] || hdr="Authorization: Bearer $CIVITAI_TOKEN"
     fi
-    warn "SHA256 KHÔNG khớp (file hỏng hoặc mirror khác bản) -> thử nguồn khác."
-    rm -f "$dest"
+    if ! fetch "$url" "$partial" "$hdr"; then
+      warn "Tải chưa xong — giữ $partial để tiếp tục khi chạy lại."
+      continue
+    fi
+    info "Xác minh file tải về ..."
+    if model_valid "$partial"; then
+      mv -f "$partial" "$dest"
+      rm -f -- "$partial.aria2"
+      [[ -n "$MODEL_SHA256" ]] || warn "Đã cho phép bỏ qua SHA256; chỉ kiểm tra dung lượng."
+      ok "Model sẵn sàng: $dest"; ls -lh "$dest"; return 0
+    fi
+    warn "File tải xong nhưng dung lượng/SHA256 sai — bỏ phần hỏng rồi thử nguồn khác."
+    rm -f -- "$partial" "$partial.aria2"
   done
-  die "Không tải được model từ nguồn nào. Đặt MODEL_URL thủ công, hoặc chép file vào $MODEL_DIR (Colab cho phép kéo-thả vào khung Files)."
+  die "Chưa tải được model. Phần tải dở (nếu có) được giữ lại. Kiểm tra mạng/token và chạy lại; hoặc cấp MODEL_URL + MODEL_SHA256."
 }
 
 # ------------------------------------------------------------------- extras
@@ -235,8 +319,13 @@ stage_extras() {
   mkdir -p "$UPSCALER_DIR"
   if [[ ! -f "$UPSCALER_DIR/RealESRGAN_x4plus_anime_6B.pth" ]]; then
     info "Tải upscaler anime 6B (18 MB)"
-    fetch "$UPSCALER_URL" "$UPSCALER_DIR/RealESRGAN_x4plus_anime_6B.pth" \
-      && ok "Upscaler: RealESRGAN_x4plus_anime_6B" || warn "tải upscaler lỗi (Forge vẫn chạy, hires fix sẽ dùng Latent)."
+    local up="$UPSCALER_DIR/RealESRGAN_x4plus_anime_6B.pth"
+    if fetch "$UPSCALER_URL" "$up.part" && [[ $(stat -c '%s' "$up.part") -ge 17000000 ]]; then
+      mv -f "$up.part" "$up"; rm -f -- "$up.part.aria2"
+      ok "Upscaler: RealESRGAN_x4plus_anime_6B"
+    else
+      warn "Tải upscaler chưa xong (Forge vẫn chạy; bộ dựng prompt sẽ chọn scaler đang có)."
+    fi
   else
     ok "Upscaler đã có sẵn."
   fi
@@ -260,7 +349,7 @@ stage_extras() {
   cp -f "$REPO_DIR/danbooru_e621.csv"                                  "$tags_dir/"
   cp -f "$REPO_DIR/colab/assets/wai-illustrious-system-tags.csv"       "$tags_dir/"
   cp -f "$REPO_DIR/colab/assets/danbooru_e621_vi_translation_wai.csv"  "$tags_dir/"
-  ls -lh "$tags_dir" | awk 'NR>1{print "   ", $9, $5}'
+  find "$tags_dir" -maxdepth 1 -type f -printf '   %f (%s byte)\n'
 
   # 4) cấu hình sẵn tagcomplete (khoá lấy từ scripts/tag_autocomplete_helper.py)
   info "Ghi cấu hình tagcomplete"
@@ -273,9 +362,12 @@ path = os.environ["CONFIG_JSON"]
 data = {}
 if os.path.exists(path):
     try:
-        data = json.load(open(path, encoding="utf-8"))
-    except Exception:
-        data = {}
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"config.json không đọc được; hãy sửa/backup file trước: {exc}")
+if not isinstance(data, dict):
+    raise SystemExit("config.json phải là JSON object.")
 data.update({
     # tag file chính: bản tiếng Anh có "_" (tagcomplete tự thay "_" bằng khoảng
     # trắng khi chèn, và đã có sẵn danh sách loại trừ emoticon ^_^, o_o, |_|...)
@@ -319,7 +411,7 @@ new = [r for r in csv.reader(open(src, newline='', encoding='utf-8')) if r and r
 if new:
     with open(dst, 'a', newline='', encoding='utf-8') as f:
         csv.writer(f, lineterminator='\n').writerows(new[1:] if new[0][0] == 'name' else new)
-print('   đã thêm', max(len(new) - 1, 0), 'style')
+print('   đã thêm', len([r for r in new if r[0] != 'name']), 'style')
 PYSTY
     else
       cp -f "$REPO_DIR/colab/assets/styles.csv" "$FORGE_DIR/styles.csv"
@@ -338,74 +430,148 @@ PYSTY
 
 # ------------------------------------------------------------------- launch
 launch_args() {
+  # Forge Neo chỉ có --ckpt-dirs (không có --models-dir/--data-dir).
+  # shlex.quote bảo toàn đường dẫn có khoảng trắng khi launch.py đọc biến môi trường.
   local args="--listen --port $PORT --api --expandable-segments"
-  [[ -n "$VRAM_FLAG" ]] && args="$args $VRAM_FLAG"
-  [[ "$TUNNEL" == "share" ]] && args="$args --share"
+  local model_path
+  model_path="$($PY -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "$MODEL_DIR")"
+  args="$args --ckpt-dirs $model_path"
+  [[ -z "$VRAM_FLAG" ]] || args="$args $VRAM_FLAG"
+  [[ "$TUNNEL" != "share" ]] || args="$args --share"
+  [[ -z "$EXTRA_FORGE_ARGS" ]] || args="$args $EXTRA_FORGE_ARGS"
   echo "$args"
+}
+
+owned_process() { # owned_process <pid file> <fragment>; không đụng process của người khác
+  [[ -f "$1" ]] || return 1
+  local pid
+  pid=$(cat "$1")
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || return 1
+  [[ -r "/proc/$pid/cmdline" ]] || return 1
+  tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$2"
+}
+
+stop_owned() {
+  local pid_file="$1" fragment="$2" pid
+  if owned_process "$pid_file" "$fragment"; then
+    pid=$(cat "$pid_file")
+    info "Dừng process của bộ cài: $pid"
+    kill "$pid"
+    for _ in {1..20}; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 1
+    done
+    kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null || true
+  fi
+  rm -f -- "$pid_file"
+}
+
+stage_stop() {
+  stop_owned "$FORGE_PID_FILE" "$FORGE_DIR/launch.py"
+  stop_owned "$TUNNEL_PID_FILE" 'cloudflared tunnel'
 }
 
 start_cloudflared() {
   [[ "$TUNNEL" == "cloudflared" ]] || return 0
-  command -v cloudflared >/dev/null 2>&1 || {
+  local bin="$RUNTIME_DIR/bin/cloudflared" url pid
+  mkdir -p "$(dirname "$bin")"
+  if [[ ! -x "$bin" ]]; then
     info "Tải cloudflared"
-    wget -q -O /usr/local/bin/cloudflared \
-      https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-      && chmod +x /usr/local/bin/cloudflared
-  }
-  nohup cloudflared tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate \
-    > /content/cloudflared.log 2>&1 &
-  info "Đang chờ link cloudflared ..."
-  for _ in $(seq 1 60); do
-    local url; url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /content/cloudflared.log | head -1)
-    [[ -n "$url" ]] && { echo; ok "Link public: $url"; return 0; }
+    fetch https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 "$bin.part" \
+      || die "Không tải được cloudflared. Thử TUNNEL=share."
+    mv -f "$bin.part" "$bin"; rm -f -- "$bin.part.aria2"; chmod +x "$bin"
+  fi
+  if ! owned_process "$TUNNEL_PID_FILE" 'cloudflared tunnel'; then
+    nohup "$bin" tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate \
+      > "$TUNNEL_LOG" 2>&1 < /dev/null &
+    pid=$!; echo "$pid" > "$TUNNEL_PID_FILE"
+  fi
+  info "Chờ link cloudflared ..."
+  for _ in {1..60}; do
+    url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1 || true)
+    if [[ -n "$url" ]]; then ok "Link public: $url"; return 0; fi
+    owned_process "$TUNNEL_PID_FILE" 'cloudflared tunnel' || die "Tunnel đã dừng. Xem $TUNNEL_LOG; hoặc đổi TUNNEL=share."
     sleep 2
   done
-  warn "Chưa thấy link cloudflared; xem /content/cloudflared.log"
+  die "Chưa có link tunnel sau 2 phút. Xem $TUNNEL_LOG hoặc đổi TUNNEL=share."
+}
+
+prepare_launch() {
+  mkdir -p "$RUNTIME_DIR"
+  cd "$FORGE_DIR" || die "thiếu $FORGE_DIR"
+  [[ -x "$FORGE_DIR/venv/bin/python" ]] || die "Chưa có venv của Forge. Chạy stage forge trước."
+  # shellcheck disable=SC1090 # file do stage torch tạo trong runtime của người dùng
+  [[ ! -f "$TORCH_ENV_FILE" ]] || source "$TORCH_ENV_FILE"
+  export GRADIO_PACKAGE="gradio==4.40.0 gradio_rangeslider==0.0.8"
+  export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD="true"
+  COMMANDLINE_ARGS="$(launch_args)"
+  export COMMANDLINE_ARGS VI_PROMPT_ROOT="$REPO_DIR"
+  # Chọn đúng checkpoint, kể cả khi thư mục chứa nhiều biến thể/model cũ.
+  CONFIG_JSON="$FORGE_DIR/config.json" WAI_CHECKPOINT="$MODEL_FILE" $PY - <<'PYCFG'
+import json, os
+from pathlib import Path
+p = Path(os.environ["CONFIG_JSON"])
+data = json.loads(p.read_text()) if p.exists() else {}
+data["sd_model_checkpoint"] = os.environ["WAI_CHECKPOINT"]
+tmp = p.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+tmp.replace(p)
+PYCFG
+  # Forge/extension không cần giữ credential dùng để clone/tải model.
+  unset GITHUB_TOKEN CIVITAI_TOKEN GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+  info "Forge sẽ nghe trên 0.0.0.0:$PORT; model dir: $MODEL_DIR"
 }
 
 stage_launch() {
   step "Khởi động Forge Neo"
-  cd "$FORGE_DIR" || die "thiếu $FORGE_DIR"
-  source /content/.wai_torch_env 2>/dev/null || true
-  # launch.py tự cộng COMMANDLINE_ARGS vào sys.argv, nên KHÔNG truyền lại ở đây (sẽ bị lặp)
-  export COMMANDLINE_ARGS VI_PROMPT_ROOT
-  COMMANDLINE_ARGS="$(launch_args)"
-  VI_PROMPT_ROOT="$REPO_DIR"
-  echo "COMMANDLINE_ARGS=$COMMANDLINE_ARGS"
+  prepare_launch
   start_cloudflared
-  info "Forge đang cài phần còn lại rồi khởi động (lần đầu 3–8 phút) ..."
-  exec "$FORGE_DIR/venv/bin/python" launch.py
+  info "Lần đầu Forge còn cài dependencies — xem log trực tiếp ở dưới."
+  # Dùng đường dẫn tuyệt đối để PID có thể được kiểm tra trước khi dừng/khởi động lại.
+  echo "$$" > "$FORGE_PID_FILE"
+  exec "$FORGE_DIR/venv/bin/python" "$FORGE_DIR/launch.py"
 }
 
 stage_launch_bg() {
   step "Khởi động Forge Neo (chạy nền)"
-  cd "$FORGE_DIR" || die "thiếu $FORGE_DIR"
-  source /content/.wai_torch_env 2>/dev/null || true
-  COMMANDLINE_ARGS="$(launch_args)"
-  export COMMANDLINE_ARGS VI_PROMPT_ROOT="$REPO_DIR"
-  start_cloudflared
-  nohup "$FORGE_DIR/venv/bin/python" launch.py > /content/forge.log 2>&1 &
-  info "Đang chờ Forge sẵn sàng (log: /content/forge.log) ..."
-  for _ in $(seq 1 240); do
-    if grep -q "Running on public URL" /content/forge.log 2>/dev/null; then
-      echo; ok "Link public: $(grep -oE 'https://[a-z0-9.-]+\.gradio\.live' /content/forge.log | head -1)"
-      return 0
-    fi
-    if grep -qE "Startup time|To create a public link" /content/forge.log 2>/dev/null; then
-      grep -oE 'https://[a-z0-9.-]+\.gradio\.live' /content/forge.log | head -1 | sed 's/^/   /'
-    fi
-    if ! kill -0 $! 2>/dev/null; then
-      tail -25 /content/forge.log
+  if curl -fsS -m 3 "http://127.0.0.1:$PORT/sdapi/v1/sd-models" >/dev/null 2>&1; then
+    die "Cổng $PORT đã có API. Không tạo process thứ hai; dùng bộ cài install.sh để tiếp tục/khởi động lại."
+  fi
+  if owned_process "$FORGE_PID_FILE" "$FORGE_DIR/launch.py"; then
+    info "Forge đang khởi động — chờ process hiện có, không chạy trùng."
+  else
+    prepare_launch
+    nohup "$FORGE_DIR/venv/bin/python" "$FORGE_DIR/launch.py" > "$FORGE_LOG" 2>&1 < /dev/null &
+    echo "$!" > "$FORGE_PID_FILE"
+  fi
+  local deadline=$(( SECONDS + LAUNCH_TIMEOUT )) ready=0 pub
+  info "Chờ API Forge (log: $FORGE_LOG) ..."
+  while (( SECONDS < deadline )); do
+    if curl -fsS -m 5 "http://127.0.0.1:$PORT/sdapi/v1/sd-models" >/dev/null 2>&1; then ready=1; break; fi
+    if ! owned_process "$FORGE_PID_FILE" "$FORGE_DIR/launch.py"; then
+      tail -40 "$FORGE_LOG" >&2 || true
       die "Forge đã dừng — xem log ở trên."
     fi
     sleep 5
   done
-  warn "Chờ quá 20 phút. Xem /content/forge.log"
+  [[ "$ready" == "1" ]] || die "API chưa sẵn sàng sau ${LAUNCH_TIMEOUT}s. Xem $FORGE_LOG rồi chạy lại (không chạy trùng process)."
+  start_cloudflared
+  if [[ "$TUNNEL" == "share" ]]; then
+    # Có API chưa chắc Gradio share đã tạo link. Chờ thêm tối đa 60s.
+    for _ in {1..30}; do
+      pub=$(grep -oE 'https://[a-z0-9.-]+\.gradio\.live' "$FORGE_LOG" | head -1 || true)
+      if [[ -n "$pub" ]]; then ok "Link public: $pub"; break; fi
+      sleep 2
+    done
+    [[ -n "$pub" ]] || die "Forge sẵn sàng nhưng chưa có Gradio share link. Thử TUNNEL=cloudflared."
+  fi
+  ok "API Forge đã phản hồi ở cổng $PORT."
 }
 
 # ------------------------------------------------------------------- all
 stage_all() { stage_gpu; stage_repo; stage_forge; stage_torch; stage_model; stage_extras; }
 
+main() {
 case "${1:-all}" in
   gpu)        stage_gpu ;;
   repo)       stage_repo ;;
@@ -415,6 +581,9 @@ case "${1:-all}" in
   extras)     stage_extras ;;
   launch)     stage_launch ;;
   launch-bg)  stage_launch_bg ;;
+  stop)       stage_stop ;;
   all)        stage_all ;;
-  *)          die "stage không hợp lệ: ${1:-} (chọn: gpu repo forge torch model extras launch launch-bg all)" ;;
+  *)          die "stage không hợp lệ: ${1:-} (chọn: gpu repo forge torch model extras launch launch-bg stop all)" ;;
 esac
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

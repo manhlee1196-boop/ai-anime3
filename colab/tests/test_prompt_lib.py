@@ -1,7 +1,7 @@
 """Kiểm tra hồi quy cho prompt_lib.
 
 Chạy:  python3 colab/tests/test_prompt_lib.py      (từ thư mục gốc repo)
-hoặc:  pytest colab/tests/test_prompt_lib.py
+Bộ kiểm tra chạy độc lập bằng Python, không cần pytest.
 """
 
 import os
@@ -11,8 +11,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "colab"))
 
-from prompt_lib import (GROUP_LABELS, WAI_DEFAULTS, PromptBuilder, TagIndex,  # noqa: E402
-                        find_repo_root, get_index, norm, parse_pieces, unaccent)
+from prompt_lib import (GROUP_LABELS, MODEL_PROFILES, WAI_DEFAULTS, PromptBuilder,  # noqa: E402
+                        TagIndex, apply_model_profile, find_repo_root, get_index,
+                        norm, parse_pieces, unaccent)
 
 FAILS = []
 
@@ -200,6 +201,43 @@ def main():
     csv_text = builder.styles_csv()
     check("có 4 mức phân loại", csv_text.count("\n"), 5)
     check_in("dòng đầu là header", "name,prompt,negative_prompt", csv_text)
+
+    print("\n15) Biến thể model (profile do colab/install.sh chọn)")
+    check("có đủ 4 biến thể trong catalog", sorted(MODEL_PROFILES), ["fp16", "fp8", "hswq", "int8"])
+    d = dict(WAI_DEFAULTS)
+    mid, applied = apply_model_profile(d, {"WAI_PROFILE_MODEL_ID": "hswq"})
+    check("chọn hswq → trả đúng id", mid, "hswq")
+    check("hswq đổi CFG về 1.0 (bản turbo, CFG 6 sẽ cháy ảnh)", d["cfg_scale"], 1.0)
+    check("hswq đổi steps về 10", d["steps"], 10)
+    check("hswq đổi steps của lượt hires", d["hr_second_pass_steps"], 10)
+    check("hswq có ghi khoá vào dict", "cfg_scale" in applied and "steps" in applied, True)
+    d = dict(WAI_DEFAULTS)
+    apply_model_profile(d, {"WAI_PROFILE_MODEL_ID": "fp8"})
+    check("fp8 dùng CFG 6.5 theo thẻ model lượng tử hoá", d["cfg_scale"], 6.5)
+    d = dict(WAI_DEFAULTS)
+    apply_model_profile(d, {"WAI_PROFILE_MODEL_ID": "fp16"})
+    check("fp16 giữ tham số gốc của thẻ model", (d["cfg_scale"], d["steps"]), (6.0, 25))
+    d = dict(WAI_DEFAULTS)
+    apply_model_profile(d, {"WAI_PROFILE_MODEL_ID": "hswq", "WAI_PROFILE_CFG": "2.5",
+                            "WAI_PROFILE_STEPS": "15"})
+    check("biến môi trường lẻ thắng catalog (để tinh chỉnh tay)", (d["cfg_scale"], d["steps"]), (2.5, 15))
+    d = dict(WAI_DEFAULTS)
+    mid, applied = apply_model_profile(d, {"WAI_PROFILE_MODEL_ID": "gguf"})
+    check("id lạ → không đổi gì, trả id rỗng", (mid, applied, d["cfg_scale"]), ("", {}, 6.0))
+    d = dict(WAI_DEFAULTS)
+    apply_model_profile(d, {"WAI_PROFILE_CFG": "không-phải-số"})
+    check("giá trị rác không gây nổ, giữ mặc định", d["cfg_scale"], 6.0)
+    d = dict(WAI_DEFAULTS)
+    apply_model_profile(d, {})
+    check("không có env → giữ mặc định fp16", d["cfg_scale"], 6.0)
+    # WAI_DEFAULTS được gửi NGUYÊN KHỐI lên /sdapi/v1/txt2img nên cấm thêm khoá lạ
+    check("apply_model_profile không làm bẩn WAI_DEFAULTS toàn cục",
+          set(WAI_DEFAULTS) <= {"steps", "cfg_scale", "sampler_name", "scheduler", "clip_skip",
+                                "width", "height", "seed", "batch_size", "enable_hr",
+                                "hr_upscaler", "hr_scale", "hr_second_pass_steps",
+                                "denoising_strength"}, True)
+    check("payload không chứa khoá ngoài API",
+          set(builder.payload(prompt, neg)) - {"prompt", "negative_prompt"} <= set(WAI_DEFAULTS), True)
 
     print("\n" + "=" * 68)
     if FAILS:

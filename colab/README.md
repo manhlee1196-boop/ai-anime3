@@ -6,7 +6,11 @@ tiếng Việt) thành **bộ nhắc prompt** cho một hệ sinh ảnh chạy t
 
 ```
 colab/
-  WAI_Illustrious_v17_vi.ipynb   ← MỞ FILE NÀY TRONG COLAB
+  WAI_v17_1click.ipynb          ← BỘ CÀI MỘT Ô, CHỌN MODEL (khuyên dùng)
+  install.sh                    bộ cài một lệnh, kiểm tra/resume/chọn model
+  INSTALL.md                    hướng dẫn bộ cài + xử lý sự cố
+  make_install_notebook.py      sinh notebook một ô
+  WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
   make_tagcomplete_assets.py     sinh file tag hệ thống + bản dịch gộp cho tagcomplete
@@ -19,12 +23,30 @@ colab/
   extension/vi-prompt-builder/   extension Forge: thêm tab "Prompt VN"
     scripts/vi_prompt_tab.py
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
-  tests/test_prompt_lib.py       bộ kiểm tra hồi quy (14 nhóm kiểm tra)
+  tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
+  tests/test_install_sh.py       80 kiểm tra bộ cài (không cần GPU/mạng)
+  tests/test_prompt_ui.py        smoke test UI, API/Forge host giả lập
   assets/                        file sinh ra khi chạy (không đưa vào git)
   outputs/                       ảnh sinh ra từ notebook (không đưa vào git)
 ```
 
-## Chạy nhanh
+## Bộ cài một lệnh / notebook một ô (khuyên dùng)
+
+Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, chọn model
+trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
+không mount Drive; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
+
+Hoặc dán một dòng vào Colab:
+
+```python
+!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/88f01d31-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
+```
+
+Model tải vào `.part`, chỉ nhận khi SHA256 khớp; chạy lại không cài/khởi động trùng.
+Chẩn đoán: `!bash /content/install.sh --doctor`. Chi tiết chọn model, Secrets, sửa lỗi:
+**[`INSTALL.md`](INSTALL.md)**.
+
+## Notebook chi tiết — chạy từng bước
 
 1. Mở [`WAI_Illustrious_v17_vi.ipynb`](WAI_Illustrious_v17_vi.ipynb) trong
    [Google Colab](https://colab.research.google.com), **Runtime → Change runtime type → T4 GPU**.
@@ -136,7 +158,9 @@ và `make_tagcomplete_assets.py` xuất chúng thành extra file để vẫn đ�
 
 ## Kiểm tra
 ```bash
-python3 colab/tests/test_prompt_lib.py     # 14 nhóm kiểm tra, in ✓/✗ từng dòng
+python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ từng dòng
+python3 colab/tests/test_install_sh.py      # 80 kiểm tra bộ cài, fixture/offline
+python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
 python3 colab/make_tagcomplete_assets.py   # sinh lại assets/, tự assert không trùng khoá
 bash -n colab/setup_forge.sh               # kiểm tra cú pháp script
 ```
@@ -146,4 +170,4 @@ Model này có khả năng tạo nội dung người lớn. Mặc định hệ t
 tự đẩy `sensitive / questionable / explicit / nsfw` sang negative prompt (đúng hướng dẫn
 trên thẻ model). Bạn phải tự tuân thủ pháp luật nơi mình ở, điều khoản dịch vụ của
 Google Colab, và **tuyệt đối không** tạo nội dung tình dục hoá trẻ vị thành niên —
-mọi tag loại đó đều bị cấm.
+đây là giới hạn sử dụng, không phải cam kết rằng negative prompt lọc được mọi nội dung.

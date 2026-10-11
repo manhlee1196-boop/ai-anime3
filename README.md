@@ -12,7 +12,8 @@ Thư mục [`colab/`](colab/) chứa trọn bộ hệ thống sinh ảnh chạy 
 
 | Thành phần | Nội dung |
 |---|---|
-| Notebook | [`colab/WAI_Illustrious_v17_vi.ipynb`](colab/WAI_Illustrious_v17_vi.ipynb) — mở trong Colab, bật GPU T4, chạy lần lượt 8 ô |
+| Bộ cài một ô ⭐ | [`colab/WAI_v17_1click.ipynb`](colab/WAI_v17_1click.ipynb) — bật GPU, chọn model ở dropdown, chạy một ô cài cả hệ thống |
+| Notebook chi tiết | [`colab/WAI_Illustrious_v17_vi.ipynb`](colab/WAI_Illustrious_v17_vi.ipynb) — chạy từng bước, kèm ví dụ API |
 | Model | WAI-illustrious-SDXL **v17.0** (SDXL 6,5 GB, VAE tích hợp sẵn), tải từ mirror HuggingFace không cần token, có kiểm SHA256 |
 | Backend | **Forge Neo** (`Haoming02/sd-webui-forge-classic` nhánh `neo`) — đúng phần mềm thẻ model khuyến nghị |
 | Bộ nhắc | Gõ tiếng Việt ngay trong ô prompt (tagcomplete đã cấu hình sẵn), hoặc dùng tab **“Prompt VN”** để tra tag, xếp thứ tự prompt chuẩn Illustrious/WAI, sinh negative và sinh ảnh |
@@ -22,7 +23,12 @@ Ba cách dùng kho prompt: **tagcomplete** (gõ `áo dài`, `tóc dài` ra tag t
 **gọi API từ notebook** (sinh ảnh hàng loạt). App Gradio cũng chạy độc lập được ngoài
 Colab: `python3 colab/prompt_builder.py --demo`.
 
-Chi tiết đầy đủ, tham số khuyến nghị và bảng xử lý sự cố: [`colab/README.md`](colab/README.md).
+**Bộ cài một lệnh:** [`colab/install.sh`](colab/install.sh), hướng dẫn trong
+[`colab/INSTALL.md`](colab/INSTALL.md). Mặc định FP16 bản gốc; có chọn FP8/INT8/HSWQ
+cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
+Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
+
+Chi tiết hệ thống/bộ dựng prompt: [`colab/README.md`](colab/README.md).
 
 ## Các file đầu ra
 
@@ -176,7 +182,11 @@ tools/
     vi_morphemes.py vi_vocab.py
   work/                              danh sách tag trung gian (gitignored)
 colab/                               hệ thống tạo ảnh WAI-Illustrious v17 trên Colab
-  WAI_Illustrious_v17_vi.ipynb       notebook chính (mở trong Colab)
+  WAI_v17_1click.ipynb               bộ cài Colab một ô + dropdown model
+  install.sh                        bộ cài một lệnh, resume/verify/doctor
+  INSTALL.md                        hướng dẫn bộ cài
+  make_install_notebook.py           sinh notebook một ô
+  WAI_Illustrious_v17_vi.ipynb        notebook chi tiết (mở trong Colab)
   setup_forge.sh                     script cài đặt theo từng stage
   prompt_builder.py                  app Gradio độc lập
   make_notebook.py                   script sinh file .ipynb

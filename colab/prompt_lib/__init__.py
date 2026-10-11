@@ -16,8 +16,9 @@ from .builder import PromptBuilder, parse_pieces, render
 from .groups import BROWSE_GROUPS, GROUP_LABELS, GROUP_ORDER, classify, strip_namespace
 from .index import (CATEGORY_NAMES, TagIndex, TagResult, find_repo_root, get_index,
                     norm, unaccent)
-from .system_tags import (NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
-                          SYSTEM_TAGS, UPSCALERS, WAI_DEFAULTS, pick_upscaler)
+from .system_tags import (ACTIVE_PROFILE_ID, MODEL_PROFILES, NEGATIVE_PRESETS,
+                          QUALITY_PRESETS, RATINGS, SIZE_PRESETS, SYSTEM_TAGS, UPSCALERS,
+                          WAI_DEFAULTS, apply_model_profile, pick_upscaler)
 
 __all__ = [
     "PromptBuilder", "parse_pieces", "render",
@@ -26,6 +27,7 @@ __all__ = [
     "norm", "unaccent",
     "SYSTEM_TAGS", "QUALITY_PRESETS", "NEGATIVE_PRESETS", "RATINGS",
     "SIZE_PRESETS", "UPSCALERS", "WAI_DEFAULTS", "pick_upscaler",
+    "MODEL_PROFILES", "ACTIVE_PROFILE_ID", "apply_model_profile",
 ]
 
 __version__ = "1.0.0"
