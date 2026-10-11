@@ -24,7 +24,7 @@ def current_branch():
 
 BRANCH = os.environ.get("WAI_BRANCH") or current_branch()
 
-INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.5
+INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.6
 
 **Cài mới từ đầu:** bật GPU rồi dùng **Runtime → Run all** (chỉ có 1 ô code).
 Nếu đang dùng phiên cũ và muốn môi trường hoàn toàn mới, **tải ảnh cần giữ về trước**,
@@ -57,28 +57,34 @@ Chưa kiểm chứng sinh ảnh với các biến thể cộng đồng trên Col
 bên trái Colab), bật Notebook access rồi chọn `USE_CIVITAI_SECRET=True`. Không viết
 API token vào source/lệnh/output notebook. Repo này public nên **không cần GitHub token**.
 
-**Error hàng loạt / traceback Matplotlib backend?** Bản 1.0.5 dùng backend Agg
+**Tunnel mặc định `share` (Gradio):** mở link `gradio.live` được in ra; Cloudflare
+vẫn có trong dropdown để chọn khi cần. Sau khi đổi từ Cloudflare, người dùng báo
+ảnh hiển thị nhanh hơn và chưa thấy lỗi HTML/JSON; đây không phải benchmark hay
+bảo đảm mọi mạng. Không giảm độ phân giải/chất lượng ảnh để đổi tunnel.
+Nếu phiên hiện tại đã ổn với Gradio share, **không cần cài lại hoặc restart**.
+
+**Error hàng loạt / traceback Matplotlib backend?** Từ 1.0.5 dùng backend Agg
 riêng cho Forge con, không đổi notebook inline hay tải lại weights/Torch.
 Xem [ô cập nhật chỉ phần mềm](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105).
 
-**API đã có WAI nhưng dropdown Checkpoint trống?** Bản 1.0.5 vá cmd-flags/schema
+**API đã có WAI nhưng dropdown Checkpoint trống?** Từ 1.0.4 đã vá cmd-flags/schema
 và khởi tạo sẵn danh sách từ registry. Dùng [ô cập nhật phần mềm trong runtime hiện tại](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104),
 không tải lại model/Torch hay xóa runtime.
 
 Dự trù **25 GB trống** và khoảng **10–25 phút** cho lần đầu (tuỳ tốc độ mạng/runtime).
 Chạy lại ô được: bỏ qua phần đã cài hợp lệ, kiểm tra lại model và API, không chạy trùng Forge.
-Ô cài luôn tải script mới từ đúng nhánh và kiểm tra **phiên bản ≥1.0.5 + cú pháp Bash**.
-Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầm chạy bản 1.0.4 cũ**.
+Ô cài luôn tải script mới từ đúng nhánh và kiểm tra **phiên bản ≥1.0.6 + cú pháp Bash**.
+Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầm chạy cache <1.0.6**.
 
 > Dữ liệu `/content` mất khi runtime kết thúc — tải ảnh về trước khi ngắt phiên.
 > Tuân thủ điều khoản Colab và giấy phép model; không dùng cách cài này để né hạn chế
 > của dịch vụ. Hệ thống mặc định mức `general`; negative prompt không bảo đảm lọc hoàn toàn nội dung.
 """
 
-CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.5) { display-mode: "form" }
+CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.6) { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 MODEL_DIR = "/content/models" #@param {type:"string"}
-TUNNEL = "cloudflared" #@param ["cloudflared", "share", "none"]
+TUNNEL = "share" #@param ["share", "cloudflared", "none"]
 PORT = 7860 #@param {type:"integer"}
 CUDA_INDEX = "auto" #@param ["auto", "cu130", "cu128", "cu126"]
 NO_LAUNCH = False #@param {type:"boolean"}
@@ -155,9 +161,14 @@ Dán vào một ô Colab mới khi cần:
 !bash /content/install.sh --diagnostics                    # checkpoint/preset/đường dẫn API
 !bash /content/install.sh --only verify --smoke-test       # nạp trọng số + sinh 1 ảnh thử
 !bash /content/install.sh --only model,extras              # sửa model/extension
-!bash /content/install.sh --only launch,verify --restart   # khởi động lại
+!bash /content/install.sh --only launch,verify --restart   # khởi động lại, giữ tunnel đã chọn
+!bash /content/install.sh --tunnel share --only launch,verify --restart  # đổi sang Gradio share
 !bash /content/install.sh --model fp8 --only model,launch,verify  # đổi model
 ```
+
+Đợi tác vụ sinh ảnh kết thúc trước khi restart/đổi tunnel; mở **link mới** sau đó.
+Bộ cài nhớ tunnel đã chọn; notebook cũ có thể vẫn đặt `TUNNEL="cloudflared"`,
+hãy chọn `share` trong form trước khi chạy lại. Không tự fallback/đổi tunnel.
 
 Token Civitai vẫn cần được đọc từ Secrets và truyền qua environment cho lệnh tải.
 Xem `colab/INSTALL.md` để biết cách truyền secret cho một ô Bash mới.
@@ -173,7 +184,7 @@ Các kiểm tra cài đặt không thay thế một lần sinh ảnh thật trê
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab một ô 1.0.5"},
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab một ô 1.0.6"},
         "accelerator": "GPU",
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"},

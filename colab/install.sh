@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Bộ cài Colab một lệnh: WAI-Illustrious v17 + Forge Neo + kho prompt tiếng Việt.
-# Mặc định: FP16 gốc, lưu trong /content; không mount Drive, không cần token GitHub.
+# Mặc định cài mới: FP16 gốc, Gradio share, /content; không mount Drive/token GitHub.
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.5"
+INSTALLER_VERSION="1.0.6"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -34,7 +34,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 CIVITAI_TOKEN="${CIVITAI_TOKEN:-}"
 CIVITAI_API_BASE="${CIVITAI_API_BASE:-https://civitai.com/api/v1}"
 PORT="${PORT:-7860}"
-TUNNEL="${TUNNEL:-cloudflared}"
+TUNNEL="${TUNNEL:-share}"
 VRAM_FLAG="${VRAM_FLAG:-}"
 EXTRA_FORGE_ARGS="${EXTRA_FORGE_ARGS:-}"
 CUDA_INDEX="${CUDA_INDEX:-auto}"
@@ -93,7 +93,7 @@ BỘ CÀI WAI-Illustrious v17 + Forge Neo + kho prompt tiếng Việt
   --branch NHÁNH         nhánh repo (mặc định $REPO_BRANCH)
   --forge-dir ĐƯỜNG_DẪN  nơi cài Forge (mặc định /content/sd-webui-forge-neo)
   --port SỐ              cổng Forge (mặc định 7860)
-  --tunnel LOẠI          cloudflared | share | none
+  --tunnel LOẠI          share | cloudflared | none (cài mới mặc định share)
   --cuda IDX             auto | cu130 | cu128 | cu126
   --vram-flag CỜ         ví dụ "--lowvram"
   --forge-args CỜ        cờ Neo bổ sung, đặt trong ngoặc kép

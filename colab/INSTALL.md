@@ -3,7 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
-Bản hiện tại **1.0.5**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
+Bản hiện tại **1.0.6**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -12,7 +12,7 @@ Bản hiện tại **1.0.5**; xem [báo cáo rà soát toàn dự án](AUDIT.md)
 Hoặc tải [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb), rồi Colab → File → Upload notebook.
 
 1. **Runtime → Change runtime type → GPU T4** (hoặc L4/A100).
-2. Chọn `MODEL` ở dropdown; mặc định **fp16**. `MODEL_DIR=/content/models`.
+2. Chọn `MODEL` ở dropdown; mặc định **fp16**, `MODEL_DIR=/content/models`, **`TUNNEL="share"`** (Gradio).
 3. Chọn **Runtime → Run all**, chờ kiểm tra đạt rồi mở link public được in ra.
 4. Trong Forge, dùng **Prompt VN**: đổi tag Việt tại chỗ, thử Nháp/Chuẩn trước,
    chọn ảnh/seed rồi mới Hoàn thiện Hires. Không tự sinh ảnh thử khi cài mặc định.
@@ -22,8 +22,8 @@ and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ l
 Đừng dùng bản notebook cũ đã lưu trong Drive nếu muốn nhận các ô mới. Notebook
 không tự xóa repo/model/ảnh hoặc mount Drive.
 
-Cả hai notebook dùng bootstrap có **version guard ≥1.0.5 + Bash syntax check**.
-Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.4.
+Cả hai notebook dùng bootstrap có **version guard ≥1.0.6 + Bash syntax check**.
+Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy cache <1.0.6.
 
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.
@@ -49,6 +49,11 @@ Nếu raw GitHub không truy cập được, lấy script qua API:
 ```python
 !curl -fsSL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/manhlee1196-boop/ai-anime3/contents/colab/install.sh?ref=arena%2F88f01d31-ai-anime3" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
+
+Cài mới mặc định dùng **Gradio share** (`gradio.live`). Có thể chọn `--tunnel cloudflared`
+hoặc `--tunnel none`; không tự đổi tunnel khi lỗi. Với phiên đã có, bộ cài giữ lựa chọn
+trong `settings.json`; environment ghi đè file và cờ `--tunnel` ghi đè cả hai. Form
+notebook cũ vẫn có thể truyền `cloudflared`: chọn `share` trước khi chạy lại nếu muốn giữ Gradio.
 
 Repo public nên **không cần GitHub token**. Notebook tự thử raw GitHub rồi API; script
 tải về được kiểm tra cú pháp và thay thế nguyên tử, không chạy bản tải dở.
@@ -114,6 +119,7 @@ notebook có output chứa thông tin riêng. Forge/extension không giữ các 
 | Buộc nạp trọng số và sinh 1 ảnh thử | `!bash /content/install.sh --only verify --smoke-test` (API phải đang chạy) |
 | Cài xong nhưng chưa mở UI | `!bash /content/install.sh --no-launch` |
 | Tải/cắm lại model và kho prompt | `!bash /content/install.sh --only model,extras` |
+| Đổi sang Gradio share | `!bash /content/install.sh --tunnel share --only launch,verify --restart` (đợi sinh xong, mở link mới) |
 | Khởi động lại + kiểm tra | `!bash /content/install.sh --only launch,verify --restart` |
 | Đổi model đã chọn | `!bash /content/install.sh --model hswq --only model,launch,verify` (cần token nếu nhà cung cấp yêu cầu) |
 | Cập nhật repo sạch + extension | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
@@ -200,6 +206,43 @@ Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đ
 chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
 
 
+### Ảnh hiển thị chậm / Unexpected token < (1.0.6)
+
+Khi Forge đã sinh xong nhưng gallery/mở ảnh chậm và giao diện báo
+`Could not parse server response: SyntaxError: Unexpected token '<'`, trình duyệt
+đã nhận **HTML thay vì JSON**. Chưa có URL/status/Content-Type của request lỗi
+thì không thể khẳng định Cloudflare 502/524, timeout cụ thể hay kích thước ảnh là nguyên nhân.
+Local API HTTP 200 không chứng minh đường public/callback/file ảnh hoạt động tốt.
+
+**Bằng chứng phiên người dùng:** sau đổi từ Cloudflare sang Gradio share, ảnh hiển thị
+nhanh hơn và chưa thấy lỗi lặp lại. Vì vậy 1.0.6 chọn `share` làm mặc định **cài mới**,
+không thay lựa chọn đã lưu. Đây không phải benchmark hay bảo đảm mọi phiên/mạng.
+
+**Nếu phiên share hiện tại đang ổn: tiếp tục dùng link đó, không cần cập nhật/restart.**
+Với phiên đang lỗi trên Cloudflare, đợi tác vụ sinh ảnh kết thúc rồi chạy ô Colab:
+
+```bash
+%%bash
+set -euo pipefail
+bash /content/install.sh --tunnel share --only launch,verify --restart
+```
+
+Mở **link `gradio.live` mới** được in ra, đóng link Cloudflare cũ. Lệnh đã hỗ trợ
+trong 1.0.5; không cần tải lại model/Torch. Chỉ restart process Forge do bộ cài quản lý,
+giữ model, ảnh đã lưu và cấu hình; không đổi độ phân giải/chất lượng hay metadata/seed ảnh.
+Không bấm Sinh liên tiếp sau lỗi frontend vì backend có thể vẫn đang chạy/lưu ảnh.
+
+Bộ cài nhớ `share` cho lần sau. Nếu chạy lại **notebook cũ**, đổi `TUNNEL` trong form
+thành `share` trước (form truyền cờ, có ưu tiên cao hơn cấu hình đã lưu).
+Nếu Gradio share không tạo được link, có thể chọn thủ công Cloudflare dự phòng bằng
+`--tunnel cloudflared --only launch,verify --restart`, cũng đợi tác vụ sinh xong trước.
+
+Nếu lỗi còn trên share, lấy **path, HTTP status, Content-Type và thời gian** của
+request lỗi trong Browser DevTools → Network; không gửi cookie/token/query string,
+request payload/prompts hoặc toàn bộ response body. Không đoán lỗi checkpoint và
+không cài lại dependencies chỉ vì trình duyệt nhận HTML.
+
+
 ### Error hàng loạt / Matplotlib backend inline Colab (1.0.5)
 
 Trường hợp đã tái hiện: WAI có trong registry/dropdown, local `/config` và `/info`
@@ -225,7 +268,7 @@ bash /content/install.sh --version
 bash /content/install.sh --only launch,verify --restart
 ```
 
-Phiên bản phải là **1.0.5**. Chỉ launch/verify; không chạy model/torch/extras/forge.
+Phiên bản cần **≥1.0.5** (hiện tại **1.0.6**). Chỉ launch/verify; không chạy model/torch/extras/forge.
 Mở **link public mới**, đóng trang cũ và reload cứng. Log khởi động in
 `MPLBACKEND=Agg`; chẩn đoán mới có `graphics_env.forge_process: Agg` và metadata
 Matplotlib/inline/pandas. `graphics_env.diagnostics_parent: inline_notebook` vẫn
@@ -435,6 +478,8 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Error ở nhiều ô / traceback Matplotlib 1292→784 | Cập nhật 1.0.5 + restart, backend Agg chỉ cho Forge con; không cài lại Torch/weights |
 | Forge không thấy model / Checkpoint trống | Cập nhật 1.0.4; API đã có model thì dùng ô software-only ở trên. Kiểm preset `xl` / `forge_checkpoint_xl` và config UI, không tải lại weights theo tên/hash null |
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
+| Ảnh chậm / `Unexpected token <` trên Cloudflare | Xem hướng dẫn tunnel ở trên; đợi sinh xong, đổi share và mở link mới; không giảm chất lượng ảnh |
+| Gradio share không tạo link | Thử `--tunnel cloudflared --only launch,verify --restart` sau khi tác vụ sinh kết thúc; không tải lại model/Torch |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |
 | `EOFError` tại `verify_version()` | Cập nhật cả hai script lên 1.0.1 rồi chỉ chạy launch/verify; xem ô sửa bên trên |

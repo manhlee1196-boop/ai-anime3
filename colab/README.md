@@ -14,7 +14,7 @@ colab/
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
   diagnostics.py                chẩn đoán checkpoint/venv/GPU/API/config UI chỉ đọc
   forge_compat.py               vá schema cmd-flags và choices/value Checkpoint (có guard/backup)
-  AUDIT.md                      báo cáo headless 1.0.5 + compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
+  AUDIT.md                      báo cáo tunnel 1.0.6 + headless 1.0.5 + compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
@@ -49,10 +49,11 @@ colab/
 
 Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, chọn model
 trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
-không mount Drive; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
+không mount Drive; **Gradio share** mặc định (`gradio.live`), Cloudflare tùy chọn; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
 
-[**Mở notebook cài mới 1.0.5 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
-→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.5.
+[**Mở notebook cài mới 1.0.6 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.6.
+**Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.
 **API đã có WAI nhưng dropdown trống:** dùng [ô cập nhật 1.0.4](INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104), chỉ cập nhật phần mềm và restart; không xóa runtime/tải lại weights.
 Nếu muốn runtime hoàn toàn mới: tải ảnh về trước rồi **Disconnect and delete runtime**,
@@ -81,10 +82,10 @@ Có `--smoke-test` để thử nạp trọng số bằng một ảnh trên GPU v
 
 1. Mở [`WAI_Illustrious_v17_vi.ipynb`](WAI_Illustrious_v17_vi.ipynb) trong
    [Google Colab](https://colab.research.google.com), **Runtime → Change runtime type → T4 GPU**.
-2. **Ô 1**: chọn model; mặc định FP16, `/content/models`, tunnel cloudflared.
+2. **Ô 1**: chọn model; mặc định FP16, `/content/models`, tunnel **Gradio share** (`gradio.live`); Cloudflare tùy chọn.
 3. **Run all** hoặc lần lượt Ô 1 → Ô 8 (khoảng 10–25 phút tùy runtime/mạng).
    Các stage dùng cùng `install.sh` mới, không trộn script cũ hay cài theo đường khác.
-4. **Ô 8** khởi chạy nền + verify, in link `trycloudflare.com`/`gradio.live` và kết thúc;
+4. **Ô 8** khởi chạy nền + verify, in link `gradio.live` (mặc định)/`trycloudflare.com` (khi chọn) và kết thúc;
    không chặn các ô sau ở một lệnh launch chạy mãi.
 5. Dùng **Prompt VN** để chọn tag/thử bố cục/seed. Ô 9 chẩn đoán/smoke test,
    Ô 10 API và Ô 11 app riêng **mặc định tắt**; Run all không tự sinh ảnh/mở server phụ.

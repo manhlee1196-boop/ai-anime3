@@ -1,4 +1,4 @@
-"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.5.
+"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.6.
 
 Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import generator.
 """
@@ -21,7 +21,7 @@ def code(text):
                   "outputs": [], "source": text.splitlines(True)})
 
 
-md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.5
+md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.6
 ### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.513 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
@@ -35,11 +35,17 @@ stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không t�
 4. Mở link public và dùng tab **Prompt VN**. Ô 9/10/11 mặc định chỉ in hướng dẫn,
    không tự sinh ảnh hay mở thêm server.
 
-**Error hàng loạt / traceback Matplotlib backend?** Bản 1.0.5 dùng backend Agg
+**Tunnel mặc định `share` (Gradio):** mở link `gradio.live` được in ra; Cloudflare
+vẫn có trong dropdown để chọn khi cần. Sau khi đổi từ Cloudflare, người dùng báo
+ảnh hiển thị nhanh hơn và chưa thấy lỗi HTML/JSON; đây không phải benchmark hay
+bảo đảm mọi mạng. Không giảm độ phân giải/chất lượng ảnh để đổi tunnel.
+Nếu phiên hiện tại đã ổn với Gradio share, **không cần cài lại hoặc restart**.
+
+**Error hàng loạt / traceback Matplotlib backend?** Từ 1.0.5 dùng backend Agg
 riêng cho Forge con, không đổi notebook inline hay tải lại weights/Torch.
 Xem [ô cập nhật chỉ phần mềm](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105).
 
-**API đã có WAI nhưng dropdown Checkpoint trống?** Bản 1.0.5 vá schema cmd-flags
+**API đã có WAI nhưng dropdown Checkpoint trống?** Từ 1.0.4 đã vá schema cmd-flags
 và khởi tạo sẵn danh sách checkpoint. Dùng [ô cập nhật phần mềm trong runtime hiện tại](https://github.com/manhlee1196-boop/ai-anime3/blob/arena/88f01d31-ai-anime3/colab/INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104),
 không tải lại model/Torch hay xóa runtime.
 
@@ -69,7 +75,7 @@ Repo public không cần GitHub token. Thư mục mặc định đều trong `/c
 code('''#@title ⚙️ Model và thư mục (cài mới) { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 MODEL_DIR = "/content/models" #@param {type:"string"}
-TUNNEL = "cloudflared" #@param ["cloudflared", "share", "none"]
+TUNNEL = "share" #@param ["share", "cloudflared", "none"]
 PORT = 7860 #@param {type:"integer"}
 CUDA_INDEX = "auto" #@param ["auto", "cu130", "cu128", "cu126"]
 RESTART = False #@param {type:"boolean"}
@@ -105,8 +111,8 @@ print(f"✔ {MODEL} · model {MODEL_DIR} · Forge {os.environ['FORGE_DIR']} · {
 
 md("""## Ô 2 — Lấy bộ cài mới và repo đúng nhánh
 
-Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.5** và cú pháp trước khi
-chạy. Không chạy cache 1.0.4 cũ. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
+Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.6** và cú pháp trước khi
+chạy. Không chạy cache <1.0.6. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
 thay Việt → Anh; repo sẵn có được fast-forward khi sạch/cùng nhánh, không reset hard.
 Không đổi sang main/master hoặc xóa repo có thay đổi của bạn.
 """)
@@ -148,7 +154,7 @@ for number, stage, title, description in (
 
 md("""## Ô 8 — Khởi chạy nền + kiểm tra checkpoint/API
 
-Chờ bộ cài in link `trycloudflare.com` hoặc `gradio.live`, mở link và chọn **Prompt VN**.
+Chờ bộ cài in link `gradio.live` (mặc định) hoặc `trycloudflare.com` (khi chọn), mở link mới và chọn **Prompt VN**.
 Ô này kết thúc khi API/verify đạt; Forge/tunnel tiếp tục chạy nền trong runtime.
 Không tự sinh ảnh để chứng minh trọng số đã nạp; bước đó là tùy chọn Ô 9.
 Nếu dùng phiên cũ, bật `RESTART=True` ở Ô 1 để nạp extension/JS mới rồi reload cứng UI.
@@ -251,15 +257,19 @@ md("""---
 | Triệu chứng | Xử lý |
 |---|---|
 | Không có GPU | Runtime → Change runtime type → GPU T4 rồi chạy lại từ Ô 1 |
-| Không lấy được bộ cài ≥1.0.5 | Kiểm mạng/mở notebook mới; không dùng cache cũ 1.0.4 |
+| Không lấy được bộ cài ≥1.0.6 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.6 |
 | Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
 | Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
 | Tag Việt còn sau chọn | Kiểm tab Prompt VN có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
 | Hết VRAM | Tắt Hires, 832×1216/1024×1024, batch 1; chờ tác vụ GPU khác, không cần tải lại checkpoint |
 | Sửa phần mềm trong phiên đang có | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
+| Ảnh chậm / `Unexpected token <` khi dùng Cloudflare | Đợi sinh xong, đổi `TUNNEL="share"`, bật `RESTART` rồi chạy Ô 8; mở link mới |
+| Gradio share không tạo được link | Chọn `TUNNEL="cloudflared"`, bật `RESTART` rồi chạy Ô 8; không tải lại model/Torch |
 | Xem link/trạng thái | `!bash /content/install.sh --status` |
 | Chạy mới hoàn toàn | Tải ảnh về, Disconnect and delete runtime, kết nối lại + GPU rồi Run all notebook mới |
 
+Đợi tác vụ sinh ảnh kết thúc trước khi restart/đổi tunnel. Phiên Gradio share đang ổn không cần chạy lại.
+Bộ cài nhớ tunnel đã chọn; form notebook cũ vẫn có thể ghi đè bằng `cloudflared`.
 Chạy lại stage không xóa model/ảnh/repo. Kho tag chính vẫn là bản Anh có `_`;
 file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content` là tạm thời.
 """)
@@ -267,7 +277,7 @@ file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content`
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.5",
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.6",
                   "collapsed_sections": []},
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"}, "accelerator": "GPU",
@@ -275,4 +285,4 @@ notebook = {
     "cells": cells,
 }
 OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.5")
+print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.6")

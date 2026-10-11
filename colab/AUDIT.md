@@ -1,4 +1,55 @@
-# Rà soát toàn dự án — bộ cài 1.0.5
+# Rà soát toàn dự án — bộ cài 1.0.6
+
+## Bổ sung 1.0.6 — Gradio share mặc định cho cài mới — 12/10/2026
+
+**Bằng chứng runtime sau 1.0.5:** diagnostics `2026-10-11T18:20:25Z` xác nhận
+process Forge dùng Agg, không còn traceback startup, WAI đã chọn và dropdown/API
+local hợp lệ. Người dùng xác nhận ảnh đã sinh xong nhưng gallery/mở ảnh chậm,
+rồi báo `Could not parse server response: SyntaxError: Unexpected token '<'`.
+Đây là HTML thay JSON; không có request path/status/Content-Type/timing để xác
+định HTTP 502/524, timeout cụ thể, kích thước ảnh hay tầng trả HTML.
+
+**Thử nghiệm do người dùng thực hiện:** chỉ đổi sang `--tunnel share` và restart
+launch/verify, không cài lại model/Torch. Phản hồi: **“gradio hiển thị nhanh hơn
+và chưa thấy lỗi”**. Kết quả ủng hộ ưu tiên đường Gradio share cho phiên này,
+không phải benchmark/tuyên bố hết lỗi lâu dài hoặc chứng minh lỗi Cloudflare cụ thể.
+
+- Bộ cài và cả hai notebook **1.0.6** mặc định `share` cho **cài mới**, in link
+  `gradio.live`. Giữ lựa chọn `cloudflared`/`none`; không fallback tự động.
+- Giữ cấu hình tunnel đã lưu. Thứ tự ưu tiên không đổi: **cờ CLI > environment >
+  settings.json > mặc định**. Notebook cũ có thể vẫn truyền `cloudflared` qua form;
+  hướng dẫn đổi `TUNNEL` rõ ràng, không âm thầm ghi đè lựa chọn của người dùng.
+- Bootstrap ≥1.0.6, kiểm syntax/cache như trước; không chạy cache cũ của bản cài mới.
+  **Phiên share đang ổn không cần cập nhật/cài lại/restart.** Lệnh chuyển tunnel
+  đã có trong 1.0.5; đợi sinh ảnh kết thúc và mở link mới khi thật sự cần restart.
+- Không sửa gallery/độ phân giải/nén ảnh gốc/metadata/seed, model, Torch, Agg,
+  compat/schema/dropdown, prompt replacement, corpus hoặc quy trình sampling.
+
+### Kiểm tra 1.0.6
+
+- **Installer: 111 đạt**, gồm 13 kiểm tra mới offline cho mặc định share, không sửa
+  lựa chọn đã lưu, ưu tiên environment/CLI, nhớ share lần sau, cờ Neo `--share`
+  chỉ bật khi chọn share và không tải/chạy Cloudflare trong chế độ share.
+- **Notebook: 14 nhóm đạt**, gồm fresh Run all ở cả hai notebook dùng share, giữ
+  stage order/FP16/noDrive/no automatic generation, từ chối cache 1.0.5 và cho phép
+  chọn thủ công Cloudflare/none. Generator tái tạo đúng byte; không output/secret.
+- **Headless: 4 nhóm đạt** với matrix FastAPI **0.127.1** / Starlette **0.50.0**,
+  Gradio **4.40.0** / Pydantic **2.10.6** giống runtime, Python **3.11** CPU.
+  Chạy bằng `FASTAPI_PROBE_PATH=tools/work/fastapi127-probe`; không thay venv/runtime.
+  Baseline sandbox FastAPI 0.115.14/Starlette 0.46.2 khác matrix gặp schema
+  `starlette.requests.Request` ở POST probe (3/4); không coi đó là lỗi runtime
+  người dùng hoặc lý do hạ/nâng dependency trong bản thay default tunnel này.
+
+- Chạy lại **checkpoint 16**, **compat 10**, **diagnostics 8** đạt; không sửa mã
+  các module này. Python/notebook AST, Bash syntax và `git diff --check` đạt.
+
+**Giới hạn:** không có GPU/model weights hoặc browser native Colab trong sandbox;
+không tự đo latency/download ảnh hay kiểm public tunnel của người dùng. Phản hồi
+nhanh hơn/chưa thấy lỗi là quan sát người dùng, không thay thế benchmark/HTTP trace.
+Các phần dưới là lịch sử kiểm tra trước phản hồi runtime mới.
+
+---
+
 
 ## Bổ sung 1.0.5 — backend headless Matplotlib — 12/10/2026
 

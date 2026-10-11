@@ -148,7 +148,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.5")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.6")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -164,6 +164,53 @@ def test_cli():
     check("Catalog liệt kê 4 bản v17 (không gọi mạng)", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "v170", "sm75")))
     check("Catalog cảnh báo tham số HSWQ khác", "CFG 1.0" in r.stdout)
+
+
+def test_tunnel_defaults(tmp):
+    print("1b) Tunnel mặc định, ưu tiên cấu hình và cờ launch (offline)")
+    state = tmp / "tunnel-settings"
+    state.mkdir()
+    settings = state / "settings.json"
+    env = {k: v for k, v in os.environ.items() if k != "TUNNEL"}
+    env.update(STATE_DIR=str(state), PY=sys.executable)
+
+    def inspect(args=(), given=None, save=False):
+        command = ('source "$1"; shift; load_saved_settings; parse_args "$@"; '
+                   + ('save_settings; ' if save else '')
+                   + 'printf "%s\\n" "$TUNNEL"')
+        return subprocess.run(["bash", "-c", command, "test", str(INSTALL), *args],
+                              cwd=ROOT, env={**env, **(given or {})},
+                              capture_output=True, text=True, timeout=10)
+
+    result = inspect()
+    check("Cài mới không có config/env/cờ → Gradio share", result.returncode == 0 and result.stdout.strip() == "share", result.stderr)
+    for tunnel in ("cloudflared", "share", "none"):
+        settings.write_text(json.dumps({"TUNNEL": tunnel, "MODEL_ID": "fp16"}))
+        before = settings.read_bytes()
+        result = inspect()
+        check(f"Giữ tunnel đã lưu: {tunnel} (không sửa settings)",
+              result.returncode == 0 and result.stdout.strip() == tunnel and settings.read_bytes() == before,
+              result.stdout + result.stderr)
+    settings.write_text(json.dumps({"TUNNEL": "cloudflared"}))
+    result = inspect(given={"TUNNEL": "share"})
+    check("Environment share thắng Cloudflare đã lưu", result.returncode == 0 and result.stdout.strip() == "share", result.stderr)
+    for tunnel in ("share", "cloudflared", "none"):
+        result = inspect(("--tunnel", tunnel), given={"TUNNEL": "none" if tunnel != "none" else "share"})
+        check(f"Cờ --tunnel {tunnel} thắng environment/config", result.returncode == 0 and result.stdout.strip() == tunnel, result.stderr)
+    result = inspect(("--tunnel", "share"), save=True)
+    saved = json.loads(settings.read_text())
+    resumed = inspect()
+    check("Đổi sang share được nhớ cho lần launch tiếp theo",
+          result.returncode == 0 and saved["TUNNEL"] == "share" and resumed.stdout.strip() == "share",
+          result.stdout + result.stderr)
+
+    for tunnel in ("share", "cloudflared", "none"):
+        result = source_call(SETUP, 'launch_args', {"TUNNEL": tunnel, "PY": sys.executable})
+        args = result.stdout.strip().split()
+        check(f"Neo launch {tunnel}: --share chỉ có khi chọn share",
+              result.returncode == 0 and ("--share" in args) == (tunnel == "share"), result.stderr)
+    result = source_call(SETUP, 'fetch() { return 99; }; start_cloudflared', {"TUNNEL": "share"})
+    check("Gradio share không tải/chạy Cloudflare", result.returncode == 0 and not result.stdout, result.stderr)
 
 
 def test_metadata():
@@ -588,6 +635,7 @@ def main():
     test_metadata()
     with tempfile.TemporaryDirectory(prefix="wai-installer-test-") as directory:
         tmp = Path(directory)
+        test_tunnel_defaults(tmp)
         test_model_and_torch(tmp)
         test_config_version(tmp)
         test_lifecycle(tmp)

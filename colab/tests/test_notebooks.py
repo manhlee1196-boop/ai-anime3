@@ -23,8 +23,8 @@ INSTALLER = (ROOT / "colab/install.sh").read_bytes()
 REAL_RUN = subprocess.run
 
 
-def script(version="1.0.5", broken=False):
-    data = INSTALLER.replace(b'INSTALLER_VERSION="1.0.5"', f'INSTALLER_VERSION="{version}"'.encode())
+def script(version="1.0.6", broken=False):
+    data = INSTALLER.replace(b'INSTALLER_VERSION="1.0.6"', f'INSTALLER_VERSION="{version}"'.encode())
     return data + (b"\nif true; then\n" if broken else b"")
 
 
@@ -80,14 +80,14 @@ class NotebookTests(unittest.TestCase):
                     self.assertEqual(cell["outputs"], [])
             source = "\n".join(code_cells(nb))
             self.assertNotIn("drive.mount", source)
-            self.assertIn('MIN_INSTALLER_VERSION = "1.0.5"', source)
+            self.assertIn('MIN_INSTALLER_VERSION = "1.0.6"', source)
             self.assertIn('"arena/88f01d31-ai-anime3"', source)
         self.assertEqual(len(code_cells(notebook("WAI_v17_1click.ipynb"))), 1)
-        self.assertEqual(MIN_INSTALLER_VERSION, "1.0.5")
+        self.assertEqual(MIN_INSTALLER_VERSION, "1.0.6")
 
     def test_02_download_replaces_old_cache_atomically(self):
-        self.dest.write_bytes(script("1.0.4"))
-        self.assertEqual(self.download([INSTALLER]), "1.0.5")
+        self.dest.write_bytes(script("1.0.5"))
+        self.assertEqual(self.download([INSTALLER]), "1.0.6")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
         self.assertFalse(self.dest.with_suffix(".sh.tmp").exists())
 
@@ -96,7 +96,7 @@ class NotebookTests(unittest.TestCase):
         output = io.StringIO()
         with patch("urllib.request.urlopen", self.fetcher([OSError("offline"), INSTALLER])), contextlib.redirect_stdout(output):
             version = self.namespace["download_installer"](self.dest, "arena/88f01d31-ai-anime3", {"GITHUB_TOKEN": token})
-        self.assertEqual(version, "1.0.5")
+        self.assertEqual(version, "1.0.6")
         self.assertIn("api.github.com", self.requests[1].full_url)
         self.assertIn("arena%2F88f01d31-ai-anime3", self.requests[1].full_url)
         self.assertTrue(all(token not in request.full_url for request in self.requests))
@@ -104,25 +104,25 @@ class NotebookTests(unittest.TestCase):
         self.assertEqual(self.requests[1].get_header("Authorization"), "Bearer " + token)
 
     def test_04_network_failure_old_cache_is_not_executed_or_deleted(self):
-        old = script("1.0.4")
+        old = script("1.0.5")
         self.dest.write_bytes(old)
-        with self.assertRaisesRegex(RuntimeError, ">= 1.0.5"):
+        with self.assertRaisesRegex(RuntimeError, ">= 1.0.6"):
             self.download([OSError("offline"), OSError("offline")])
         self.assertEqual(self.dest.read_bytes(), old)
 
     def test_05_verified_new_cache_can_resume_offline(self):
         self.dest.write_bytes(INSTALLER)
-        self.assertEqual(self.download([OSError("offline"), OSError("offline")]), "1.0.5")
+        self.assertEqual(self.download([OSError("offline"), OSError("offline")]), "1.0.6")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
 
     def test_06_old_or_invalid_network_bytes_never_overwrite_cache(self):
         self.dest.write_bytes(INSTALLER)
-        self.assertEqual(self.download([script("1.0.4"), script(broken=True)]), "1.0.5")
+        self.assertEqual(self.download([script("1.0.5"), script(broken=True)]), "1.0.6")
         self.assertEqual(self.dest.read_bytes(), INSTALLER)
         self.assertFalse(self.dest.with_suffix(".sh.tmp").exists())
 
     def test_07_broken_cache_and_no_cache_fail_before_install(self):
-        for data in (None, script(broken=True), b"<!DOCTYPE html>error", script("1.0.4")):
+        for data in (None, script(broken=True), b"<!DOCTYPE html>error", script("1.0.5")):
             with self.subTest(data=data is None):
                 if data is None:
                     self.dest.unlink(missing_ok=True)
@@ -143,6 +143,7 @@ class NotebookTests(unittest.TestCase):
             stage = args[args.index("--only") + 1]
             stages.append(stage)
             self.assertEqual(args[args.index("--model") + 1], "fp16")
+            self.assertEqual(args[args.index("--tunnel") + 1], "share")
             self.assertEqual(args[args.index("--branch") + 1], "arena/88f01d31-ai-anime3")
             self.assertTrue(kwargs.get("check"))
             if stage == "repo":
@@ -191,6 +192,7 @@ class NotebookTests(unittest.TestCase):
         self.assertNotIn("--fallback-fp16", args)
         self.assertEqual(args[args.index("--model") + 1], "fp16")
         self.assertEqual(args[args.index("--model-dir") + 1], "/content/models")
+        self.assertEqual(args[args.index("--tunnel") + 1], "share")
 
     def test_10_api_sample_disabled_makes_no_requests(self):
         with patch("requests.get", side_effect=AssertionError("Không gọi API")), \
@@ -253,13 +255,13 @@ class NotebookTests(unittest.TestCase):
             WAI_DEFAULTS.update(defaults)
 
     def test_12_oneclick_refuses_old_cache_before_starting_installer(self):
-        self.dest.write_bytes(script("1.0.4"))
+        self.dest.write_bytes(script("1.0.5"))
         source = code_cells(notebook("WAI_v17_1click.ipynb"))[0].replace('"/content/install.sh"', repr(str(self.dest)))
         with patch.dict(os.environ, {}, clear=True), \
                 patch("urllib.request.urlopen", self.fetcher([OSError("offline"), OSError("offline")])), \
                 patch("subprocess.Popen", side_effect=AssertionError("Không chạy script cũ")), \
                 contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, ">= 1.0.5"):
+            with self.assertRaisesRegex(RuntimeError, ">= 1.0.6"):
                 exec(compile(source, "oneclick-cell", "exec"), {})
 
     def test_13_final_sample_one_image_hires_and_sanitized_failure(self):
@@ -301,6 +303,51 @@ class NotebookTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Hết VRAM") as raised:
                     ns["generate_notebook_sample"]()
                 self.assertNotIn("SECRET-FIXTURE", str(raised.exception))
+
+
+    def test_14_both_notebooks_honor_cloudflare_and_none_choices(self):
+        for name in ("WAI_v17_1click.ipynb", "WAI_Illustrious_v17_vi.ipynb"):
+            for tunnel in ("cloudflared", "none"):
+                with self.subTest(notebook=name, tunnel=tunnel):
+                    repo = self.root / name / tunnel
+                    repo_install = repo / "colab/install.sh"
+                    repo_install.parent.mkdir(parents=True)
+                    repo_install.write_bytes(INSTALLER)
+                    calls = []
+
+                    def run(args, **kwargs):
+                        if args[:2] != ["bash", "-n"]:
+                            calls.append((args, kwargs))
+                        return subprocess.CompletedProcess(args, 0)
+
+                    class Process:
+                        def __init__(self):
+                            self.stdout = io.StringIO("fixture install done\n")
+                            self.pid = 123456
+                        def wait(self):
+                            return 0
+
+                    def launch(args, **kwargs):
+                        calls.append((args, kwargs))
+                        return Process()
+
+                    # Một ô đầy đủ hoặc 2 ô config/bootstrap của notebook chi tiết;
+                    # các stage/HTTP được giả lập, không clone/tải/chạy Forge.
+                    cells = code_cells(notebook(name))[:2]
+                    namespace = {}
+                    with patch.dict(os.environ, {}, clear=True), \
+                            patch("urllib.request.urlopen", self.fetcher([INSTALLER])), \
+                            patch("subprocess.run", run), patch("subprocess.Popen", launch), \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        for cell in cells:
+                            cell = cell.replace('TUNNEL = "share"', f'TUNNEL = "{tunnel}"')
+                            cell = cell.replace('"/content/install.sh"', repr(str(self.dest)))
+                            cell = cell.replace('"/content/ai-anime3"', repr(str(repo)))
+                            exec(compile(cell, "selected-tunnel", "exec"), namespace)
+                    self.assertTrue(calls)
+                    for args, _kwargs in calls:
+                        self.assertEqual(args[args.index("--tunnel") + 1], tunnel)
+                    self.assertEqual(namespace["TUNNEL"], tunnel)
 
 
 if __name__ == "__main__":
