@@ -215,6 +215,13 @@ class PromptBuilder:
             if value is None:
                 continue
             body[key] = value
+        # Neo API nhận sampler và scheduler riêng; giữ lựa chọn UI cũ nhưng
+        # không gửi "DPM++ 2M Karras" như một tên sampler không tồn tại.
+        combined = {"DPM++ 2M Karras": "DPM++ 2M", "DPM++ 2M SDE Karras": "DPM++ 2M SDE"}
+        if body.get("sampler_name") in combined:
+            body["sampler_name"] = combined[body["sampler_name"]]
+            if not (overrides or {}).get("scheduler"):
+                body["scheduler"] = "Karras"
         if not body.get("enable_hr"):
             for key in ("hr_upscaler", "hr_scale", "hr_second_pass_steps",
                         "denoising_strength"):

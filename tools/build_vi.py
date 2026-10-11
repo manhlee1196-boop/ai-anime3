@@ -89,7 +89,7 @@ EMOTICON_KEEP = {k for k in EMOTICONS if "_" in k} | {
     "\u0ca0_\u0ca0", "m0_0m_c", "0o0_w_o0", "19_0v0", "a-o_a", "t_t", "6_9",
     "+_-", "3_3", "._.", "t_k", "u_o", "o_3", "x_3", "^o^", "o_o;", "-_-",
 }
-EMOTICON_KEEP = {k.encode().decode("unicode_escape") for k in EMOTICON_KEEP}
+# Các chuỗi đã là Unicode thật; decode unicode_escape lần nữa sẽ làm hỏng ಠ_ಠ.
 
 
 def spaced(tag):
@@ -102,7 +102,7 @@ def spaced(tag):
 def spaced_aliases(aliases):
     if not aliases:
         return aliases
-    return [a.replace("_", " ") for a in aliases]
+    return [spaced(a) for a in aliases]
 
 
 # bộ ghép đệ quy cho tag tổ hợp chưa có trong từ điển (dùng chung MERGED)

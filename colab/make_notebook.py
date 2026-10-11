@@ -58,8 +58,16 @@ code('''import os
 # ---- repo chứa kho prompt + code của hệ thống này -----------------------------
 os.environ["REPO_DIR"]    = "/content/ai-anime3"
 os.environ["REPO_URL"]    = "https://github.com/manhlee1196-boop/ai-anime3"
-os.environ["REPO_BRANCH"] = "arena/88f01d31-ai-anime3"   # script tự thử cả main/master
-os.environ["GITHUB_TOKEN"] = ""      # chỉ điền nếu repo để PRIVATE (token read-only là đủ)
+os.environ["REPO_BRANCH"] = "arena/88f01d31-ai-anime3"   # đúng một nhánh, không fallback sang main/master
+# Repo public không cần token GitHub. Nếu cần credential, dùng Colab Secrets,
+# không dán token vào source notebook (source sẽ được lưu/chia sẻ).
+USE_GITHUB_SECRET = False
+USE_CIVITAI_SECRET = False
+if USE_GITHUB_SECRET or USE_CIVITAI_SECRET:
+    from google.colab import userdata
+    for enabled, name in ((USE_GITHUB_SECRET, "GITHUB_TOKEN"), (USE_CIVITAI_SECRET, "CIVITAI_TOKEN")):
+        if enabled:
+            os.environ[name] = userdata.get(name)
 
 # ---- Forge Neo ---------------------------------------------------------------
 os.environ["FORGE_DIR"]    = "/content/sd-webui-forge-neo"
@@ -74,7 +82,7 @@ os.environ["MODEL_DIR"]  = "/content/sd-webui-forge-neo/models/Stable-diffusion"
 os.environ["MODEL_FILE"] = "waiIllustriousSDXL_v170.safetensors"
 # SHA256 công bố trên thẻ model Civitai (version 2883731) và khớp với mirror HF
 os.environ["MODEL_SHA256"] = "f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04"
-os.environ["CIVITAI_TOKEN"] = ""       # tuỳ chọn: thêm Civitai làm nguồn tải dự phòng
+# CIVITAI_TOKEN (nếu bật) đã được đọc từ Secrets, không ghi literal vào notebook.
 
 print("Cấu hình đã nạp:")
 for k in ("REPO_DIR", "FORGE_DIR", "MODEL_FILE", "TUNNEL", "PORT"):
@@ -87,40 +95,39 @@ Cần 4 file CSV ở thư mục gốc repo (`danbooru_e621.csv`, `danbooru_e621_
 `colab/` chứa `prompt_lib`, extension và `setup_forge.sh`.
 """)
 
-code('''import os, shutil, subprocess
+code('''import os, base64, subprocess, tempfile
+from pathlib import Path
 
-repo_dir = os.environ["REPO_DIR"]
-url      = os.environ["REPO_URL"]
-branch   = os.environ["REPO_BRANCH"]
-token    = os.environ.get("GITHUB_TOKEN", "").strip()
-
-if os.path.exists(os.path.join(repo_dir, "danbooru_e621.csv")):
-    print("✔ Kho prompt đã có sẵn ở", repo_dir)
+repo = Path(os.environ["REPO_DIR"])
+url, branch = os.environ["REPO_URL"], os.environ["REPO_BRANCH"]
+required = ("danbooru_e621.csv", "danbooru_e621_vi.csv", "danbooru_e621_nounderscore.csv",
+            "danbooru_e621_vi_translation.csv", "colab/setup_forge.sh", "colab/checkpoint_tools.py")
+if all((repo / name).is_file() for name in required):
+    print("✔ Kho prompt đã có sẵn ở", repo)
+elif repo.exists() and any(repo.iterdir()):
+    raise RuntimeError("Repo đã có dữ liệu nhưng thiếu file/bản mới. Cập nhật cùng nhánh; không xóa thư mục hay reset hard.")
 else:
-    clone_url = url.replace("https://github.com/", f"https://oauth2:{token}@github.com/") if token else url
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    token = env.get("GITHUB_TOKEN", "").strip()
     if token:
-        print("   (đang dùng GITHUB_TOKEN để clone repo private)")
-    done = False
-    for candidate in [branch, "main", "master"]:
-        print(f"   thử clone nhánh '{candidate}' ...")
-        rc = subprocess.run(["git", "clone", "--depth", "1", "--branch", candidate,
-                             clone_url, repo_dir]).returncode
-        if rc == 0:
-            done = True
-            print(f"✔ Đã clone nhánh '{candidate}'")
-            break
-        shutil.rmtree(repo_dir, ignore_errors=True)
-    if not done:
-        raise SystemExit(
-            "✖ Không clone được repo. Nếu repo để PRIVATE, hãy điền GITHUB_TOKEN ở Ô 1 "
-            "(token chỉ cần quyền đọc), hoặc tự chép 4 file CSV + thư mục colab/ vào "
-            + repo_dir)
-    for f in ("danbooru_e621.csv", "danbooru_e621_vi_translation.csv",
-              "colab/setup_forge.sh", "colab/prompt_lib/index.py"):
-        assert os.path.exists(os.path.join(repo_dir, f)), f"thiếu {f}"
-    print("✔ Đủ các file cần thiết.")
-
-!ls -lh "$REPO_DIR"/*.csv | awk '{print "   ", $9, $5}' ''')
+        auth = base64.b64encode(("x-access-token:" + token).encode()).decode()
+        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.https://github.com/.extraheader",
+                   GIT_CONFIG_VALUE_0="Authorization: Basic " + auth)
+    with tempfile.TemporaryDirectory(prefix="wai-repo-", dir=repo.parent) as tmp:
+        dest = Path(tmp) / "repo"
+        result = subprocess.run(["git", "clone", "--depth", "1", "--branch", branch, url, str(dest)],
+                                env=env, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError("Không clone được đúng nhánh. Kiểm tra mạng/quyền GitHub; không chuyển sang nhánh khác.")
+        if not all((dest / name).is_file() for name in required):
+            raise RuntimeError("Nhánh đã clone thiếu file. Giữ dữ liệu hiện tại, không chạy stage tiếp theo.")
+        if repo.exists():
+            repo.rmdir()  # chỉ chấp nhận thư mục rỗng; không xóa dữ liệu người dùng
+        dest.rename(repo)
+    print("✔ Đã clone đúng nhánh", branch)
+for path in repo.glob("*.csv"):
+    print(f"   {path.name}: {path.stat().st_size:,} byte")''')
 
 md("""## Ô 3 — Kiểm tra GPU, ổ đĩa, driver
 
@@ -128,32 +135,35 @@ md("""## Ô 3 — Kiểm tra GPU, ổ đĩa, driver
 ngược lại `cu128`).
 """)
 
-code('''import os
-!bash "$REPO_DIR/colab/setup_forge.sh" gpu''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "gpu"], check=True)''')
 
 md("""## Ô 4 — Cài Forge Neo
 
 `uv` tạo môi trường Python 3.13 riêng (Colab chỉ có 3.11/3.12), mất ~1 phút.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" forge''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "forge"], check=True)''')
 
 md("""## Ô 5 — Cài PyTorch phù hợp với driver
 
-Script thử lần lượt `cu130` → `cu128` → `cu126` và **kiểm tra `torch.cuda.is_available()`
-sau mỗi lần cài**, nên driver cũ của Colab cũng không làm hỏng bản cài.
+Script thử `cu130` → `cu128` → `cu126`, import torchvision và **chạy tensor/kernel CUDA
+thật sau mỗi lần cài**; `cuda.is_available()` một mình chưa đủ để kiểm tra T4.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" torch''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "torch"], check=True)''')
 
 md("""## Ô 6 — Tải WAI-illustrious-SDXL v17.0 (6,5 GB)
 
 Tải từ mirror HuggingFace (không cần token), có **tải tiếp nếu đứt giữa chừng** và
-**kiểm SHA256** sau khi tải. Nếu mirror hỏng, script tự thử mirror thứ hai, rồi tới
-Civitai (nếu bạn điền `CIVITAI_TOKEN` ở Ô 1).
+**kiểm SHA256** sau khi tải. Nếu mirror hỏng, script tự thử mirror thứ hai, rồi
+báo lỗi nếu cả hai mirror đều không tải được. Không tự đổi checkpoint/phiên bản.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" model''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "model"], check=True)''')
 
 md("""## Ô 7 — Cắm kho prompt tiếng Việt vào Forge
 
@@ -169,7 +179,8 @@ md("""## Ô 7 — Cắm kho prompt tiếng Việt vào Forge
 6. Cài extension **Prompt VN** và tạo `styles.csv` với 4 mức phân loại.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" extras''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "extras"], check=True)''')
 
 md("""## Ô 8 — Chạy Forge (ô này sẽ chạy liên tục, đừng ngắt)
 
@@ -187,7 +198,8 @@ Tham số mặc định nên dùng (theo thẻ model): **Euler a · 25 bước �
 Hires fix 1.5× với `RealESRGAN_x4plus_anime_6B`, 20 bước, denoise 0.4 · CLIP stop 2**.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" launch''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "launch"], check=True)''')
 
 md("""---
 ## 🔧 Ô 9 (tuỳ chọn) — Chạy Forge ở chế độ nền
@@ -196,7 +208,8 @@ Muốn dùng thêm ô khác trong khi Forge đang chạy (ví dụ sinh ảnh b�
 hoặc mở app dựng prompt riêng) thì dùng ô này **thay cho Ô 8**.
 """)
 
-code('''!bash "$REPO_DIR/colab/setup_forge.sh" launch-bg''')
+code('''import os, subprocess
+subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "launch-bg"], check=True)''')
 
 md("""## 🔧 Ô 10 (tuỳ chọn) — Sinh ảnh thẳng từ notebook bằng API
 
@@ -294,13 +307,14 @@ md("""---
 | `Không thấy nvidia-smi` | Chưa bật GPU: **Runtime → Change runtime type → T4 GPU** |
 | `PyTorch is not able to access any compute device` | Driver cũ hơn bản torch: chạy lại Ô 5 (script tự lùi `cu128`/`cu126`), hoặc đặt `os.environ["TORCH_INDEX"]="cu126"` rồi chạy lại Ô 5 |
 | Tải model báo `SHA256 KHÔNG khớp` | Mirror trả file hỏng; script tự thử mirror kế. Muốn chắc chắn, điền `CIVITAI_TOKEN` ở Ô 1 |
-| Không đủ ổ đĩa | FP16 cần ~7 GB cho model + ~12 GB cho Forge/venv. Xoá `/content/sample_data`, hoặc đổi `MODEL_FILE` sang bản FP8 4,07 GB |
+| Không đủ ổ đĩa | FP16 cần ~7 GB model + ~12 GB Forge/venv. Dọn file không dùng; muốn đổi precision dùng notebook một ô, **không chỉ đổi MODEL_FILE** |
+| Ô Checkpoint trống dù file tồn tại | Cập nhật bộ cài 1.0.2: preset `xl` cần cả `sd_model_checkpoint` và `forge_checkpoint_xl`; xem `colab/INSTALL.md` |
 | Link `gradio.live` không mở được | Đổi `os.environ["TUNNEL"]="cloudflared"` ở Ô 1 rồi chạy lại Ô 8 |
 | Tab **Prompt VN** báo “Không tìm thấy prompt_lib” | Ô 2 chưa chạy thành công: kiểm tra `ls /content/ai-anime3`, hoặc đặt `os.environ["VI_PROMPT_ROOT"]` rồi chạy lại Ô 7 + Ô 8 |
 | Gõ tiếng Việt không ra gợi ý | Vào **Settings → Tag autocomplete** kiểm tra *Tag filename* = `danbooru_e621.csv`, *Translation filename* = `danbooru_e621_vi_translation_wai.csv`, và **bỏ** tuỳ chọn “old 3-column format” |
 | Ảnh bị mờ/vỡ nét khi hires fix | Đổi upscaler sang `RealESRGAN_x4plus_anime_6B` (Ô 7 đã tải sẵn); hạ denoising còn 0.35 |
 | Tràn VRAM khi hires fix ở 1024×1344 | Đặt `os.environ["VRAM_FLAG"]="--lowvram"` ở Ô 1, chạy lại Ô 7 → Ô 8; hoặc tắt hires fix |
-| Mất hết khi ngắt phiên | Bạn đã chọn lưu trong `/content`. Muốn giữ model qua các phiên, mount Drive và đặt `MODEL_DIR` sang thư mục trên Drive |
+| Mất hết khi ngắt phiên | Dữ liệu `/content` không được giữ qua phiên. Tải ảnh về trước khi ngắt; phiên mới phải cài/tải lại. Notebook không mount Drive |
 
 ## 📌 Ghi chú về kho prompt
 - Tag file dùng cho tagcomplete là **bản tiếng Anh có dấu `_`** (`danbooru_e621.csv`),

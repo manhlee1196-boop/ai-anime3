@@ -17,7 +17,7 @@
 #  Mọi đường dẫn/URL đều ghi đè được bằng biến môi trường (xem khối CONFIG).
 # =============================================================================
 # shellcheck disable=SC2034 # marker API được install.sh đọc trước khi gọi stage
-SETUP_API_VERSION=1
+SETUP_API_VERSION=2
 set -Eeuo pipefail
 trap 'rc=$?; printf "\n✖ Stage %s lỗi (dòng %s, mã %s). Không đánh dấu hoàn tất.\n" "${1:-all}" "$LINENO" "$rc" >&2; exit "$rc"' ERR
 
@@ -224,6 +224,28 @@ EOF
   die "Không bản PyTorch nào chạy được với GPU/driver này. Kiểm tra lại loại GPU của runtime Colab."
 }
 
+# ------------------------------------------------------------------- checkpoint helper
+checkpoint_helper() {
+  local helper="$REPO_DIR/colab/checkpoint_tools.py"
+  if [[ ! -s "$helper" ]]; then
+    helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/checkpoint_tools.py"
+  fi
+  [[ -s "$helper" ]] || die "Thiếu checkpoint_tools.py. Cập nhật repo; không trộn script cũ/mới."
+  printf '%s\n' "$helper"
+}
+configure_checkpoint() {
+  local mid="${WAI_PROFILE_MODEL_ID:-fp16}" cfg="${WAI_PROFILE_CFG:-6.0}"
+  local steps="${WAI_PROFILE_STEPS:-25}" hires="${WAI_PROFILE_HIRES_STEPS:-20}"
+  # Khi gọi setup trực tiếp vẫn áp dụng đúng preset của bản turbo/lượng tử hoá.
+  if [[ "$mid" == hswq ]]; then
+    cfg="${WAI_PROFILE_CFG:-1.0}"; steps="${WAI_PROFILE_STEPS:-10}"; hires="${WAI_PROFILE_HIRES_STEPS:-10}"
+  elif [[ "$mid" == fp8 || "$mid" == int8 ]]; then
+    cfg="${WAI_PROFILE_CFG:-6.5}"
+  fi
+  "$PY" "$(checkpoint_helper)" configure "$FORGE_DIR" "$MODEL_DIR/$MODEL_FILE" \
+    --sha "$MODEL_SHA256" --model-id "$mid" --cfg "$cfg" --steps "$steps" --hires-steps "$hires"
+}
+
 # ------------------------------------------------------------------- model
 fetch() {  # fetch <url> <đích tạm> [header]; giữ phần đã tải khi mất mạng
   local url="$1" dest="$2" hdr="${3:-}" dir base
@@ -262,7 +284,10 @@ model_valid() {
   elif [[ "${ALLOW_UNVERIFIED_MODEL:-0}" != "1" ]]; then
     return 1
   fi
-  return 0
+  # Hash đúng vẫn cần là container safetensors hoàn chỉnh, không phải pointer/HTML.
+  local -a validate_args=(--quiet)
+  [[ "$1" != *.safetensors.part ]] || validate_args+=(--download-temp)
+  "$PY" "$(checkpoint_helper)" validate "$1" "${validate_args[@]}"
 }
 
 stage_model() {
@@ -597,17 +622,10 @@ prepare_launch() {
   export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD="true"
   COMMANDLINE_ARGS="$(launch_args)"
   export COMMANDLINE_ARGS VI_PROMPT_ROOT="$REPO_DIR"
-  # Chọn đúng checkpoint, kể cả khi thư mục chứa nhiều biến thể/model cũ.
-  CONFIG_JSON="$FORGE_DIR/config.json" WAI_CHECKPOINT="$MODEL_FILE" $PY - <<'PYCFG'
-import json, os
-from pathlib import Path
-p = Path(os.environ["CONFIG_JSON"])
-data = json.loads(p.read_text()) if p.exists() else {}
-data["sd_model_checkpoint"] = os.environ["WAI_CHECKPOINT"]
-tmp = p.with_suffix(".json.tmp")
-tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-tmp.replace(p)
-PYCFG
+  # Neo còn lưu model RIÊNG theo preset. Chỉ ghi sd_model_checkpoint là chưa đủ:
+  # forge_checkpoint_xl mặc định None sẽ làm dropdown trống khi on_preset_change chạy.
+  # Kiểm header + hash, alias có quản lý, backup config và đặt preset SDXL nhất quán.
+  configure_checkpoint
   # Forge/extension không cần giữ credential dùng để clone/tải model.
   unset GITHUB_TOKEN CIVITAI_TOKEN GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
   info "Forge sẽ nghe trên 0.0.0.0:$PORT; model dir: $MODEL_DIR"

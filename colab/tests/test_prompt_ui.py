@@ -64,12 +64,16 @@ def main():
     class Response:
         def __init__(self, data):
             self.data = data
+            self.status_code = 200
         def raise_for_status(self):
             pass
         def json(self):
             return self.data
 
+    api_options = {"sd_model_checkpoint": "fixture.safetensors", "forge_preset": "xl", "forge_checkpoint_xl": "fixture.safetensors"}
     def get(url, **kwargs):
+        if url.endswith("/options"):
+            return Response(api_options)
         return Response([{"name": "RealESRGAN_x4plus_anime_6B"}])
     def post(url, json=None, **kwargs):
         captured.append(json)
@@ -88,6 +92,27 @@ def main():
     assert "seed `1`" in note and "CFG 1.0" in note
     assert captured[0]["hr_second_pass_steps"] == 10
     print("✔ API giả lập: đọc info JSON-string, PNG → PIL, hires steps theo HSWQ")
+
+    # App độc lập cũng phải đi hết đường sinh ảnh, không chỉ dựng được UI.
+    try:
+        app.requests.get, app.requests.post = get, post
+        images, note = app.do_generate("masterpiece, landscape", "lowres", "Vuông 1024×1024",
+                                      10, 1.0, "DPM++ 2M Karras", 1, 1, True, 1.5, 10, 0.4,
+                                      "RealESRGAN_x4plus_anime_6B", "http://127.0.0.1:7860")
+        assert len(images) == 1 and isinstance(images[0], Image.Image)
+        assert "seed `1`" in note
+        assert captured[-1]["sampler_name"] == "DPM++ 2M" and captured[-1]["scheduler"] == "Karras"
+        api_options["sd_model_checkpoint"] = None
+        connected, note = app.forge_alive()
+        assert not connected and "chưa chọn Checkpoint" in note
+        api_options["sd_model_checkpoint"] = "fixture.safetensors"
+        app.requests.post = lambda *args, **kwargs: Response({"images": [], "info": "{}"})
+        images, note = app.do_generate("landscape", "", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1,
+                                      False, 1.5, 10, 0.4, "None", "http://127.0.0.1:7860")
+        assert images == [] and "không hợp lệ" in note
+    finally:
+        app.requests.get, app.requests.post = old_get, old_post
+    print("✔ App sinh ảnh: JSON-string/PIL, tách sampler/scheduler, báo checkpoint trống và response hỏng")
 
     # App độc lập đọc profile lưu trên đĩa, nhưng environment vẫn được ưu tiên.
     with tempfile.TemporaryDirectory(prefix="wai-profile-test-") as tmp:

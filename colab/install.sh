@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.1"
+INSTALLER_VERSION="1.0.2"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -42,7 +42,7 @@ CUDA_PICK="cu130"
 ONLY_STAGES="${ONLY_STAGES:-}"
 SKIP_STAGES="${SKIP_STAGES:-}"
 WAI_NO_FALLBACK="${WAI_NO_FALLBACK:-1}"
-DO_LAUNCH=1; FORCE=0; RESTART=0; MODE=install
+DO_LAUNCH=1; FORCE=0; RESTART=0; SMOKE_TEST=0; MODE=install
 CURRENT_STAGE=""; SETUP=""; SPEC_READY=0
 MODEL_FILE=""; MODEL_SHA256=""; MODEL_LABEL=""; MODEL_MIN_BYTES=0; MODEL_URLS_STR=""
 CIVITAI_VERSION_ID=""; GPU_NAME=""; DRIVER=""; GPU_VRAM_MB=0
@@ -108,6 +108,8 @@ BỘ CÀI WAI-Illustrious v17 + Forge Neo + kho prompt tiếng Việt
   --list-stages          xem thứ tự stage
   --status              xem trạng thái và link, không cài gì
   --doctor              kiểm tra/gợi ý sửa, không cài gì; exit 1 nếu có lỗi
+  --diagnostics         in chẩn đoán checkpoint/API (chỉ đọc, không lộ token)
+  --smoke-test          verify sinh 1 ảnh thử 256×256/1 step; có dùng GPU
   --clean               chỉ xoá marker .ok, giữ model, ảnh, cấu hình và repo
   --version             phiên bản bộ cài
   --help                hướng dẫn này
@@ -158,11 +160,13 @@ parse_args() {
         shift 2 ;;
       --no-launch) DO_LAUNCH=0; shift ;;
       --restart) RESTART=1; shift ;;
+      --smoke-test) SMOKE_TEST=1; shift ;;
       --force) FORCE=1; shift ;;
       --fallback-fp16) WAI_NO_FALLBACK=0; shift ;;
       --no-fallback) WAI_NO_FALLBACK=1; shift ;;
       --status) MODE=status; shift ;; --doctor) MODE=doctor; shift ;;
       --clean) MODE=clean; shift ;;
+      --diagnostics) MODE=diagnostics; shift ;;
       --print-models) print_models; exit 0 ;;
       --list-stages) printf '%s\n' "${DEFAULT_STAGES[@]}"; exit 0 ;;
       -h|--help) usage; exit 0 ;; -V|--version) echo "install.sh $INSTALLER_VERSION"; exit 0 ;;
@@ -200,6 +204,28 @@ validate_args() {
     || { bad "SHA256 phải có 64 ký tự hex."; exit 2; }
   [[ -z "$MODEL_MIN_OVERRIDE" || "$MODEL_MIN_OVERRIDE" =~ ^[0-9]+$ ]] \
     || { bad "MODEL_MIN_BYTES không hợp lệ."; exit 2; }
+  # Không để EXTRA_FORGE_ARGS âm thầm ghi đè đường dẫn/port/file cấu hình do bộ cài quản lý.
+  # --ckpt-dirs có action=append nên vẫn cho phép thêm thư mục khác.
+  "$PY_BIN" - "$EXTRA_FORGE_ARGS" <<'PYARGS' || { bad "--forge-args không hợp lệ."; exit 2; }
+import shlex, sys
+try:
+    args = shlex.split(sys.argv[1])
+except ValueError:
+    sys.exit("--forge-args có dấu nháy không hợp lệ.")
+reserved = {"--ui-settings-file", "--ui-config-file", "--data-dir", "--model-ref", "--port",
+            "--server-name", "--ckpt", "--nowebui", "--disable-all-extensions", "--ui-debug-mode",
+            "--api-auth", "--gradio-auth", "--gradio-auth-path", "--ngrok", "--ngrok-authtoken"}
+for arg in args:
+    flag = arg.split("=", 1)[0]
+    if flag in reserved:
+        sys.exit(f"Cờ {flag} xung đột đường dẫn/chế độ hoặc chứa credential không được lưu; không truyền nó trong --forge-args.")
+PYARGS
+  if [[ "$SMOKE_TEST" == 1 && ( "$MODE" != install || "$DO_LAUNCH" != 1 ) ]]; then
+    bad "--smoke-test cần chế độ cài/verify có API (không dùng với --doctor/--no-launch)."; exit 2
+  fi
+  if [[ "$SMOKE_TEST" == 1 ]] && ! selected verify; then
+    bad "--smoke-test cần stage verify trong --only."; exit 2
+  fi
   [[ "$CUDA_INDEX" == auto ]] || CUDA_PICK="$CUDA_INDEX"
 }
 
@@ -318,7 +344,8 @@ fingerprint() {
 repo_ready() {
   local f
   for f in danbooru_e621.csv danbooru_e621_nounderscore.csv danbooru_e621_vi.csv \
-    danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py; do
+    danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py \
+    colab/checkpoint_tools.py colab/diagnostics.py; do
     [[ -s "$REPO_DIR/$f" ]] || return 1
   done
 }
@@ -429,8 +456,10 @@ stage_preflight() {
 locate_setup() {
   local self_dir
   self_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  if [[ -f "$self_dir/setup_forge.sh" ]]; then SETUP="$self_dir/setup_forge.sh"
-  else SETUP="$REPO_DIR/colab/setup_forge.sh"; fi
+  # Repo là nguồn chuẩn sau khi cập nhật; không ưu tiên buddy /content/setup_forge.sh
+  # cũ còn sót từ một lần sửa lỗi/notebook khác.
+  if [[ -f "$REPO_DIR/colab/setup_forge.sh" ]]; then SETUP="$REPO_DIR/colab/setup_forge.sh"
+  else SETUP="$self_dir/setup_forge.sh"; fi
 }
 repo_git() {
   if [[ -n "$GITHUB_TOKEN" ]]; then
@@ -441,7 +470,7 @@ repo_git() {
   else git -C "$REPO_DIR" "$@"; fi
 }
 stage_repo() {
-  if repo_ready; then
+  if [[ -s "$REPO_DIR/danbooru_e621.csv" && -s "$REPO_DIR/colab/setup_forge.sh" ]]; then
     if [[ -d "$REPO_DIR/.git" ]]; then
       local branch origin
       branch=$(git -C "$REPO_DIR" branch --show-current)
@@ -458,6 +487,7 @@ stage_repo() {
         warn "Không cập nhật được (mạng hoặc lịch sử phân kỳ); giữ checkout hiện có."
       fi
     fi
+    repo_ready || die "Repo cũ/thiếu checkpoint_tools.py hoặc diagnostics.py. Cập nhật cùng nhánh, giữ thay đổi local; không reset hard."
     ok "Dùng kho prompt sẵn có: $REPO_DIR (không xoá thay đổi của bạn)."
     return 0
   fi
@@ -489,7 +519,7 @@ stage_repo() {
 run_setup() {
   locate_setup # phải được thiết lập lại khi chạy --only hoặc resume (không lệ thuộc stage repo)
   [[ -s "$SETUP" ]] || die "Chưa có $SETUP. Chạy lại toàn bộ bộ cài hoặc stage repo trước."
-  grep -q '^SETUP_API_VERSION=1$' "$SETUP" \
+  grep -q '^SETUP_API_VERSION=2$' "$SETUP" \
     || die "setup_forge.sh đang là bản cũ/không tương thích. Cập nhật repo cùng nhánh rồi chạy lại; không dùng lẫn hai bản bộ cài."
   env REPO_URL="$REPO_URL" REPO_BRANCH="$REPO_BRANCH" REPO_DIR="$REPO_DIR" GITHUB_TOKEN="$GITHUB_TOKEN" \
   FORGE_DIR="$FORGE_DIR" FORGE_REPO="$FORGE_REPO" FORGE_BRANCH="$FORGE_BRANCH" \
@@ -501,6 +531,7 @@ run_setup() {
   WAI_RUNTIME_DIR="$RUNTIME_DIR" VI_PROMPT_ROOT="$REPO_DIR" \
   WAI_PROFILE_MODEL_ID="$MODEL_ID" WAI_PROFILE_CFG="$(m_field "$MODEL_ID" cfg)" \
   WAI_PROFILE_STEPS="$(m_field "$MODEL_ID" steps)" WAI_PROFILE_SAMPLER="$(m_field "$MODEL_ID" sampler)" \
+  WAI_PROFILE_HIRES_STEPS="$( [[ "$MODEL_ID" == hswq ]] && echo 10 || echo 20 )" \
     bash "$SETUP" "$1" 9>&- # child/Forge không giữ khoá của bộ cài
 }
 stage_forge() { run_setup forge; }
@@ -713,9 +744,19 @@ check() {
   else bad "  $label"; VERIFY_FAIL=$((VERIFY_FAIL + 1)); fi
   return 0
 }
+check_detail() {
+  local label="$1" detail; shift
+  if detail=$("$@" 2>&1); then ok "  $label"
+  else
+    bad "  $label"; VERIFY_FAIL=$((VERIFY_FAIL + 1))
+    # Helper checkpoint chỉ trả thông tin công khai/error ngắn, không dump options/log.
+    [[ -z "$detail" ]] || printf '%s\n' "${detail: -2500}" >&2
+  fi
+  return 0
+}
 valid_model_file() {
   [[ -s "$MODEL_DIR/$MODEL_FILE" && "$MODEL_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || return 1
-  echo "$MODEL_SHA256  $MODEL_DIR/$MODEL_FILE" | sha256sum -c --status
+  "$PY_BIN" "$REPO_DIR/colab/checkpoint_tools.py" validate "$MODEL_DIR/$MODEL_FILE" --sha "$MODEL_SHA256" --quiet
 }
 valid_tac_config() {
   "$PY_BIN" - "$FORGE_DIR/config.json" <<'PYCFG'
@@ -730,18 +771,20 @@ except (OSError, ValueError, KeyError, AssertionError, TypeError): sys.exit(1)
 PYCFG
 }
 model_in_api() {
-  curl -fsS --max-time 8 "http://127.0.0.1:$PORT/sdapi/v1/sd-models" | "$PY_BIN" -c '
-import json,os,sys
-models=json.load(sys.stdin)
-sys.exit(0 if any(os.path.basename(m.get("filename", "")) == sys.argv[1] or m.get("model_name") == sys.argv[1].removesuffix(".safetensors") for m in models) else 1)
-' "$MODEL_FILE"
+  "$PY_BIN" "$REPO_DIR/colab/checkpoint_tools.py" api "http://127.0.0.1:$PORT" \
+    "$MODEL_DIR/$MODEL_FILE" --sha "$MODEL_SHA256" --registry-only
 }
+model_selected_api() {
+  "$PY_BIN" "$REPO_DIR/colab/checkpoint_tools.py" api "http://127.0.0.1:$PORT" \
+    "$MODEL_DIR/$MODEL_FILE" --sha "$MODEL_SHA256"
+}
+
 stage_verify() {
   resolve_model
   VERIFY_FAIL=0
   check "Forge Neo + venv" test -x "$FORGE_DIR/venv/bin/python"
   check "Kho prompt đủ 4 CSV" repo_ready
-  check "Model $MODEL_FILE khớp SHA256" valid_model_file
+  check_detail "Model $MODEL_FILE hợp lệ và khớp SHA256" valid_model_file
   check "Tagcomplete + extension Prompt VN + bản dịch" extras_ready
   check "Cấu hình tìm bằng tiếng Việt của Forge" valid_tac_config
   check "PyTorch chạy được kernel CUDA" torch_ready
@@ -753,12 +796,25 @@ stage_verify() {
   fi
   if [[ "$DO_LAUNCH" == 1 ]]; then
     check "API Forge phản hồi ở cổng $PORT" api_ready
-    if api_ready; then check "Forge thấy đúng model trong MODEL_DIR" model_in_api; fi
+    if api_ready; then
+      check_detail "Forge quét đúng đường dẫn checkpoint (không chỉ tên file)" model_in_api
+      check_detail "Preset XL và checkpoint đang chọn nhất quán" model_selected_api
+      if [[ "$SMOKE_TEST" == 1 && "$VERIFY_FAIL" == 0 ]]; then
+        info "Sinh 1 ảnh thử để buộc nạp trọng số thật; không phải benchmark/chứng nhận chất lượng."
+        check_detail "GPU sinh ảnh thử bằng đúng hash checkpoint" "$PY_BIN" "$REPO_DIR/colab/checkpoint_tools.py" \
+          smoke "http://127.0.0.1:$PORT" "$MODEL_DIR/$MODEL_FILE" --sha "$MODEL_SHA256" --output "$RUNTIME_DIR/checkpoint-smoke.png"
+      fi
+    fi
   fi
   if (( VERIFY_FAIL )); then
     bad "$VERIFY_FAIL kiểm tra chưa đạt."
     printf 'Sửa theo hạng mục; ví dụ --only model,extras hoặc --only launch --restart.\nXem log: tail -50 %s/forge.log\n' "$RUNTIME_DIR"
     return 1
+  fi
+  if [[ "$SMOKE_TEST" == 1 && "$DO_LAUNCH" == 1 ]]; then
+    ok "Ảnh thử: $RUNTIME_DIR/checkpoint-smoke.png"
+  elif [[ "$DO_LAUNCH" == 1 ]]; then
+    info "Đã xác minh đăng ký/chọn checkpoint; chưa sinh ảnh GPU. Thêm --smoke-test nếu muốn thử nạp thật."
   fi
   ok "Mọi kiểm tra đều đạt."
 }
@@ -824,6 +880,11 @@ main() {
   locate_setup
   if [[ "$MODE" == status ]]; then stage_status; return 0; fi
   if [[ "$MODE" == clean ]]; then stage_clean; return 0; fi
+  if [[ "$MODE" == diagnostics ]]; then
+    "$PY_BIN" "$REPO_DIR/colab/diagnostics.py" --repo-dir "$REPO_DIR" --forge-dir "$FORGE_DIR" \
+      --model-dir "$MODEL_DIR" --model-file "$MODEL_FILE" --state-dir "$STATE_DIR" --port "$PORT"
+    return 0
+  fi
   if [[ "$MODE" == doctor ]]; then
     # Không ghi marker/config và không tải metadata hay dependencies trong doctor.
     if stage_doctor; then return 0; else return 1; fi

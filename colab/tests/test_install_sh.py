@@ -137,7 +137,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.1")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.2")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -310,7 +310,7 @@ def verify_version():
     model = tmp / "version-guard/models/fixture.safetensors"
     model.parent.mkdir(parents=True); model.write_bytes(DATA)
     env = {"FORGE_DIR": str(forge), "WAI_RUNTIME_DIR": str(runtime), "TUNNEL": "none",
-           "MODEL_DIR": str(model.parent), "MODEL_FILE": model.name}
+           "MODEL_DIR": str(model.parent), "MODEL_FILE": model.name, "MODEL_SHA256": SHA, "MODEL_MIN_BYTES": "1"}
     # Trích AST UID + hàm nguyên bản: không import các module engine/torch,
     # không thay input() và vẫn chạy thật với stdin=/dev/null như launch-bg.
     run_guard = """
@@ -405,6 +405,8 @@ def test_lifecycle(tmp):
     colab = repo / "colab"
     colab.mkdir(parents=True)
     shutil.copy2(INSTALL, colab / "install.sh")
+    for name in ("checkpoint_tools.py", "diagnostics.py"):
+        shutil.copy2(ROOT / "colab" / name, colab / name)
     for f in ("danbooru_e621.csv", "danbooru_e621_nounderscore.csv", "danbooru_e621_vi.csv",
               "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py"):
         p = repo / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("fixture\n")
@@ -417,7 +419,11 @@ def test_lifecycle(tmp):
                 downloads.append(self.path)
             elif self.path.endswith("/sd-models") and ready.exists():
                 filename = ready.read_text().strip()
-                body = json.dumps([{"filename": filename}]).encode(); code = 200
+                body = json.dumps([{"filename": filename, "title": Path(filename).name,
+                                    "model_name": Path(filename).stem, "sha256": SHA}]).encode(); code = 200
+            elif self.path.endswith("/options") and ready.exists():
+                body = json.dumps({"sd_model_checkpoint": Path(ready.read_text().strip()).name,
+                                   "forge_preset": "xl", "forge_checkpoint_xl": Path(ready.read_text().strip()).name}).encode(); code = 200
             else:
                 body, code = b"not ready", 503
             self.send_response(code); self.send_header("Content-Length", str(len(body)))
@@ -428,7 +434,7 @@ def test_lifecycle(tmp):
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     port = server.server_port
     stub = r'''#!/usr/bin/env bash
-SETUP_API_VERSION=1
+SETUP_API_VERSION=2
 set -euo pipefail
 printf '%s\n' "$1" >> "$TRACE_FILE"
 if [[ "${FAIL_STAGE:-}" == "$1" ]]; then exit 42; fi

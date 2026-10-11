@@ -10,6 +10,9 @@ colab/
   install.sh                    bộ cài một lệnh, kiểm tra/resume/chọn model
   INSTALL.md                    hướng dẫn bộ cài + xử lý sự cố
   make_install_notebook.py      sinh notebook một ô
+  checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
+  diagnostics.py                chẩn đoán checkpoint/venv/GPU/API chỉ đọc
+  AUDIT.md                      báo cáo rà soát toàn dự án 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
@@ -25,7 +28,9 @@ colab/
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
   tests/test_install_sh.py       95 kiểm tra bộ cài (không cần GPU/mạng)
-  tests/test_prompt_ui.py        smoke test UI, API/Forge host giả lập
+  tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
+  tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
+  tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
   assets/                        file sinh ra khi chạy (không đưa vào git)
   outputs/                       ảnh sinh ra từ notebook (không đưa vào git)
 ```
@@ -50,6 +55,11 @@ Nếu bản cài cũ dừng ở `verify_version()` với `EOFError`, xem
 [ô sửa VERSION_UID](INSTALL.md#eoferror-tại-verify_version--press-enter-to-continue):
 bộ cài 1.0.1 chỉ cần cập nhật script và mở lại UI, không tải lại checkpoint.
 
+Nếu ô **Checkpoint** trống dù file đã có, xem
+[ô sửa checkpoint 1.0.2](INSTALL.md#không-nhận-checkpoint--ô-checkpoint-trống-dù-file-đã-tải).
+Bản mới đặt đúng preset XL, đăng ký model và đối chiếu đường dẫn/lựa chọn thực từ API.
+Có `--smoke-test` để thử nạp trọng số bằng một ảnh trên GPU và `--diagnostics` chỉ đọc.
+
 ## Notebook chi tiết — chạy từng bước
 
 1. Mở [`WAI_Illustrious_v17_vi.ipynb`](WAI_Illustrious_v17_vi.ipynb) trong
@@ -60,7 +70,8 @@ bộ cài 1.0.1 chỉ cần cập nhật script và mở lại UI, không tải 
 5. Trong Forge: dùng tab **Prompt VN**, hoặc gõ thẳng tiếng Việt vào ô prompt
    (tagcomplete đã được cấu hình sẵn).
 
-Nếu repo để **private**, điền `GITHUB_TOKEN` (quyền đọc là đủ) vào Ô 1.
+Repo public không cần GitHub token. Nếu dùng repo private, bật `USE_GITHUB_SECRET`
+ở Ô 1 và đọc token từ **Colab Secrets**; không dán token vào source/URL clone.
 
 ## Ba cách dùng kho prompt
 
@@ -143,12 +154,15 @@ ao_dai, holding_sword, cherry_blossoms, from_behind
 | Backend | **forge-neo** (khuyến nghị của tác giả model) |
 | Phân loại | 4 mức `general / sensitive / nsfw / explicit` |
 
-### Hai chỗ dễ cài sai (đã xử lý sẵn trong code)
+### Các chỗ dễ cài sai (đã xử lý trong code)
 - **Upscaler:** Forge Neo *không* có scaler tên `R-ESRGAN 4x+ Anime6B`. Lớp
   `UpscalerESRGAN` của nó quét `models/ESRGAN/` và đặt tên scaler **theo tên file**
   (`friendly_name()` giữ nguyên basename), nên tên đúng là `RealESRGAN_x4plus_anime_6B`.
   `pick_upscaler()` hỏi `/sdapi/v1/upscalers` rồi tự chọn bản anime tốt nhất mà backend
   thực sự có, nên payload không bao giờ trỏ tới upscaler không tồn tại.
+- **Checkpoint/preset:** Neo dùng cả `sd_model_checkpoint` và `forge_checkpoint_xl`.
+  Bộ cài chọn preset `xl`, tạo alias có quản lý khi model nằm ngoài Forge và không chỉ
+  so basename API (tránh nhận nhầm một model cùng tên ở thư mục khác).
 - **Cờ dòng lệnh:** nhánh `neo` **không có** `--medvram`, `--no-download-sd-model`,
   `--precision`; thay vào đó là `--lowvram`, `--expandable-segments`, `--reserve-vram`.
   `setup_forge.sh` chỉ dùng các cờ đã kiểm tra là tồn tại trong
@@ -164,6 +178,8 @@ và `make_tagcomplete_assets.py` xuất chúng thành extra file để vẫn đ�
 ```bash
 python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ từng dòng
 python3 colab/tests/test_install_sh.py      # 95 kiểm tra bộ cài, fixture/offline
+python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
+python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
 python3 colab/make_tagcomplete_assets.py   # sinh lại assets/, tự assert không trùng khoá
 bash -n colab/setup_forge.sh               # kiểm tra cú pháp script

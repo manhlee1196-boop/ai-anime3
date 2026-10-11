@@ -3,6 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
+Bản hiện tại **1.0.2**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -100,6 +101,8 @@ notebook có output chứa thông tin riêng. Forge/extension không giữ các 
 |---|---|
 | Xem trạng thái + link | `!bash /content/install.sh --status` |
 | Kiểm tra, không cài/sửa gì | `!bash /content/install.sh --doctor` |
+| In chẩn đoán checkpoint/preset/đường dẫn API | `!bash /content/install.sh --diagnostics` |
+| Buộc nạp trọng số và sinh 1 ảnh thử | `!bash /content/install.sh --only verify --smoke-test` (API phải đang chạy) |
 | Cài xong nhưng chưa mở UI | `!bash /content/install.sh --no-launch` |
 | Tải/cắm lại model và kho prompt | `!bash /content/install.sh --only model,extras` |
 | Khởi động lại + kiểm tra | `!bash /content/install.sh --only launch,verify --restart` |
@@ -128,6 +131,10 @@ bỏ qua bước torch. `--force` không xóa model đã khớp SHA256 và **kh�
   khác chiếm thì báo lỗi, không tự kill nó.
 - Repo sạch cùng nhánh được cập nhật **fast-forward only**. Có thay đổi local hoặc khác
   origin/nhánh thì giữ nguyên; **không dùng reset hard, không tự chuyển nhánh**.
+- Trước launch: xác minh SHA256 + header safetensors, đặt preset `xl` và **cả hai**
+  `sd_model_checkpoint`/`forge_checkpoint_xl`. Không mặc định bật FP8 dtype trên T4.
+- Tạo alias symlink nhỏ trong `models/Stable-diffusion` khi model nằm ngoài Forge;
+  giữ file gốc tại MODEL_DIR, không copy hàng GB, không ghi đè file/link không rõ nguồn.
 - `--doctor` chỉ thăm dò/kiểm tra, không cài dependencies, không thay marker/cấu hình.
   Trả exit 1 khi phát hiện lỗi; không phải một bước cài thất bại mới.
 
@@ -140,6 +147,7 @@ bỏ qua bước torch. `--force` không xóa model đã khớp SHA256 và **kh�
     colab/assets/            CSV cho tagcomplete + profile model
   sd-webui-forge-neo/         Forge, venv, extension, ảnh outputs/
   models/                    checkpoint (hoặc thư mục bạn chọn)
+  checkpoint-smoke.png       ảnh thử khi bật --smoke-test
   .wai_state/                markers, settings.json, model.json, khóa cài
   .wai_torch_env             cấu hình PyTorch phù hợp GPU
   forge.pid  cloudflared.pid PID do bộ cài quản lý
@@ -161,6 +169,58 @@ Mọi thứ trong `/content` mất khi runtime kết thúc. Tải ảnh về tr�
 phiên mới cần cài/tải lại. Không có thủ thuật giữ runtime luôn hoạt động.
 
 ## 6. Xử lý sự cố
+
+### Không nhận Checkpoint / ô Checkpoint trống dù file đã tải
+
+**Đã sửa ở 1.0.2.** Forge Neo còn lưu checkpoint riêng theo preset:
+`forge_checkpoint_xl` mặc định là `None`. Chỉ ghi `sd_model_checkpoint` không đủ:
+`on_preset_change()` có thể đặt lại ô Checkpoint thành trống khi mở UI.
+
+Chạy trong **runtime hiện tại**, không reset và không tải lại model:
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --only extras,launch,verify --restart --smoke-test
+```
+
+Ô này cập nhật kho prompt/extension, kiểm header + SHA256 của checkpoint đang có,
+đăng ký alias có quản lý và chọn đúng **preset `xl` / checkpoint**. Không chạy stage
+model/torch/forge; không xóa ảnh, trọng số hay venv. Config được sao lưu trước khi sửa.
+Nếu đổi tùy chọn UI trước đây, bản sửa chỉ sửa key **UI Preset** trong `ui-config.json`,
+không đặt lại prompt/kích thước/key UI khác. Các tùy chọn WAI/preset XL được áp dụng
+lại theo model đã chọn; preset của model khác được giữ nguyên.
+
+`--smoke-test` dùng GPU để tạo **1 ảnh 256×256, 1 step, không hires** tại
+`/content/checkpoint-smoke.png`. Mục tiêu là buộc Forge nạp trọng số và đối chiếu hash,
+**không đánh giá chất lượng/benchmark**. Lần nạp đầu có thể mất vài phút.
+Nếu chưa muốn sinh ảnh, bỏ `--smoke-test`; verify khi đó chỉ chứng minh container,
+đăng ký và lựa chọn checkpoint — **không chứng minh weights đã nạp vào GPU**.
+
+Nếu vẫn lỗi, chạy và gửi output chẩn đoán (không có token/config đầy đủ):
+
+```python
+!bash /content/install.sh --diagnostics
+```
+
+Công cụ in đường dẫn thực/symlink/kích thước/header, phiên bản venv/GPU, UID, `ckpt_dirs`
+của process đang chạy, danh sách model API và preset đang chọn. Có file `.part` không
+đồng nghĩa tải xong; Forge không nhận nó. Có hai file khác nhau trùng tên thì bộ cài
+dừng thay vì ghi đè/chọn nhầm. Không tự đổi precision/phiên bản khi model lỗi.
+
+### Cờ bổ sung và credential
+
+`--forge-args` không được ghi đè `--data-dir`, `--model-ref`, `--ui-settings-file`,
+`--ui-config-file`, `--port`, chế độ API-only/debug hoặc tắt extension. Những cờ này
+làm thư mục scan/config của Forge lệch khỏi nơi bộ cài đang quản lý. `--ckpt-dirs`
+bổ sung vẫn được phép vì Neo dùng `action=append`.
+
+Không truyền `--api-auth`/`--gradio-auth`/token ngrok trong `--forge-args`: cấu hình
+bổ sung được lưu để resume nên bộ cài **từ chối** credential trong trường này.
+Bộ cài mặc định chưa quản lý auth UI/API; hãy bảo vệ link public như phần cảnh báo.
+Token tải model/clone dùng Colab Secrets/header riêng, không nằm trong origin Git.
 
 ### `EOFError` tại `verify_version()` / “Press Enter to Continue…”
 
@@ -224,7 +284,7 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Civitai 401/403, metadata rỗng | Kiểm tra quyền tải và Secret `CIVITAI_TOKEN`; hoặc chọn FP16. Không tự chuyển phiên bản |
 | SHA256 sai | Stage không nhận file; chạy lại stage model. Nếu dùng mirror riêng, kiểm tra URL + SHA của đúng file |
 | Rớt mạng lúc tải | Chạy lại cùng lệnh; `.part` được giữ để tiếp tục |
-| Forge không thấy model | `--doctor`; xem `--ckpt-dirs`/MODEL_DIR, chạy `--only launch,verify --restart` |
+| Forge không thấy model / Checkpoint trống | Cập nhật 1.0.2, xem ô sửa ở trên; cần cả preset `xl` và `forge_checkpoint_xl`, không chỉ kiểm tên trong API |
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |
@@ -243,6 +303,8 @@ Từ thư mục gốc repo:
 
 ```bash
 python3 colab/tests/test_install_sh.py       # 95 kiểm tra CLI/fixture/vòng đời cài
+python3 colab/tests/test_checkpoint_flow.py  # 16 nhóm checkpoint/preset/API/alias
+python3 colab/tests/test_data_integrity.py   # 4 nhóm, kiểm toàn bộ 349.714 dòng CSV
 python3 colab/tests/test_prompt_lib.py       # 15 nhóm hồi quy thư viện prompt
 python3 colab/make_install_notebook.py       # sinh lại notebook một ô
 bash -n colab/install.sh
@@ -253,14 +315,19 @@ python colab/tests/test_prompt_ui.py         # UI thật, API và Forge host gi�
 ```
 
 **Đã kiểm tra:** luồng cài/resume bằng stage stub, tải/checksum model nhỏ qua HTTP cục bộ,
-CUDA fallback bằng venv giả lập, hồi quy VERSION_UID/EOF với stdin đóng, và UI trên
+CUDA fallback bằng venv giả lập, header/checksum/alias/preset, hồi quy VERSION_UID/EOF
+với stdin đóng, toàn bộ CSV, đường giải mã ảnh của cả hai UI, và UI trên
 Gradio **4.40.0 / 6.30.0**. Test UID có fixture offline; cũng đã chạy lại cùng hàm
 `verify_version()` nguyên bản lấy từ Forge Neo, chỉ trích AST, không import engine.
-Muốn kiểm tra bằng mã upstream đã tải về:
+Muốn kiểm tra bằng mã upstream đã tải về (bản rà soát: Neo 2.30,
+commit `ede60e1aefd30ce0f7341c8ff538f48e0fd047c9`):
 
 ```bash
 FORGE_VERSION_GUARD_SOURCE=/path/to/Forge/modules/launch_utils.py \
   python3 colab/tests/test_install_sh.py
+# Thư mục snapshot có audit_modules_{sd_models,modelloader,util,options}.py
+# và audit_modules_forge_{main_entry,presets}.py:
+FORGE_AUDIT_SOURCE_DIR=tools/work python3 colab/tests/test_checkpoint_flow.py
 ```
 
 **Chưa kiểm tra:** chạy toàn bộ hệ thống và sinh ảnh thật trên GPU Colab; sandbox không có GPU

@@ -14,8 +14,6 @@ Tính năng:
 """
 
 import argparse
-import base64
-import io
 import os
 import sys
 import time
@@ -31,6 +29,7 @@ from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY
                         MODEL_PROFILES, NEGATIVE_PRESETS,
                         QUALITY_PRESETS, RATINGS, SIZE_PRESETS, UPSCALERS, WAI_DEFAULTS,
                         PromptBuilder, TagIndex, pick_upscaler)
+from prompt_lib.api import decode_generation_response
 
 INDEX = None
 BUILDER = None
@@ -110,8 +109,12 @@ def forge_alive(url=None, timeout=6):
         r = requests.get(f"{url}/sdapi/v1/options", timeout=timeout)
         if r.status_code == 200:
             data = r.json()
-            model = data.get("sd_model_checkpoint", "(chưa chọn model)")
-            return True, f"✅ Đã nối được Forge tại `{url}`\n\nModel đang nạp: `{model}`"
+            model = data.get("sd_model_checkpoint")
+            if not isinstance(model, str) or not model.strip() or model.lower() == "none":
+                return False, f"⚠️ Đã nối được Forge tại `{url}` nhưng **chưa chọn Checkpoint**. Chạy bộ cài với launch/verify."
+            if data.get("forge_preset") == "xl" and not data.get("forge_checkpoint_xl"):
+                return False, "⚠️ Forge thấy model nhưng preset XL chưa có checkpoint. Cập nhật bộ cài 1.0.2 rồi restart."
+            return True, f"✅ Đã nối được Forge tại `{url}`\n\nCheckpoint đang chọn: `{model}` (nạp trọng số khi sinh ảnh)."
     except Exception as exc:                      # noqa: BLE001
         return False, f"❌ Không nối được Forge tại `{url}`\n\n`{type(exc).__name__}: {exc}`"
     return False, f"❌ Forge trả về mã lỗi {r.status_code}"
@@ -192,6 +195,8 @@ def do_build(selected, description, rating_label, quality, negative_preset,
 
 def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
                 batch, enable_hr, hr_scale, hr_steps, denoise, upscaler, url):
+    if not (prompt or "").strip():
+        return [], "Chưa có prompt. Bấm **Dựng prompt** trước."
     if CFG["demo"]:
         return [], ("🧪 **Chế độ demo** (không có GPU/Forge): app chỉ dựng prompt. "
                     "Chạy notebook Colab để sinh ảnh thật.")
@@ -228,11 +233,10 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
         r.raise_for_status()
     except Exception as exc:                      # noqa: BLE001
         return [], f"❌ Sinh ảnh thất bại: `{type(exc).__name__}: {exc}`"
-    data = r.json()
-    images = []
-    for b64 in data.get("images", []):
-        images.append(base64.b64decode(b64.split(",", 1)[-1]))
-    info = data.get("info", {})
+    try:
+        images, info = decode_generation_response(r.json())
+    except Exception as exc:                      # noqa: BLE001
+        return [], f"❌ Response ảnh của Forge không hợp lệ: `{type(exc).__name__}: {exc}`"
     elapsed = time.time() - started
     summary = swapped + (f"✅ {len(images)} ảnh trong **{elapsed:.1f}s** · seed `{info.get('seed')}` "
                f"· sampler `{info.get('sampler_name')}` · {info.get('width')}×{info.get('height')} "

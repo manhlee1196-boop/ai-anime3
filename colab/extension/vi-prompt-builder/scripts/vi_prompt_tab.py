@@ -67,6 +67,8 @@ if LIB_DIR:
                             NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
                             UPSCALERS, WAI_DEFAULTS, PromptBuilder, TagIndex)
 
+    from prompt_lib.api import decode_generation_response
+
     INDEX = TagIndex(CSV_ROOT)
     BUILDER = PromptBuilder(INDEX)
     RATING_BY_LABEL = {r["label"]: r["id"] for r in RATINGS}
@@ -172,7 +174,6 @@ def do_build(selected, description, rating_label, quality, negative_preset,
 def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
                 enable_hr, hr_scale, denoise, upscaler):
     """Sinh ảnh qua API của chính Forge (cần bật --api)."""
-    import base64
     import time
 
     if not (prompt or "").strip():
@@ -212,20 +213,10 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
     except Exception as exc:                      # noqa: BLE001
         return [], (f"❌ Gọi API thất bại: `{type(exc).__name__}: {exc}`\n\n"
                     f"URL: `{url}` — Forge phải chạy với cờ `--api`.")
-    data = r.json()
-    import io
-    import json
-    from PIL import Image
-    images = [Image.open(io.BytesIO(base64.b64decode(b.split(",", 1)[-1]))).copy()
-              for b in data.get("images", [])]
-    info = data.get("info", {})
-    if isinstance(info, str):
-        try:
-            info = json.loads(info)
-        except ValueError:
-            info = {}
-    if not isinstance(info, dict):
-        info = {}
+    try:
+        images, info = decode_generation_response(r.json())
+    except Exception as exc:                      # noqa: BLE001
+        return [], f"❌ Response ảnh của Forge không hợp lệ: `{type(exc).__name__}: {exc}`"
     return images, swapped + (f"✅ {len(images)} ảnh trong {time.time() - started:.1f}s · "
                     f"seed `{info.get('seed')}` · {info.get('width')}×{info.get('height')} · "
                     f"CFG {info.get('cfg_scale')} · {info.get('steps')} bước")
