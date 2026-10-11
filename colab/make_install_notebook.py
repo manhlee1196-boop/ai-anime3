@@ -9,6 +9,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from notebook_support import BOOTSTRAP_SOURCE, WORKFLOW_GUIDE
+
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "WAI_v17_1click.ipynb"
 
@@ -22,7 +24,12 @@ def current_branch():
 
 BRANCH = os.environ.get("WAI_BRANCH") or current_branch()
 
-INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô
+INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.3
+
+**Cài mới từ đầu:** bật GPU rồi dùng **Runtime → Run all** (chỉ có 1 ô code).
+Nếu đang dùng phiên cũ và muốn môi trường hoàn toàn mới, **tải ảnh cần giữ về trước**,
+rồi chọn **Runtime → Disconnect and delete runtime**, kết nối lại và bật GPU.
+Notebook không tự xóa repo/model/ảnh và không cần mount Google Drive.
 
 **Forge Neo + tagcomplete + kho prompt tiếng Việt + tab Prompt VN** được cài bằng
 một lần chạy ô dưới. Mặc định lưu model và ảnh trong `/content`, **không mount Drive**.
@@ -52,13 +59,15 @@ API token vào source/lệnh/output notebook. Repo này public nên **không c�
 
 Dự trù **25 GB trống** và khoảng **10–25 phút** cho lần đầu (tuỳ tốc độ mạng/runtime).
 Chạy lại ô được: bỏ qua phần đã cài hợp lệ, kiểm tra lại model và API, không chạy trùng Forge.
+Ô cài luôn tải script mới từ đúng nhánh và kiểm tra **phiên bản ≥1.0.3 + cú pháp Bash**.
+Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầm chạy bản 1.0.2 cũ**.
 
 > Dữ liệu `/content` mất khi runtime kết thúc — tải ảnh về trước khi ngắt phiên.
 > Tuân thủ điều khoản Colab và giấy phép model; không dùng cách cài này để né hạn chế
 > của dịch vụ. Hệ thống mặc định mức `general`; negative prompt không bảo đảm lọc hoàn toàn nội dung.
 """
 
-CELL = r'''#@title 🎨 Cài WAI v17 + Forge Neo + prompt tiếng Việt { display-mode: "form" }
+CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.3) { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 MODEL_DIR = "/content/models" #@param {type:"string"}
 TUNNEL = "cloudflared" #@param ["cloudflared", "share", "none"]
@@ -75,10 +84,6 @@ BRANCH = "__BRANCH__"
 import os
 import signal
 import subprocess
-import urllib.error
-import urllib.parse
-import urllib.request
-from pathlib import Path
 
 env = dict(os.environ)
 if USE_CIVITAI_SECRET or USE_GITHUB_SECRET:
@@ -91,38 +96,9 @@ if USE_CIVITAI_SECRET or USE_GITHUB_SECRET:
             except Exception:
                 raise RuntimeError(f"Chưa đọc được Secret {name}; thêm secret và bật Notebook access.") from None
 
-owner_repo = "manhlee1196-boop/ai-anime3"
-raw = f"https://raw.githubusercontent.com/{owner_repo}/{BRANCH}/colab/install.sh"
-api = (f"https://api.github.com/repos/{owner_repo}/contents/colab/install.sh?ref="
-       + urllib.parse.quote(BRANCH, safe=""))
+__BOOTSTRAP__
 dest = Path("/content/install.sh")
-dest.parent.mkdir(parents=True, exist_ok=True)
-
-# Lấy file mới qua raw GitHub; dự phòng API GitHub. Ghi nguyên tử, không chạy file dở.
-downloaded = False
-for url in (raw, api):
-    headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0"}
-    if env.get("GITHUB_TOKEN"):
-        headers["Authorization"] = f"Bearer {env['GITHUB_TOKEN']}"
-    try:
-        request = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data = response.read()
-        if not data.startswith(b"#!/usr/bin/env bash") or len(data) < 5000:
-            raise ValueError("Không phải script bộ cài đầy đủ")
-        tmp = dest.with_suffix(".sh.tmp")
-        tmp.write_bytes(data)
-        subprocess.run(["bash", "-n", str(tmp)], check=True, capture_output=True)
-        tmp.replace(dest)
-        downloaded = True
-        break
-    except (OSError, ValueError, subprocess.CalledProcessError, urllib.error.URLError):
-        continue
-if not downloaded:
-    if dest.exists() and dest.stat().st_size > 5000:
-        print("⚠ Không lấy được bản mới; dùng bộ cài đã có trong /content.")
-    else:
-        raise RuntimeError("Không tải được install.sh. Kiểm tra mạng/nhánh; hoặc upload file colab/install.sh vào /content.")
+download_installer(dest, BRANCH, env)
 
 args = ["bash", str(dest), "--model", MODEL, "--model-dir", MODEL_DIR,
         "--branch", BRANCH, "--port", str(PORT), "--tunnel", TUNNEL, "--cuda", CUDA_INDEX]
@@ -157,9 +133,11 @@ if NO_LAUNCH:
     print("✅ Cài xong, chưa mở Forge. Khởi động: !bash /content/install.sh --only launch,verify")
 else:
     print("✅ Các bước đã đạt. Mở link public ở trên → dùng tab Prompt VN.")
-'''.replace("__BRANCH__", BRANCH)
+    print("▶ Chuẩn: 832×1216, Hires tắt. Chọn ảnh/seed rồi dùng Hoàn thiện.")
+    print("▶ Dùng nút Thay mục Việt → tag Anh; giữ tag khác/trọng số, không xóa toàn bộ prompt.")
+'''.replace("__BOOTSTRAP__", BOOTSTRAP_SOURCE).replace("__BRANCH__", BRANCH)
 
-AFTER = """## Lệnh dùng sau khi cài
+AFTER = WORKFLOW_GUIDE + """\n## Lệnh dùng sau khi cài
 
 Dán vào một ô Colab mới khi cần:
 
@@ -187,7 +165,7 @@ Các kiểm tra cài đặt không thay thế một lần sinh ảnh thật trê
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — bộ cài một ô"},
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab một ô 1.0.3"},
         "accelerator": "GPU",
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"},

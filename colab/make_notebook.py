@@ -1,15 +1,14 @@
-"""Sinh `colab/WAI_Illustrious_v17_vi.ipynb`.
+"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.3.
 
-Viết notebook bằng script thay vì sửa tay JSON để tránh lỗi escape và để nội dung
-các ô luôn khớp với `setup_forge.sh`. Chạy:  python3 colab/make_notebook.py
+Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import generator.
 """
-
 import json
-import os
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "WAI_Illustrious_v17_vi.ipynb")
+from notebook_support import API_SAMPLE_SOURCE, BOOTSTRAP_SOURCE, WORKFLOW_GUIDE
 
+HERE = Path(__file__).resolve().parent
+OUT = HERE / "WAI_Illustrious_v17_vi.ipynb"
 cells = []
 
 
@@ -22,333 +21,250 @@ def code(text):
                   "outputs": [], "source": text.splitlines(True)})
 
 
-# =============================================================================
-md("""# 🎨 Hệ thống tạo ảnh WAI-Illustrious v17 trên Google Colab
-### kèm kho prompt tiếng Việt 349.714 tag Danbooru + e621
+md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.3
+### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.513 bản dịch
 
-Notebook này dựng một hệ sinh ảnh hoàn chỉnh trên Colab:
+Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
+stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không tự đổi model.
 
-| Thành phần | Là gì |
+**Chạy mới từ đầu:**
+1. Chọn **Runtime → Change runtime type → GPU T4** (hoặc GPU NVIDIA khác).
+2. Chọn model ở Ô 1; mặc định **FP16 gốc**, checkpoint tại `/content/models`.
+3. **Runtime → Run all**, hoặc chạy lần lượt Ô 1 → Ô 8. Forge chạy nền, Ô 8 có thể
+   kết thúc sau launch/verify; không bị chặn ở một ô chạy mãi.
+4. Mở link public và dùng tab **Prompt VN**. Ô 9/10/11 mặc định chỉ in hướng dẫn,
+   không tự sinh ảnh hay mở thêm server.
+
+Nếu muốn môi trường hoàn toàn mới khi đang dùng phiên cũ, **tải ảnh về trước** rồi
+chọn **Runtime → Disconnect and delete runtime**, kết nối lại và bật GPU. Notebook
+không tự xóa thư mục cũ. Chạy lại trong cùng phiên sẽ tiếp tục/cập nhật an toàn.
+
+| Model | Ghi chú |
 |---|---|
-| **Model** | `waiIllustriousSDXL_v170.safetensors` — WAI-illustrious-SDXL **v17.0**, SDXL 6,5 GB, VAE tích hợp sẵn |
-| **Backend** | **Forge Neo** (nhánh `neo` của `Haoming02/sd-webui-forge-classic`) — đúng phần mềm thẻ model khuyến nghị |
-| **Bộ nhắc** | Kho tag Danbooru + e621 đã dịch tiếng Việt của repo này: **45.513 bản dịch** trên 349.714 tag |
-| **Gõ tiếng Việt trong ô prompt** | Extension `sd-webui-tagcomplete` + file dịch 2 cột → gõ “áo dài”, “tóc dài”, “đồng phục học sinh” vẫn ra tag |
-| **Tab “Prompt VN”** | Extension của repo: tra tag, xếp thứ tự prompt chuẩn Illustrious/WAI, sinh negative, sinh ảnh ngay |
+| `fp16` ⭐ | WAI v17 gốc pruned, 6,46 GiB; VAE tích hợp; SHA256 đã biết; khuyên dùng |
+| `fp8` / `int8` | Bản lượng tử hóa cộng đồng, thử nghiệm; CFG 6.5 / 25 bước |
+| `hswq` | Turbo merge cộng đồng, thử nghiệm; CFG 1 / 10 bước, không dùng CFG FP16 |
 
-**Yêu cầu:** Colab có GPU (T4 trở lên, ≥12 GB VRAM thì thoải mái hires fix), ~25 GB ổ đĩa trống.
-**Thời gian:** cài đặt 8–15 phút (tải model 6,5 GB là lâu nhất), sau đó sinh ảnh ngay.
-
-> ⚠️ Model này **có khả năng tạo nội dung người lớn**. Thẻ model ghi rõ bốn mức phân loại
-> `general / sensitive / nsfw / explicit` và khuyên *chủ động thêm “nsfw” vào negative prompt*
-> để lọc nội dung. Hệ thống ở đây mặc định để mức **general** và tự đẩy các mức còn lại
-> sang negative. Bạn phải tự chịu trách nhiệm tuân thủ pháp luật nơi mình ở, điều khoản
-> của Google Colab, và không tạo nội dung vi phạm (đặc biệt là nội dung liên quan trẻ em —
-> tag `loli`/`shota` và mọi nội dung tình dục hoá trẻ vị thành niên đều bị cấm).
+Cần khoảng **25 GB trống**, **10–25 phút** cho lần cài đầu tùy mạng/runtime. T4 không
+có tensor core FP8; model nhỏ hơn không bảo đảm nhanh hơn. Chưa benchmark GPU thật.
+Dữ liệu `/content` mất khi kết thúc runtime; không có thủ thuật giữ runtime luôn hoạt động.
+Mặc định phân loại `general`; negative prompt không bảo đảm lọc mọi nội dung.
+Tuân thủ giấy phép model, pháp luật và điều khoản Google Colab.
 """)
 
-md("""---
-## ⚙️ Ô 1 — Cấu hình (sửa ở đây rồi chạy các ô bên dưới)
+md("""## ⚙️ Ô 1 — Cấu hình
 
-Mặc định đã chọn đúng theo thẻ model v17.0. Chỉ cần sửa nếu bạn biết mình muốn gì khác.
+FP16 được khuyên dùng. Nếu cần token tải Civitai, thêm `CIVITAI_TOKEN` vào **Colab
+Secrets**, bật Notebook access và `USE_CIVITAI_SECRET`; không dán token vào code.
+Repo public không cần GitHub token. Thư mục mặc định đều trong `/content`.
 """)
+code('''#@title ⚙️ Model và thư mục (cài mới) { display-mode: "form" }
+MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
+MODEL_DIR = "/content/models" #@param {type:"string"}
+TUNNEL = "cloudflared" #@param ["cloudflared", "share", "none"]
+PORT = 7860 #@param {type:"integer"}
+CUDA_INDEX = "auto" #@param ["auto", "cu130", "cu128", "cu126"]
+RESTART = False #@param {type:"boolean"}
+FALLBACK_FP16 = False #@param {type:"boolean"}
+USE_CIVITAI_SECRET = False #@param {type:"boolean"}
+USE_GITHUB_SECRET = False #@param {type:"boolean"}
 
-code('''import os
-
-# ---- repo chứa kho prompt + code của hệ thống này -----------------------------
-os.environ["REPO_DIR"]    = "/content/ai-anime3"
-os.environ["REPO_URL"]    = "https://github.com/manhlee1196-boop/ai-anime3"
-os.environ["REPO_BRANCH"] = "arena/88f01d31-ai-anime3"   # đúng một nhánh, không fallback sang main/master
-# Repo public không cần token GitHub. Nếu cần credential, dùng Colab Secrets,
-# không dán token vào source notebook (source sẽ được lưu/chia sẻ).
-USE_GITHUB_SECRET = False
-USE_CIVITAI_SECRET = False
-if USE_GITHUB_SECRET or USE_CIVITAI_SECRET:
-    from google.colab import userdata
-    for enabled, name in ((USE_GITHUB_SECRET, "GITHUB_TOKEN"), (USE_CIVITAI_SECRET, "CIVITAI_TOKEN")):
-        if enabled:
-            os.environ[name] = userdata.get(name)
-
-# ---- Forge Neo ---------------------------------------------------------------
-os.environ["FORGE_DIR"]    = "/content/sd-webui-forge-neo"
-os.environ["FORGE_REPO"]   = "https://github.com/Haoming02/sd-webui-forge-classic"
-os.environ["FORGE_BRANCH"] = "neo"
-os.environ["PORT"]         = "7860"
-os.environ["TUNNEL"]       = "share"        # share | cloudflared | none
-os.environ["VRAM_FLAG"]    = ""             # T4 mà bị tràn VRAM thì đặt "--lowvram"
-
-# ---- model WAI-Illustrious v17.0 (FP16 bản gốc, 6,5 GB) ----------------------
-os.environ["MODEL_DIR"]  = "/content/sd-webui-forge-neo/models/Stable-diffusion"
-os.environ["MODEL_FILE"] = "waiIllustriousSDXL_v170.safetensors"
-# SHA256 công bố trên thẻ model Civitai (version 2883731) và khớp với mirror HF
-os.environ["MODEL_SHA256"] = "f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04"
-# CIVITAI_TOKEN (nếu bật) đã được đọc từ Secrets, không ghi literal vào notebook.
-
-print("Cấu hình đã nạp:")
-for k in ("REPO_DIR", "FORGE_DIR", "MODEL_FILE", "TUNNEL", "PORT"):
-    print(f"   {k:<12} = {os.environ[k]}")''')
-
-md("""## Ô 2 — Lấy kho prompt (clone repo này)
-
-Cần 4 file CSV ở thư mục gốc repo (`danbooru_e621.csv`, `danbooru_e621_vi.csv`,
-`danbooru_e621_nounderscore.csv`, `danbooru_e621_vi_translation.csv`) cùng thư mục
-`colab/` chứa `prompt_lib`, extension và `setup_forge.sh`.
-""")
-
-code('''import os, base64, subprocess, tempfile
-from pathlib import Path
-
-repo = Path(os.environ["REPO_DIR"])
-url, branch = os.environ["REPO_URL"], os.environ["REPO_BRANCH"]
-required = ("danbooru_e621.csv", "danbooru_e621_vi.csv", "danbooru_e621_nounderscore.csv",
-            "danbooru_e621_vi_translation.csv", "colab/setup_forge.sh", "colab/checkpoint_tools.py")
-if all((repo / name).is_file() for name in required):
-    print("✔ Kho prompt đã có sẵn ở", repo)
-elif repo.exists() and any(repo.iterdir()):
-    raise RuntimeError("Repo đã có dữ liệu nhưng thiếu file/bản mới. Cập nhật cùng nhánh; không xóa thư mục hay reset hard.")
-else:
-    repo.parent.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
-    token = env.get("GITHUB_TOKEN", "").strip()
-    if token:
-        auth = base64.b64encode(("x-access-token:" + token).encode()).decode()
-        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.https://github.com/.extraheader",
-                   GIT_CONFIG_VALUE_0="Authorization: Basic " + auth)
-    with tempfile.TemporaryDirectory(prefix="wai-repo-", dir=repo.parent) as tmp:
-        dest = Path(tmp) / "repo"
-        result = subprocess.run(["git", "clone", "--depth", "1", "--branch", branch, url, str(dest)],
-                                env=env, capture_output=True, text=True)
-        if result.returncode:
-            raise RuntimeError("Không clone được đúng nhánh. Kiểm tra mạng/quyền GitHub; không chuyển sang nhánh khác.")
-        if not all((dest / name).is_file() for name in required):
-            raise RuntimeError("Nhánh đã clone thiếu file. Giữ dữ liệu hiện tại, không chạy stage tiếp theo.")
-        if repo.exists():
-            repo.rmdir()  # chỉ chấp nhận thư mục rỗng; không xóa dữ liệu người dùng
-        dest.rename(repo)
-    print("✔ Đã clone đúng nhánh", branch)
-for path in repo.glob("*.csv"):
-    print(f"   {path.name}: {path.stat().st_size:,} byte")''')
-
-md("""## Ô 3 — Kiểm tra GPU, ổ đĩa, driver
-
-Ô này cũng quyết định sẽ cài bản PyTorch nào (`cu130` nếu driver hỗ trợ CUDA 13,
-ngược lại `cu128`).
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "gpu"], check=True)''')
-
-md("""## Ô 4 — Cài Forge Neo
-
-`uv` tạo môi trường Python 3.13 riêng (Colab chỉ có 3.11/3.12), mất ~1 phút.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "forge"], check=True)''')
-
-md("""## Ô 5 — Cài PyTorch phù hợp với driver
-
-Script thử `cu130` → `cu128` → `cu126`, import torchvision và **chạy tensor/kernel CUDA
-thật sau mỗi lần cài**; `cuda.is_available()` một mình chưa đủ để kiểm tra T4.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "torch"], check=True)''')
-
-md("""## Ô 6 — Tải WAI-illustrious-SDXL v17.0 (6,5 GB)
-
-Tải từ mirror HuggingFace (không cần token), có **tải tiếp nếu đứt giữa chừng** và
-**kiểm SHA256** sau khi tải. Nếu mirror hỏng, script tự thử mirror thứ hai, rồi
-báo lỗi nếu cả hai mirror đều không tải được. Không tự đổi checkpoint/phiên bản.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "model"], check=True)''')
-
-md("""## Ô 7 — Cắm kho prompt tiếng Việt vào Forge
-
-Ô này làm 6 việc:
-1. Tải upscaler `RealESRGAN_x4plus_anime_6B.pth` (thẻ model khuyên dùng cho hires fix).
-2. Sinh `wai-illustrious-system-tags.csv` — các tag hệ thống Illustrious/WAI mà danh sách
-   Danbooru **không có** (`rating_general`, `rating_explicit`, `masterpiece`, `newest`,
-   `very awa`, `source_anime`…) để chúng vẫn được gợi ý khi gõ.
-3. Sinh `danbooru_e621_vi_translation_wai.csv` — bản dịch của kho + tag hệ thống.
-4. Cài `sd-webui-tagcomplete` và chép 3 file CSV vào thư mục `tags/` của nó.
-5. Ghi sẵn `config.json`: chọn tag file, file dịch tiếng Việt, bật tìm bằng tiếng Việt,
-   bật hiện nghĩa tiếng Việt dưới ô prompt, và đặt **CLIP stop = 2**.
-6. Cài extension **Prompt VN** và tạo `styles.csv` với 4 mức phân loại.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "extras"], check=True)''')
-
-md("""## Ô 8 — Chạy Forge (ô này sẽ chạy liên tục, đừng ngắt)
-
-Đợi tới khi thấy dòng `Running on public URL: https://xxxx.gradio.live` thì bấm link đó.
-Lần khởi động đầu mất 3–8 phút vì Forge tự cài nốt `requirements.txt`.
-
-**Sau khi mở giao diện:**
-- Tab **`Prompt VN`** — bộ dựng prompt tiếng Việt (tra tag, xếp thứ tự, sinh negative,
-  sinh ảnh ngay trong tab).
-- Ô prompt của **txt2img** — gõ thử `áo dài`, `tóc dài`, `đồng phục học sinh`: tagcomplete
-  sẽ gợi ý tag tiếng Anh kèm nghĩa tiếng Việt.
-- Nút **Styles** — chọn `WAI v17 — An toàn — general` để nạp cả positive lẫn negative mẫu.
-
-Tham số mặc định nên dùng (theo thẻ model): **Euler a · 25 bước · CFG 6 · 1024×1344 ·
-Hires fix 1.5× với `RealESRGAN_x4plus_anime_6B`, 20 bước, denoise 0.4 · CLIP stop 2**.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "launch"], check=True)''')
-
-md("""---
-## 🔧 Ô 9 (tuỳ chọn) — Chạy Forge ở chế độ nền
-
-Muốn dùng thêm ô khác trong khi Forge đang chạy (ví dụ sinh ảnh bằng API từ notebook,
-hoặc mở app dựng prompt riêng) thì dùng ô này **thay cho Ô 8**.
-""")
-
-code('''import os, subprocess
-subprocess.run(["bash", os.path.join(os.environ["REPO_DIR"], "colab/setup_forge.sh"), "launch-bg"], check=True)''')
-
-md("""## 🔧 Ô 10 (tuỳ chọn) — Sinh ảnh thẳng từ notebook bằng API
-
-Không cần mở giao diện: dựng prompt bằng `prompt_lib` rồi gọi `/sdapi/v1/txt2img`.
-Chỉ chạy được khi Forge đang chạy (Ô 8 hoặc Ô 9).
-""")
-
-code('''import os, sys, base64, requests
-from pathlib import Path
-
-REPO = os.environ["REPO_DIR"]
-sys.path.insert(0, os.path.join(REPO, "colab"))
-from prompt_lib import PromptBuilder, TagIndex          # noqa: E402
-
-index   = TagIndex(REPO)
-builder = PromptBuilder(index)
-
-# 1) Tra tag bằng tiếng Việt
-for q in ("áo dài", "tóc dài", "hoa anh đào", "nhìn vào người xem"):
-    hits = index.search(q, limit=1)
-    print(f"   {q:<22} -> {hits[0].tag if hits else '(không thấy)'}")
-
-# 2) Dựng prompt đúng thứ tự Illustrious/WAI
-out = builder.assemble(
-    "1girl, ao_dai, long_hair, red_eyes, looking_at_viewer, holding_sword, "
-    "cherry_blossoms, simple_background",
-    description="Một cô gái mặc áo dài đứng dưới cơn mưa hoa anh đào",
-    rating_id="general",
-    quality_preset="WAI khuyến nghị (đầy đủ)",
-)
-negative = builder.negative("general", "Chuẩn cộng đồng (đầy đủ)")
-print("\\nPROMPT :", out["prompt"])
-print("NEGATIVE:", negative[:110], "...")
-
-# 3) Gọi API của Forge (tham số đúng thẻ model v17.0)
-url = f'http://127.0.0.1:{os.environ.get("PORT", 7860)}'
-available = [u["name"] for u in requests.get(url + "/sdapi/v1/upscalers", timeout=30).json()]
-payload = builder.payload(out["prompt"], negative, {
-    "steps": 25, "cfg_scale": 6.0, "sampler_name": "Euler a", "seed": -1,
-    "width": 1024, "height": 1344, "enable_hr": True, "hr_scale": 1.5,
-    "hr_second_pass_steps": 20, "denoising_strength": 0.4,
-    "override_settings": {"clip_stop_at_last_layers": 2},
+import os
+os.environ.update({
+    "REPO_DIR": "/content/ai-anime3",
+    "REPO_URL": "https://github.com/manhlee1196-boop/ai-anime3",
+    "REPO_BRANCH": "arena/88f01d31-ai-anime3",
+    "FORGE_DIR": "/content/sd-webui-forge-neo",
+    "FORGE_REPO": "https://github.com/Haoming02/sd-webui-forge-classic",
+    "FORGE_BRANCH": "neo",
+    "MODEL_ID": MODEL, "MODEL_DIR": MODEL_DIR, "TUNNEL": TUNNEL,
+    "PORT": str(PORT), "CUDA_INDEX": CUDA_INDEX,
+    "VI_PROMPT_ROOT": "/content/ai-anime3",
 })
-builder.fix_upscaler(payload, available)     # Forge Neo đặt tên upscaler theo tên file
-print("UPSCALER:", payload["hr_upscaler"])
+# Không giữ MODEL_FILE/SHA/URL từ ô cấu hình FP16 của notebook cũ khi chọn FP8/HSWQ.
+# Muốn mirror/checkpoint tùy chỉnh, dùng cờ bộ cài trong colab/INSTALL.md.
+for key in ("MODEL_FILE", "MODEL_SHA256", "MODEL_URL", "MODEL_MIN_BYTES"):
+    os.environ.pop(key, None)
+if USE_CIVITAI_SECRET or USE_GITHUB_SECRET:
+    from google.colab import userdata
+    for enabled, name in ((USE_CIVITAI_SECRET, "CIVITAI_TOKEN"), (USE_GITHUB_SECRET, "GITHUB_TOKEN")):
+        if enabled:
+            try:
+                os.environ[name] = userdata.get(name)
+            except Exception:
+                raise RuntimeError(f"Chưa đọc được Secret {name}; thêm secret và bật Notebook access.") from None
+print(f"✔ {MODEL} · model {MODEL_DIR} · Forge {os.environ['FORGE_DIR']} · {TUNNEL}:{PORT}")''')
 
-r = requests.post(url + "/sdapi/v1/txt2img", json=payload, timeout=1800)
-r.raise_for_status()
-out_dir = Path(REPO) / "colab" / "outputs"; out_dir.mkdir(parents=True, exist_ok=True)
-info = r.json()["info"]
-for i, b64 in enumerate(r.json()["images"]):
-    path = out_dir / f'wai17_seed{info["seed"]}_{i}.png'
-    path.write_bytes(base64.b64decode(b64.split(",", 1)[-1]))
-    print("   đã lưu", path)''')
+md("""## Ô 2 — Lấy bộ cài mới và repo đúng nhánh
 
-md("""## 🔧 Ô 11 (tuỳ chọn) — Mở app dựng prompt tiếng Việt thành giao diện riêng
-
-App này là bản độc lập của tab **Prompt VN**, chạy ở cổng 7861 và gọi API của Forge.
-Dùng khi bạn muốn một cửa sổ riêng chỉ để soạn prompt. Cần Forge đang chạy nền (Ô 9).
+Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.3** và cú pháp trước khi
+chạy. Không chạy cache 1.0.2 cũ. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
+thay Việt → Anh; repo sẵn có được fast-forward khi sạch/cùng nhánh, không reset hard.
+Không đổi sang main/master hoặc xóa repo có thay đổi của bạn.
 """)
+code('''import os, subprocess
+''' + BOOTSTRAP_SOURCE + '''
+INSTALLER = Path("/content/install.sh")
+download_installer(INSTALLER, os.environ["REPO_BRANCH"], dict(os.environ))
 
-code('''import os, time
 
-forge_py = os.path.join(os.environ["FORGE_DIR"], "venv", "bin", "python")
-if not os.path.exists(forge_py):
-    raise SystemExit("✖ Chưa có Forge. Hãy chạy Ô 4 (forge) và Ô 9 (launch-bg) trước.")
+def run_install(stages, launch=False, restart=False, smoke=False):
+    args = ["bash", str(INSTALLER), "--only", stages, "--model", MODEL,
+            "--model-dir", MODEL_DIR, "--branch", os.environ["REPO_BRANCH"],
+            "--port", str(PORT), "--tunnel", TUNNEL, "--cuda", CUDA_INDEX]
+    if not launch:
+        args.append("--no-launch")
+    if restart:
+        args.append("--restart")
+    if smoke:
+        args.append("--smoke-test")
+    if FALLBACK_FP16:
+        args.append("--fallback-fp16")
+    subprocess.run(args, env=dict(os.environ), check=True)
 
-# app dùng chung môi trường của Forge (đã có sẵn gradio + requests), không cần cài thêm
-log = "/content/prompt_builder.log"
-get_ipython().system(
-    f'cd "{os.environ["REPO_DIR"]}" && '
-    f'VI_PROMPT_ROOT="{os.environ["REPO_DIR"]}" nohup "{forge_py}" colab/prompt_builder.py '
-    f'--forge-url "http://127.0.0.1:{os.environ.get("PORT", 7860)}" '
-    f'--port 7861 --share > {log} 2>&1 &'
-)
 
-for _ in range(90):
-    txt = open(log, encoding="utf-8", errors="ignore").read()
-    if "gradio.live" in txt:
-        link = next(l for l in txt.splitlines() if "gradio.live" in l)
-        print("✔ Link app dựng prompt tiếng Việt:")
-        print("   ", link.strip())
-        break
-    if "Traceback" in txt:
-        print("✖ App lỗi:\\n", txt[-2000:]); break
-    time.sleep(2)
+run_install("repo")
+# Stage sau ưu tiên setup_forge.sh trong repo. Từ chối trộn checkout/bộ cài cũ.
+checked_installer_version((Path(os.environ["REPO_DIR"]) / "colab/install.sh").read_bytes())
+print("✔ Repo/bộ cài đủ phiên bản; tiếp tục Ô 3 → Ô 8.")''')
+
+for number, stage, title, description in (
+    (3, "preflight", "Kiểm tra GPU, driver và ổ đĩa", "Kiểm NVIDIA GPU, đường dẫn, dung lượng và mạng. Chưa tải checkpoint hay cài Torch."),
+    (4, "forge", "Cài Forge Neo", "Dùng Python 3.13 riêng qua uv; giữ thư mục và cấu hình sẵn có."),
+    (5, "torch", "Cài PyTorch phù hợp GPU", "Bộ cài chọn cu130/cu128/cu126 theo driver và kiểm kernel CUDA, không chỉ cuda.is_available()."),
+    (6, "model", "Tải và xác minh checkpoint WAI v17", "Tải tiếp .part; xác minh SHA256 + header safetensors. Chỉ đúng biến thể/file v17, không tự đổi model khi nguồn lỗi."),
+    (7, "extras", "Cắm tagcomplete + Prompt VN mới", "Chép CSV/JS mới, cấu hình dịch 2 cột, CLIP stop 2, styles và upscaler anime. Thư viện editing/workflow phải có đủ trước khi thay extension."),
+):
+    md(f"## Ô {number} — {title}\n\n{description}\n")
+    code(f'run_install("{stage}")')
+
+md("""## Ô 8 — Khởi chạy nền + kiểm tra checkpoint/API
+
+Chờ bộ cài in link `trycloudflare.com` hoặc `gradio.live`, mở link và chọn **Prompt VN**.
+Ô này kết thúc khi API/verify đạt; Forge/tunnel tiếp tục chạy nền trong runtime.
+Không tự sinh ảnh để chứng minh trọng số đã nạp; bước đó là tùy chọn Ô 9.
+Nếu dùng phiên cũ, bật `RESTART=True` ở Ô 1 để nạp extension/JS mới rồi reload cứng UI.
+""" + WORKFLOW_GUIDE)
+code('run_install("launch,verify", launch=True, restart=RESTART)')
+
+md("""## 🔧 Ô 9 (tùy chọn) — Chẩn đoán và sinh ảnh kiểm tra
+
+Chỉ bật `RUN_DIAGNOSTICS` khi cần xem checkpoint/preset/API. `SMOKE_TEST` dùng GPU
+để nạp trọng số và sinh **1 ảnh 256×256 / 1 step**, không phải benchmark/chất lượng.
+Mặc định cả hai tắt nên **Run all không tự sinh ảnh**.
+""")
+code('''#@title 🔧 Kiểm tra thêm (tùy chọn) { display-mode: "form" }
+RUN_DIAGNOSTICS = False #@param {type:"boolean"}
+SMOKE_TEST = False #@param {type:"boolean"}
+if RUN_DIAGNOSTICS:
+    subprocess.run(["bash", str(INSTALLER), "--diagnostics"], check=True)
+if SMOKE_TEST:
+    run_install("verify", launch=True, smoke=True)
+if not RUN_DIAGNOSTICS and not SMOKE_TEST:
+    print("Bỏ qua chẩn đoán/sinh ảnh thử. Launch + verify đã chạy ở Ô 8.")''')
+
+md("""## 🖼️ Ô 10 (tùy chọn) — Sinh ảnh bằng API theo quy trình mới
+
+Bật `RUN_API_SAMPLE` khi muốn dùng API thay cho tab Prompt VN. Mặc định **Nháp,
+832×1216, Hires tắt**, steps/CFG theo model đã chọn. Nhiều ảnh chạy tuần tự.
+Sau lượt Nháp/Chuẩn, chọn seed của ảnh thật (không phải grid), nhập `SEED` và chọn
+Hoàn thiện để sinh 1 ảnh Hires. Mã dùng bộ giải mã chung cho info JSON-string và
+PNG/PIL, không dùng ví dụ API cũ bật Hires ngay hoặc cố định CFG FP16 cho HSWQ.
+""")
+code(API_SAMPLE_SOURCE)
+
+md("""## 🧩 Ô 11 (tùy chọn) — App Prompt VN độc lập
+
+Không cần ô này để dùng tab Prompt VN đã cài trong Forge. Nếu muốn app riêng,
+bật `START_PROMPT_APP`; ô kiểm tra PID/cổng trước để tránh chạy server trùng.
+App dùng venv Forge, không cài lại Gradio/Torch. Chỉ dùng một nơi để sinh ảnh tại
+một thời điểm; queue của app riêng không chặn mọi client GPU khác.
+""")
+code('''#@title 🧩 App soạn prompt riêng (không tự mở khi Run all) { display-mode: "form" }
+START_PROMPT_APP = False #@param {type:"boolean"}
+
+
+def start_prompt_app():
+    import os, socket, subprocess, time
+    from pathlib import Path
+    repo = Path(os.environ["REPO_DIR"])
+    python = Path(os.environ["FORGE_DIR"]) / "venv/bin/python"
+    script = repo / "colab/prompt_builder.py"
+    pid_file = Path("/content/prompt_builder.pid")
+    log = Path("/content/prompt_builder.log")
+    if not python.is_file() or not script.is_file():
+        raise RuntimeError("Chưa có Forge/app; chạy Ô 1 → Ô 8 trước.")
+    owned = False
+    try:
+        pid = int(pid_file.read_text().strip())
+        parts = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\\0")
+        owned = os.fsencode(script) in parts
+    except (OSError, ValueError):
+        pass
+    if not owned:
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", 7861)) == 0:
+                raise RuntimeError("Cổng 7861 do dịch vụ khác dùng; không tự đóng dịch vụ đó.")
+        env = dict(os.environ)
+        for key in ("GITHUB_TOKEN", "CIVITAI_TOKEN"):
+            env.pop(key, None)
+        with log.open("w") as stream:
+            process = subprocess.Popen(
+                [str(python), "-u", str(script), "--forge-url", f"http://127.0.0.1:{PORT}",
+                 "--host", "0.0.0.0", "--port", "7861", "--share"],
+                cwd=repo, env=env, stdout=stream, stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL, start_new_session=True,
+            )
+        pid_file.write_text(str(process.pid))
+    else:
+        print("✔ App do notebook quản lý đang chạy; không mở server trùng.")
+    for _ in range(90):
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        link = next((line.strip() for line in text.splitlines() if "gradio.live" in line), None)
+        if link:
+            print("✔ Link app:", link)
+            return
+        if "Traceback" in text:
+            raise RuntimeError("App lỗi; xem /content/prompt_builder.log riêng, không chia sẻ log có dữ liệu riêng.")
+        if not owned and process.poll() is not None:
+            raise RuntimeError("App đã dừng; xem /content/prompt_builder.log.")
+        time.sleep(2)
+    raise RuntimeError("Chưa có link sau 180 giây; xem log trước khi thử lại, không mở trùng process.")
+
+
+if START_PROMPT_APP:
+    start_prompt_app()
 else:
-    print("Chưa thấy link, log hiện tại:\\n", open(log, encoding="utf-8", errors="ignore").read()[-1500:])''')
+    print("Bỏ qua app riêng. Dùng tab Prompt VN trong link Forge ở Ô 8.")''')
 
 md("""---
-## 🚑 Xử lý sự cố
+## 🚑 Xử lý sự cố / chạy lại
 
-| Triệu chứng | Nguyên nhân / cách xử lý |
+| Triệu chứng | Xử lý |
 |---|---|
-| `Không thấy nvidia-smi` | Chưa bật GPU: **Runtime → Change runtime type → T4 GPU** |
-| `PyTorch is not able to access any compute device` | Driver cũ hơn bản torch: chạy lại Ô 5 (script tự lùi `cu128`/`cu126`), hoặc đặt `os.environ["TORCH_INDEX"]="cu126"` rồi chạy lại Ô 5 |
-| Tải model báo `SHA256 KHÔNG khớp` | Mirror trả file hỏng; script tự thử mirror kế. Muốn chắc chắn, điền `CIVITAI_TOKEN` ở Ô 1 |
-| Không đủ ổ đĩa | FP16 cần ~7 GB model + ~12 GB Forge/venv. Dọn file không dùng; muốn đổi precision dùng notebook một ô, **không chỉ đổi MODEL_FILE** |
-| Ô Checkpoint trống dù file tồn tại | Cập nhật bộ cài 1.0.2: preset `xl` cần cả `sd_model_checkpoint` và `forge_checkpoint_xl`; xem `colab/INSTALL.md` |
-| Link `gradio.live` không mở được | Đổi `os.environ["TUNNEL"]="cloudflared"` ở Ô 1 rồi chạy lại Ô 8 |
-| Tab **Prompt VN** báo “Không tìm thấy prompt_lib” | Ô 2 chưa chạy thành công: kiểm tra `ls /content/ai-anime3`, hoặc đặt `os.environ["VI_PROMPT_ROOT"]` rồi chạy lại Ô 7 + Ô 8 |
-| Gõ tiếng Việt không ra gợi ý | Vào **Settings → Tag autocomplete** kiểm tra *Tag filename* = `danbooru_e621.csv`, *Translation filename* = `danbooru_e621_vi_translation_wai.csv`, và **bỏ** tuỳ chọn “old 3-column format” |
-| Ảnh bị mờ/vỡ nét khi hires fix | Đổi upscaler sang `RealESRGAN_x4plus_anime_6B` (Ô 7 đã tải sẵn); hạ denoising còn 0.35 |
-| Tràn VRAM khi hires fix ở 1024×1344 | Đặt `os.environ["VRAM_FLAG"]="--lowvram"` ở Ô 1, chạy lại Ô 7 → Ô 8; hoặc tắt hires fix |
-| Mất hết khi ngắt phiên | Dữ liệu `/content` không được giữ qua phiên. Tải ảnh về trước khi ngắt; phiên mới phải cài/tải lại. Notebook không mount Drive |
+| Không có GPU | Runtime → Change runtime type → GPU T4 rồi chạy lại từ Ô 1 |
+| Không lấy được bộ cài ≥1.0.3 | Kiểm mạng/mở notebook mới; không dùng cache cũ 1.0.2 |
+| Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
+| Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
+| Tag Việt còn sau chọn | Kiểm tab Prompt VN có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
+| Hết VRAM | Tắt Hires, 832×1216/1024×1024, batch 1; chờ tác vụ GPU khác, không cần tải lại checkpoint |
+| Sửa phần mềm trong phiên đang có | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
+| Xem link/trạng thái | `!bash /content/install.sh --status` |
+| Chạy mới hoàn toàn | Tải ảnh về, Disconnect and delete runtime, kết nối lại + GPU rồi Run all notebook mới |
 
-## 📌 Ghi chú về kho prompt
-- Tag file dùng cho tagcomplete là **bản tiếng Anh có dấu `_`** (`danbooru_e621.csv`),
-  vì chính extension sẽ thay `_` bằng khoảng trắng lúc chèn tag — và nó đã có sẵn danh
-  sách loại trừ cho emoticon (`^_^`, `o_o`, `|_|`…), trùng với cách repo này xử lý.
-- File dịch là **2 cột** đúng chuẩn mới của tagcomplete, nên phải **để tắt** tuỳ chọn
-  “old 3-column format”.
-- 45.513 tag có nghĩa tiếng Việt; phần còn lại là tên riêng (hoạ sĩ, nhân vật, series)
-  vốn không dịch.
+Chạy lại stage không xóa model/ảnh/repo. Kho tag chính vẫn là bản Anh có `_`;
+file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content` là tạm thời.
 """)
 
-# =============================================================================
 notebook = {
-    "nbformat": 4,
-    "nbformat_minor": 0,
+    "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {
-            "provenance": [],
-            "gpuType": "T4",
-            "name": "WAI-Illustrious v17 + kho prompt tiếng Việt",
-            "collapsed_sections": [],
-        },
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.3",
+                  "collapsed_sections": []},
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
-        "language_info": {"name": "python"},
-        "accelerator": "GPU",
+        "language_info": {"name": "python"}, "accelerator": "GPU",
     },
     "cells": cells,
 }
-
-with open(OUT, "w", encoding="utf-8") as f:
-    json.dump(notebook, f, ensure_ascii=False, indent=1)
-    f.write("\n")
-
-code_cells = sum(1 for c in cells if c["cell_type"] == "code")
-print(f"Đã sinh {OUT}")
-print(f"   {len(cells)} ô ({code_cells} ô code, {len(cells) - code_cells} ô markdown), "
-      f"{os.path.getsize(OUT):,} byte")
+OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.3")

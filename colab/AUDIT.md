@@ -25,6 +25,16 @@ Ngày **11/10/2026** · `prompt_lib` **1.1.0** · setup API **2** giữ nguyên.
 - Bộ cài kiểm cả thư viện mới và adapter JS; stage extras thiếu source sẽ dừng
   trước khi thay extension. Cập nhật bằng extras/launch/verify, không cài lại model/Torch.
 
+### Đồng bộ notebook cài mới
+
+Cả notebook một ô và từng bước đã được sinh lại cho 1.0.3. Bootstrap kiểm phiên
+bản/cú pháp, từ chối cache 1.0.2; notebook từng bước dùng cùng bộ cài, launch nền
+và mặc định không sinh ảnh/mở app phụ khi Run all. Ví dụ API dùng profile,
+workflow/validation/decoder/seed chung. `test_notebooks.py`: **13 nhóm CPU đạt**,
+bao gồm Run all với stage/HTTP giả lập, không phải cài mới trên Colab/GPU thật.
+Notebook không có output đã chạy/secret literal. Xóa runtime là thao tác người dùng
+chọn trong Colab sau khi tải ảnh về, không phải lệnh xóa dữ liệu tự động.
+
 ### Kết quả chạy lại 1.0.3
 
 | Kiểm tra | Kết quả và phạm vi |

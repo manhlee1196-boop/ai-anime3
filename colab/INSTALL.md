@@ -13,8 +13,17 @@ Hoặc tải [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb), rồi Colab → Fil
 
 1. **Runtime → Change runtime type → GPU T4** (hoặc L4/A100).
 2. Chọn `MODEL` ở dropdown; mặc định **fp16**. `MODEL_DIR=/content/models`.
-3. Chạy ô cài duy nhất, chờ kiểm tra đạt rồi mở link public được in ra.
-4. Trong Forge, dùng **Prompt VN** hoặc gõ tiếng Việt ngay trong ô prompt.
+3. Chọn **Runtime → Run all**, chờ kiểm tra đạt rồi mở link public được in ra.
+4. Trong Forge, dùng **Prompt VN**: đổi tag Việt tại chỗ, thử Nháp/Chuẩn trước,
+   chọn ảnh/seed rồi mới Hoàn thiện Hires. Không tự sinh ảnh thử khi cài mặc định.
+
+**Muốn chạy mới hoàn toàn:** tải ảnh cần giữ về trước, rồi **Runtime → Disconnect
+and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ link phía trên.
+Đừng dùng bản notebook cũ đã lưu trong Drive nếu muốn nhận các ô mới. Notebook
+không tự xóa repo/model/ảnh hoặc mount Drive.
+
+Cả hai notebook dùng bootstrap có **version guard ≥1.0.3 + Bash syntax check**.
+Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.2.
 
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.

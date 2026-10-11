@@ -10,6 +10,7 @@ colab/
   install.sh                    bộ cài một lệnh, kiểm tra/resume/chọn model
   INSTALL.md                    hướng dẫn bộ cài + xử lý sự cố
   make_install_notebook.py      sinh notebook một ô
+  notebook_support.py           bootstrap/version guard và nội dung ô dùng chung
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
   diagnostics.py                chẩn đoán checkpoint/venv/GPU/API chỉ đọc
   AUDIT.md                      báo cáo rà soát 1.0.3 + checkpoint 1.0.2
@@ -32,6 +33,7 @@ colab/
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
+  tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
@@ -44,6 +46,11 @@ colab/
 Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, chọn model
 trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
 không mount Drive; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
+
+[**Mở notebook cài mới 1.0.3 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.3.
+Nếu muốn runtime hoàn toàn mới: tải ảnh về trước rồi **Disconnect and delete runtime**,
+kết nối lại/bật GPU. Notebook không tự xóa dữ liệu cũ.
 
 Hoặc dán một dòng vào Colab:
 
@@ -68,11 +75,15 @@ Có `--smoke-test` để thử nạp trọng số bằng một ảnh trên GPU v
 
 1. Mở [`WAI_Illustrious_v17_vi.ipynb`](WAI_Illustrious_v17_vi.ipynb) trong
    [Google Colab](https://colab.research.google.com), **Runtime → Change runtime type → T4 GPU**.
-2. Xem lại **Ô 1 (Cấu hình)** — mặc định đã đúng theo thẻ model v17.0.
-3. Chạy lần lượt Ô 2 → Ô 7 (mất 8–15 phút, phần lớn là tải model 6,5 GB).
-4. Chạy **Ô 8** rồi bấm link `https://xxxx.gradio.live`.
-5. Trong Forge: dùng tab **Prompt VN**, hoặc gõ thẳng tiếng Việt vào ô prompt
-   (tagcomplete đã được cấu hình sẵn).
+2. **Ô 1**: chọn model; mặc định FP16, `/content/models`, tunnel cloudflared.
+3. **Run all** hoặc lần lượt Ô 1 → Ô 8 (khoảng 10–25 phút tùy runtime/mạng).
+   Các stage dùng cùng `install.sh` mới, không trộn script cũ hay cài theo đường khác.
+4. **Ô 8** khởi chạy nền + verify, in link `trycloudflare.com`/`gradio.live` và kết thúc;
+   không chặn các ô sau ở một lệnh launch chạy mãi.
+5. Dùng **Prompt VN** để chọn tag/thử bố cục/seed. Ô 9 chẩn đoán/smoke test,
+   Ô 10 API và Ô 11 app riêng **mặc định tắt**; Run all không tự sinh ảnh/mở server phụ.
+   Bật riêng khi cần. Ví dụ API dùng profile model, Hires tắt ở Nháp/Chuẩn,
+   decoder JSON-string/PIL và seed đúng từng ảnh, không dùng ví dụ CFG FP16 cố định cũ.
 
 Repo public không cần GitHub token. Nếu dùng repo private, bật `USE_GITHUB_SECRET`
 ở Ô 1 và đọc token từ **Colab Secrets**; không dán token vào source/URL clone.
@@ -227,6 +238,7 @@ python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
 python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
 python3 colab/tests/test_prompt_workflow.py # 10 nhóm CPU, không cần Gradio
+python3 colab/tests/test_notebooks.py       # 13 nhóm CPU; cần requests/Pillow (venv Forge/demo)
 node colab/tests/test_vi_prompt_js.cjs      # DOM stub/bridge/token, không cần browser
 # Có source TAC đã tải: TAC_AUDIT_SOURCE=/path/tagAutocomplete.js node colab/tests/test_vi_prompt_js.cjs
 python3 colab/make_tagcomplete_assets.py   # sinh lại assets/, tự assert không trùng khoá
