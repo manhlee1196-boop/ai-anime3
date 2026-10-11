@@ -52,6 +52,28 @@ def _source_uid(path):
     return "không đọc được"
 
 
+def checkpoint_ui_summary(config):
+    """Chỉ trích checkpoint từ Gradio /config; không đưa prompt/auth/config khác vào báo cáo."""
+    if not isinstance(config, dict) or not isinstance(config.get("components"), list):
+        return {"loi": "Config UI không đúng định dạng Gradio"}
+    checkpoints = []
+    for component in config["components"]:
+        if not isinstance(component, dict):
+            continue
+        props = component.get("props", {})
+        if not isinstance(props, dict) or props.get("elem_id") != "setting_sd_model_checkpoint":
+            continue
+        choices = props.get("choices") or []
+        if not isinstance(choices, list):
+            choices = []
+        values = [c[1] if isinstance(c, (list, tuple)) and len(c) == 2 else c for c in choices]
+        value = props.get("value")
+        checkpoints.append({"component_id": component.get("id"), "choices_count": len(choices),
+                            "choices": choices[:60], "value": value,
+                            "value_in_choices": value is not None and value in values})
+    return {"tim_thay_dropdown": bool(checkpoints), "checkpoints": checkpoints}
+
+
 def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port):
     repo, forge, models, state = map(Path, (repo_dir, forge_dir, model_dir, state_dir))
     cached = _json_file(state / "model.json")
@@ -71,6 +93,11 @@ def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port):
         "config": {k: v for k, v in _json_file(forge / "config.json").items() if k in CONFIG_FIELDS},
         "gpu": _run(["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"]),
     }
+    try:
+        from forge_compat import check as compat_check
+        report["forge"]["compat_api_ui_v1"] = compat_check(forge)
+    except (OSError, ValueError, ImportError) as exc:
+        report["forge"]["compat_api_ui_v1"] = {"loi": str(exc)}
     files, seen = [], set()
     for folder in (models, forge / "models/Stable-diffusion"):
         if not folder.is_dir():
@@ -124,6 +151,10 @@ print(json.dumps({'python':sys.version,'packages':packages}))'''
     except (CheckpointError, OSError) as exc:
         api["checkpoint_da_dang_ky_va_chon"] = False
         api["loi_checkpoint"] = str(exc)
+    try:
+        api["checkpoint_ui_initial_config"] = checkpoint_ui_summary(api_json(base, "/config"))
+    except CheckpointError as exc:
+        api["checkpoint_ui_initial_config"] = {"loi": str(exc)}
     report["api"] = api
     return report
 

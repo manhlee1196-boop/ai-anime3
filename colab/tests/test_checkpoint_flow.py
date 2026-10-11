@@ -188,6 +188,12 @@ class CheckpointFlow(unittest.TestCase):
     def test_10_real_prepare_launch_no_gpu(self):
         source = self.forge / "modules/launch_utils.py"
         source.parent.mkdir(); source.write_text('VERSION_UID: str = "PY313"\n')
+        import forge_compat
+        for relative, _marker, old, _new in forge_compat.PATCHES:
+            target = self.forge / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            prefix = "def flags_fixture():\n    for key in _options:\n" if relative.endswith("models.py") else "def make_checkpoint_manager_ui():\n"
+            target.write_text(prefix + old + "\n")
         py = self.forge / "venv/bin/python"
         py.parent.mkdir(parents=True); py.symlink_to(sys.executable)
         env = {**os.environ, "REPO_DIR": str(ROOT), "FORGE_DIR": str(self.forge),
@@ -372,7 +378,7 @@ git() {
 }
 repo_git() {
   if [[ "$1" == fetch ]]; then
-    cp "$PROJECT_SOURCE/colab/checkpoint_tools.py" "$PROJECT_SOURCE/colab/diagnostics.py" "$REPO_DIR/colab/"
+    cp "$PROJECT_SOURCE/colab/checkpoint_tools.py" "$PROJECT_SOURCE/colab/diagnostics.py" "$PROJECT_SOURCE/colab/forge_compat.py" "$REPO_DIR/colab/"
     cp "$PROJECT_SOURCE/colab/setup_forge.sh" "$REPO_DIR/colab/setup_forge.sh"
     cp "$PROJECT_SOURCE/colab/prompt_lib/editing.py" "$PROJECT_SOURCE/colab/prompt_lib/workflow.py" "$REPO_DIR/colab/prompt_lib/"
   fi

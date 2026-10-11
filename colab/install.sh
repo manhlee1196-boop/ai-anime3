@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.3"
+INSTALLER_VERSION="1.0.4"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -346,7 +346,7 @@ repo_ready() {
   for f in danbooru_e621.csv danbooru_e621_nounderscore.csv danbooru_e621_vi.csv \
     danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py \
     colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
-    colab/checkpoint_tools.py colab/diagnostics.py; do
+    colab/checkpoint_tools.py colab/diagnostics.py colab/forge_compat.py; do
     [[ -s "$REPO_DIR/$f" ]] || return 1
   done
 }
@@ -785,6 +785,7 @@ stage_verify() {
   resolve_model
   VERIFY_FAIL=0
   check "Forge Neo + venv" test -x "$FORGE_DIR/venv/bin/python"
+  check_detail "Compat Neo: schema port + dropdown khởi tạo có choices/value" "$PY_BIN" "$REPO_DIR/colab/forge_compat.py" "$FORGE_DIR" --check
   check "Kho prompt đủ 4 CSV" repo_ready
   check_detail "Model $MODEL_FILE hợp lệ và khớp SHA256" valid_model_file
   check "Tagcomplete + extension Prompt VN + bản dịch" extras_ready
@@ -798,6 +799,7 @@ stage_verify() {
   fi
   if [[ "$DO_LAUNCH" == 1 ]]; then
     check "API Forge phản hồi ở cổng $PORT" api_ready
+    check_detail "API cmd-flags HTTP 200, port integer đúng" "$PY_BIN" "$REPO_DIR/colab/forge_compat.py" "$FORGE_DIR" --check --api-url "http://127.0.0.1:$PORT"
     if api_ready; then
       check_detail "Forge quét đúng đường dẫn checkpoint (không chỉ tên file)" model_in_api
       check_detail "Preset XL và checkpoint đang chọn nhất quán" model_selected_api

@@ -1,4 +1,52 @@
-# Rà soát toàn dự án — bộ cài 1.0.3
+# Rà soát toàn dự án — bộ cài 1.0.4
+
+## Bổ sung 1.0.4 — model đã đăng ký, nhưng dropdown trống
+
+Ngày **11/10/2026** · setup API **2**, thư viện prompt **1.1.0** giữ nguyên.
+
+**Bằng chứng runtime người dùng:** file WAI FP16 6.938.040.682 byte, header SDXL
+hợp lệ, alias cùng file vật lý; `/sd-models` đã đăng ký, `/options` chọn đúng XL/WAI.
+Không thiếu weights trong backend; diagnostic không tính SHA mới hoặc sinh ảnh.
+`/cmd-flags` HTTP 500. Không đề nghị tải lại model/Torch hoặc xóa runtime.
+
+**Lỗi schema xác định được:** Neo [ede60e1aefd30ce0f7341c8ff538f48e0fd047c9](https://github.com/Haoming02/sd-webui-forge-classic/tree/ede60e1aefd30ce0f7341c8ff538f48e0fd047c9)
+suy kiểu flag default `None` thành `str | None`, trong khi argparse `--port` trả
+integer. Tái hiện `string_type` với `7860` bằng Pydantic 2.10 và HTTP 500 bằng
+FastAPI thật; bản vá dùng `Optional[flag.type]` cho primitive được khai báo.
+Không bỏ response model hoặc tắt validation để che lỗi.
+
+**Gia cố UI:** constructor Checkpoint gốc có `choices=None, value=None`, rồi chờ
+root-load callbacks. Vá để lấy danh sách/giá trị đã chọn từ registry trước callback,
+giữ short/long mode; registry rỗng vẫn để rỗng. Không có bằng chứng rằng cmd-flags
+500 gây dropdown trống; CPU test constructor/config không thay thế browser native.
+
+- `forge_compat.py`: stdlib, guard snippet/marker + AST cả hai source, backup có SHA,
+  ghi nguyên tử/rollback, idempotent; `--check` chỉ đọc. Extras/prepare-launch áp dụng
+  trước import Forge API/Gradio; verify kiểm source và HTTP 200/port integer.
+- Diagnostics thêm projection `/config` chỉ lấy checkpoint choices/value, không
+  dump prompt/auth/cmdline/log; trạng thái compat giúp tách frontend khỏi registry.
+- Notebook bootstrap ≥**1.0.4**, không chạy cache 1.0.3 chưa có compat. Cập nhật
+  runtime đang chạy chỉ cần phần mềm/restart; mặc định không sinh ảnh thử.
+
+### Kiểm tra 1.0.4 (CPU, trên source Neo revision nói trên)
+
+| Kiểm tra | Kết quả / giới hạn |
+|---|---|
+| Compat | **10 nhóm đạt**: guards/idempotency/backup, unknown source không ghi dở, marker tamper, FastAPI 500→200, real Gradio 4.40 long/short choices/value trước callback, registry rỗng, collision, rollback và projection chẩn đoán; UiLoadsave nguyên bản với default None/stale |
+| Bộ cài / checkpoint / notebook | **98 + 16 + 13 đạt**; preset/scanner/selector và UID dùng AST upstream nguyên bản; Torch/server trong harness giả lập |
+
+Chạy lại regression: prompt_lib **15 nhóm**, workflow **10 nhóm**, UI thật **Gradio
+4.40.0** (API/host giả lập), JS **9 nhóm** với insertion TAC pinned, dữ liệu **3 đạt
++ 1 bỏ qua** nguồn tải lại; AST notebook/Python, Bash/ShellCheck, Node và diff check
+đạt. Không chạy lại Gradio 6/browser app độc lập trong đợt 1.0.4.
+
+Chưa thử toàn bộ Forge/TAC trong browser native, Python 3.13 của Colab, hoặc nạp/
+sinh ảnh WAI trên GPU thật. Cần người dùng chạy ô update để xác nhận trạng thái UI
+của runtime; nếu còn trống, theo dõi callback/refresh/traceback thay vì tải lại model.
+Các kết quả 1.0.3/1.0.2 bên dưới là lịch sử, không suy ra mọi dependency đã chạy
+lại trên mọi phiên bản trong đợt compat này.
+
+---
 
 ## Bổ sung 1.0.3 — quy trình và sửa prompt
 

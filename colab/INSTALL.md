@@ -3,7 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
-Bản hiện tại **1.0.3**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
+Bản hiện tại **1.0.4**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -22,8 +22,8 @@ and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ l
 Đừng dùng bản notebook cũ đã lưu trong Drive nếu muốn nhận các ô mới. Notebook
 không tự xóa repo/model/ảnh hoặc mount Drive.
 
-Cả hai notebook dùng bootstrap có **version guard ≥1.0.3 + Bash syntax check**.
-Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.2.
+Cả hai notebook dùng bootstrap có **version guard ≥1.0.4 + Bash syntax check**.
+Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy `install.sh` 1.0.3.
 
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.
@@ -200,9 +200,55 @@ Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đ
 chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
 
 
+### API đã có WAI nhưng dropdown trống / cmd-flags 500 (1.0.4)
+
+Nếu diagnostics cho thấy file SDXL hợp lệ, alias đúng và
+`checkpoint_da_dang_ky_va_chon: true`, **model không bị thiếu trong backend**.
+Không tải lại weights/Torch, không xóa runtime. Hash API null/`sd_checkpoint_hash` rỗng
+không tự chứng minh model bị thiếu; đăng ký/chọn cũng chưa chứng minh sinh ảnh GPU.
+
+Trên Neo `ede60e1…`, schema `FlagsModel` suy kiểu từ default `None`, làm `--port`
+bị khai báo string dù argparse trả integer `7860`. Đã tái hiện HTTP 500 bằng FastAPI/
+Pydantic thật. Bản 1.0.4 giữ kiểu primitive đã khai báo khi default None; **không tắt
+response validation**. Ngoài ra, dropdown native trước đây dựng với `choices=None,
+value=None`; bản vá lấy choices/value từ registry trước callback trình duyệt, giữ
+chế độ tên dài/ngắn. **Chưa chứng minh lỗi cmd-flags là nguyên nhân UI trống của
+mọi runtime**; khởi tạo sẵn là biện pháp gia cố, chưa phải kiểm thử native/GPU.
+
+Dán **một ô mới trong runtime hiện tại**:
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --only launch,verify --restart
+```
+
+Chỉ launch/verify, không chạy model/torch/forge/extras; model/ảnh/venv được giữ nguyên.
+Helper vá đúng snippet đã biết, kiểm AST cả hai file trước khi ghi, backup
+`.wai-compat-<sha>.bak`, rollback nếu ghi lỗi. Source Neo khác/từng bị sửa thì dừng
+thay vì vá mù. Verify kiểm marker, `/cmd-flags` HTTP 200 và port integer. Bộ cài vẫn
+xác minh header/SHA256 và registry/preset, không tự sinh ảnh khi thiếu `--smoke-test`.
+Nếu Git báo thay đổi/xung đột, giữ nguyên và gửi lỗi; không dùng `reset --hard`.
+Đường dẫn repo khác thì thay `/content/ai-anime3` tương ứng.
+
+Sau restart, **đóng trang Forge cũ, mở link public mới**, nhấn Ctrl+Shift+R rồi chọn
+UI Preset **XL** nếu cần. Nếu vẫn trống, gửi:
+
+```python
+!bash /content/install.sh --diagnostics
+```
+
+Báo cáo mới có `checkpoint_ui_initial_config` (choices/value từ `/config`, không
+in prompt/auth/config khác) và trạng thái source compat. Nếu config server đã có
+choices/value mà browser vẫn trống, cần xem callback/UI: thử nút refresh cạnh
+Checkpoint, ghi lại nó có hiện model không và gửi traceback gắn với thao tác đó
+trong `forge.log` sau khi che thông tin riêng. Không gửi toàn bộ config/log/token.
+
 ### Không nhận Checkpoint / ô Checkpoint trống dù file đã tải
 
-**Đã sửa ở 1.0.2.** Forge Neo còn lưu checkpoint riêng theo preset:
+**Trường hợp cấu hình thiếu key được sửa ở 1.0.2 (giữ trong 1.0.4).** Forge Neo còn lưu checkpoint riêng theo preset:
 `forge_checkpoint_xl` mặc định là `None`. Chỉ ghi `sd_model_checkpoint` không đủ:
 `on_preset_change()` có thể đặt lại ô Checkpoint thành trống khi mở UI.
 
@@ -314,7 +360,7 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Civitai 401/403, metadata rỗng | Kiểm tra quyền tải và Secret `CIVITAI_TOKEN`; hoặc chọn FP16. Không tự chuyển phiên bản |
 | SHA256 sai | Stage không nhận file; chạy lại stage model. Nếu dùng mirror riêng, kiểm tra URL + SHA của đúng file |
 | Rớt mạng lúc tải | Chạy lại cùng lệnh; `.part` được giữ để tiếp tục |
-| Forge không thấy model / Checkpoint trống | Cập nhật 1.0.2, xem ô sửa ở trên; cần cả preset `xl` và `forge_checkpoint_xl`, không chỉ kiểm tên trong API |
+| Forge không thấy model / Checkpoint trống | Cập nhật 1.0.4; API đã có model thì dùng ô software-only ở trên. Kiểm preset `xl` / `forge_checkpoint_xl` và config UI, không tải lại weights theo tên/hash null |
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |

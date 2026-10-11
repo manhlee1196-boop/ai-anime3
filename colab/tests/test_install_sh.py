@@ -52,6 +52,17 @@ def source_call(script, command, env=None):
                           capture_output=True, timeout=30)
 
 
+def compat_fixture(forge):
+    import sys
+    sys.path.insert(0, str(ROOT / "colab"))
+    import forge_compat
+    for relative, _marker, old, _new in forge_compat.PATCHES:
+        path = forge / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "def flags_fixture():\n    for key in _options:\n" if relative.endswith("models.py") else "def make_checkpoint_manager_ui():\n"
+        path.write_text(prefix + old + "\n")
+
+
 def executable(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -137,7 +148,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.3")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.4")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -294,6 +305,7 @@ def verify_version():
     initial_uid = ast.literal_eval(uid_node.value)
     declaration = ast.get_source_segment(guard, uid_node)
     source.write_text(guard, encoding="utf-8")
+    compat_fixture(forge)
     python = forge / "venv/bin/python"
     python.parent.mkdir(parents=True)
     python.symlink_to(sys.executable)
@@ -419,12 +431,15 @@ def test_lifecycle(tmp):
     colab = repo / "colab"
     colab.mkdir(parents=True)
     shutil.copy2(INSTALL, colab / "install.sh")
-    for name in ("checkpoint_tools.py", "diagnostics.py"):
+    for name in ("checkpoint_tools.py", "diagnostics.py", "forge_compat.py"):
         shutil.copy2(ROOT / "colab" / name, colab / name)
     for f in ("danbooru_e621.csv", "danbooru_e621_nounderscore.csv", "danbooru_e621_vi.csv",
               "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py",
               "colab/prompt_lib/editing.py", "colab/prompt_lib/workflow.py"):
         p = repo / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("fixture\n")
+    compat_fixture(forge)
+    import forge_compat
+    forge_compat.apply(forge)  # stage forge/extras bên dưới là stub; check vẫn chạy thật
     trace, ready = home / "trace", home / "api-ready"
     downloads = []
     class Handler(BaseHTTPRequestHandler):
@@ -436,6 +451,8 @@ def test_lifecycle(tmp):
                 filename = ready.read_text().strip()
                 body = json.dumps([{"filename": filename, "title": Path(filename).name,
                                     "model_name": Path(filename).stem, "sha256": SHA}]).encode(); code = 200
+            elif self.path.endswith("/cmd-flags") and ready.exists():
+                body = json.dumps({"port": self.server.server_port, "api": True}).encode(); code = 200
             elif self.path.endswith("/options") and ready.exists():
                 body = json.dumps({"sd_model_checkpoint": Path(ready.read_text().strip()).name,
                                    "forge_preset": "xl", "forge_checkpoint_xl": Path(ready.read_text().strip()).name}).encode(); code = 200

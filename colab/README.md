@@ -12,8 +12,9 @@ colab/
   make_install_notebook.py      sinh notebook một ô
   notebook_support.py           bootstrap/version guard và nội dung ô dùng chung
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
-  diagnostics.py                chẩn đoán checkpoint/venv/GPU/API chỉ đọc
-  AUDIT.md                      báo cáo rà soát 1.0.3 + checkpoint 1.0.2
+  diagnostics.py                chẩn đoán checkpoint/venv/GPU/API/config UI chỉ đọc
+  forge_compat.py               vá schema cmd-flags và choices/value Checkpoint (có guard/backup)
+  AUDIT.md                      báo cáo compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
@@ -35,6 +36,7 @@ colab/
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
+  tests/test_forge_compat.py      10 nhóm compat trên Neo/FastAPI/Gradio (CPU)
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
   assets/                        file sinh ra khi chạy (không đưa vào git)
@@ -47,8 +49,9 @@ Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, ch�
 trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
 không mount Drive; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
 
-[**Mở notebook cài mới 1.0.3 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
-→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.3.
+[**Mở notebook cài mới 1.0.4 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.4.
+**API đã có WAI nhưng dropdown trống:** dùng [ô cập nhật 1.0.4](INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104), chỉ cập nhật phần mềm và restart; không xóa runtime/tải lại weights.
 Nếu muốn runtime hoàn toàn mới: tải ảnh về trước rồi **Disconnect and delete runtime**,
 kết nối lại/bật GPU. Notebook không tự xóa dữ liệu cũ.
 

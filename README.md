@@ -28,10 +28,12 @@ Colab: `python3 colab/prompt_builder.py --demo`.
 cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
 Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
-> **Bộ cài 1.0.3:** thêm quy trình Nháp → Chuẩn → Hoàn thiện, seed ảnh đã chọn, sinh tuần tự tiết kiệm VRAM; sửa thay toàn cụm Việt → Anh mà không sót chữ Việt/mất tag khác. Giữ toàn bộ bản sửa checkpoint 1.0.2. [Hướng dẫn](colab/README.md#quy-trình-tối-ưu-bản-103) · [Rà soát checkpoint](colab/AUDIT.md).
+> **Bộ cài 1.0.4:** vá schema `/cmd-flags` của Neo (port integer, không HTTP 500) và khởi tạo sẵn choices/value của Checkpoint từ registry. Nếu API đã có WAI nhưng UI trống, [cập nhật phần mềm trong runtime hiện tại](colab/INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104), **không tải lại model/Torch**. Giữ các sửa prompt/quy trình 1.0.3 và checkpoint 1.0.2.
 
-**Chạy lại từ đầu:** [mở notebook Colab 1.0.3](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**.
-Notebook lấy bộ cài mới, chặn cache <1.0.3, đã tích hợp hướng dẫn thay Việt → Anh và
+> **Quy trình 1.0.3:** thêm quy trình Nháp → Chuẩn → Hoàn thiện, seed ảnh đã chọn, sinh tuần tự tiết kiệm VRAM; sửa thay toàn cụm Việt → Anh mà không sót chữ Việt/mất tag khác. Giữ toàn bộ bản sửa checkpoint 1.0.2. [Hướng dẫn](colab/README.md#quy-trình-tối-ưu-bản-103) · [Rà soát checkpoint](colab/AUDIT.md).
+
+**Chạy lại từ đầu:** [mở notebook Colab 1.0.4](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**.
+Notebook lấy bộ cài mới, chặn cache <1.0.4, đã tích hợp hướng dẫn thay Việt → Anh và
 Nháp/Chuẩn/Hoàn thiện. Muốn runtime hoàn toàn mới, tải ảnh về trước khi **Disconnect
 and delete runtime**; không có bước tự xóa dữ liệu/mount Drive.
 

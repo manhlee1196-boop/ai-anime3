@@ -233,6 +233,14 @@ checkpoint_helper() {
   [[ -s "$helper" ]] || die "Thiếu checkpoint_tools.py. Cập nhật repo; không trộn script cũ/mới."
   printf '%s\n' "$helper"
 }
+ensure_forge_compat() {
+  local helper="$REPO_DIR/colab/forge_compat.py"
+  if [[ ! -s "$helper" ]]; then
+    helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/forge_compat.py"
+  fi
+  [[ -s "$helper" ]] || die "Thiếu forge_compat.py. Cập nhật repo trước; không cần tải lại model/Torch."
+  "$PY" "$helper" "$FORGE_DIR"
+}
 configure_checkpoint() {
   local mid="${WAI_PROFILE_MODEL_ID:-fp16}" cfg="${WAI_PROFILE_CFG:-6.0}"
   local steps="${WAI_PROFILE_STEPS:-25}" hires="${WAI_PROFILE_HIRES_STEPS:-20}"
@@ -432,6 +440,7 @@ stage_extras() {
                      colab/extension/vi-prompt-builder/javascript/vi_prompt.js; do
     [[ -s "$REPO_DIR/$source_file" ]] || die "Repo thiếu $source_file. Cập nhật cùng nhánh trước; chưa thay đổi extension đang có."
   done
+  ensure_forge_compat
   ensure_config_version
 
   # 1) upscaler cho hires fix — Forge Neo đặt tên scaler THEO TÊN FILE, nên file
@@ -550,7 +559,7 @@ PYSTY
 
 # ------------------------------------------------------------------- launch
 launch_args() {
-  # Forge Neo chỉ có --ckpt-dirs (không có --models-dir/--data-dir).
+  # Forge Neo dùng --ckpt-dirs cho checkpoint; không có --models-dir.
   # shlex.quote bảo toàn đường dẫn có khoảng trắng khi launch.py đọc biến môi trường.
   local args="--listen --port $PORT --api --expandable-segments"
   local model_path
@@ -620,6 +629,7 @@ prepare_launch() {
   mkdir -p "$RUNTIME_DIR"
   cd "$FORGE_DIR" || die "thiếu $FORGE_DIR"
   [[ -x "$FORGE_DIR/venv/bin/python" ]] || die "Chưa có venv của Forge. Chạy stage forge trước."
+  ensure_forge_compat # source schema/dropdown phải được vá trước import API/Gradio
   ensure_config_version # cũng sửa lần cài v1.0.0 chỉ chạy lại stage launch
   # shellcheck disable=SC1090 # file do stage torch tạo trong runtime của người dùng
   [[ ! -f "$TORCH_ENV_FILE" ]] || source "$TORCH_ENV_FILE"
