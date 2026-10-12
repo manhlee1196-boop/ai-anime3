@@ -61,6 +61,9 @@ def main():
         assert module.do_convert("1girl, áo dài, tóc dài")[0] == "1girl, ao_dai, long_hair"
         components = ui.get_config_file()["components"]
         assert any(c["props"].get("label") == "Quy trình" for c in components)
+        assert any(c["props"].get("label", "").startswith("Bảng ảnh đã tạo") for c in components)
+        assert ui.wai_history_panel.ids.value == []
+        assert any(dep.get("trigger_only_on_success") for dep in ui.get_config_file()["dependencies"])
         assert all(not c["props"].get("value") for c in components
                    if c["type"] == "checkbox" and c["props"].get("label", "").startswith("Hires"))
         assert len(module.set_workflow("Hoàn thiện — Hires 1.5×")) == 9

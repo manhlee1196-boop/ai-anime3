@@ -1,6 +1,6 @@
 """Nội dung dùng chung khi sinh notebook; các ô đã xuất không cần import file này."""
 
-MIN_INSTALLER_VERSION = "1.0.6"
+MIN_INSTALLER_VERSION = "1.0.7"
 
 BOOTSTRAP_SOURCE = r'''import re
 import subprocess
@@ -33,7 +33,7 @@ def download_installer(dest, branch, env):
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".sh.tmp")
     for url in (raw, api):
-        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.6"}
+        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.7"}
         if env.get("GITHUB_TOKEN"):
             headers["Authorization"] = f"Bearer {env['GITHUB_TOKEN']}"
         try:
@@ -51,7 +51,7 @@ def download_installer(dest, branch, env):
         finally:
             if tmp.exists():
                 tmp.unlink()  # chỉ file tạm do ô này tạo; không đụng model/repo/ảnh
-    # Mất mạng chỉ dùng cache nếu phiên bản và cú pháp đều hợp lệ. Từ 1.0.6, cài mới mặc định dùng Gradio share.
+    # Mất mạng chỉ dùng cache đủ mới/hợp lệ; bản 1.0.7 cần source bảng ảnh đã tạo.
     try:
         version = checked_installer_version(dest.read_bytes())
         subprocess.run(["bash", "-n", str(dest)], check=True, capture_output=True)
@@ -85,6 +85,20 @@ Nhiều ảnh chạy tuần tự (`batch_size=1`), không tăng batch để ti�
 **Sinh ảnh** trong Prompt VN dùng các tham số trên; **Đưa vào txt2img** chỉ chuyển
 prompt, không chuyển sampling. Điền txt2img mặc định ghép/thay mục tương ứng;
 **Thay toàn bộ** phải bật rõ ràng và có **Hoàn tác** trong phiên trình duyệt.
+
+### 🗂️ Bảng ảnh đã tạo (1.0.7)
+
+Trong **Prompt VN → Ảnh đã tạo**, bấm **Làm mới** để xem ảnh cũ từ output của
+Forge (txt2img/img2img), ảnh mới từ Prompt VN và ví dụ notebook. Có thumbnail,
+12/24 ảnh mỗi trang, bảng thời gian/seed/kích thước/dung lượng. Chọn thumbnail
+hoặc một dòng để **xem/tải ảnh gốc** và **Dùng seed ảnh lịch sử**.
+Chỉ điền seed, không tự thay prompt/sampling; ảnh lưới/ảnh không có seed không
+được dùng lại seed. File gốc/metadata không bị sửa, thumbnail WebP chỉ là preview.
+
+Chỉ mục SQLite/preview lưu trên đĩa; State chỉ giữ id nhỏ, không tích lũy toàn bộ
+PIL/base64. Lịch sử đọc lại được sau restart Forge, nhưng `/content` vẫn mất khi
+xóa runtime. Không tự mount Drive. Album này **không phải bản vá đã xác định cho
+RAM của Forge tăng sau nhiều ảnh**. Người có link UI cũng có thể xem album.
 """
 
 API_SAMPLE_SOURCE = r'''#@title 🖼️ Ví dụ API — chỉ sinh khi bật RUN_API_SAMPLE { display-mode: "form" }

@@ -1,4 +1,56 @@
-# Rà soát toàn dự án — bộ cài 1.0.6
+# Rà soát toàn dự án — bộ cài 1.0.7
+
+## Bổ sung 1.0.7 — bảng ảnh đã tạo trên đĩa — 12/10/2026
+
+Yêu cầu: **“thêm bảng hình đã tạo”**. Phiên người dùng trước đó có RAM 11/12 GiB,
+MemAvailable 994 MiB/no swap; T4 4645/15360 MiB và utilization 97%. Người dùng báo
+RAM tăng sau vài ảnh nhưng chưa có chuỗi RSS/anonymous hoặc xác nhận highvram.
+**Không kết luận leak/cause và không thay model, Torch hay chính sách VRAM.**
+
+- Thêm **Ảnh đã tạo** vào tab Prompt VN và app riêng: Gallery thumbnail + bảng
+  thời gian UTC+7/tên/seed/kích thước/dung lượng, mới nhất trước, 12/24 ảnh/trang.
+  Xem/tải file gốc, dùng lại seed ảnh đơn có metadata. Không tự chuyển prompt/sampling.
+- Đọc ảnh txt2img/img2img/output đã có theo cấu hình Forge và ví dụ notebook;
+  Prompt VN tự refresh sau generation callback, native txt2img/img2img dùng Làm mới.
+  App riêng đọc filesystem cục bộ (`--forge-dir` / `--history-dir`), không tải ảnh remote.
+- Chỉ mục **SQLite trên đĩa**, cache DB khoảng 2 MiB/connection, không giữ danh sách
+  toàn bộ ảnh/PIL/base64 trong State. State là trang, tối đa 24 id và token chọn gồm
+  id/mtime/size; token bị vô hiệu khi file thay đổi, không lấy nhầm seed mới.
+- Preview WebP tối đa 384px, decode từng ảnh; ảnh lớn hơn 4096×4096 dùng placeholder.
+  Metadata/header được đọc mà không decode toàn bộ pixel khi lập chỉ mục. Không
+  ghi/nén/xóa original. Lịch sử đọc lại sau restart Forge, vẫn mất theo `/content` khi
+  xóa runtime. Album không phải bản vá xác định cho RAM của Forge tăng.
+- Chặn ảnh symlink/đường dẫn ngoài root cho phép, DB/preview symlink, file hỏng,
+  grid seed và seed không hợp lệ; scan giới hạn 50.000 file/lượt. Lỗi storage trả
+  thông báo ngắn, không dump log/path/prompt/response riêng. Người có link UI có thể
+  xem album; đây không phải hệ thống phân quyền nhiều người dùng.
+- Installer/notebook **1.0.7**, `prompt_lib` **1.2.0**, setup API **2** giữ nguyên.
+  Guard source history/history_ui trước khi ghi extras, verify import UI dưới Agg
+  riêng process probe. Update extras/launch/verify; không stage model/torch.
+  Giữ Gradio share mặc định, flags VRAM/cấu hình cũ, headless/compat/prompt workflow.
+
+### Kiểm tra 1.0.7
+
+| Kiểm tra | Kết quả/phạm vi |
+|---|---|
+| History core | **13 đạt**, PNG/JPEG/WebP fixtures: header/seed/sidecar, paging/bounds, dedup/restart, file đổi/mất, symlink/foreign paths, grid/unknown seed, scan cap, big-preview guard và original byte/metadata preservation |
+| History panel | **8 đạt** trên Gradio **4.40.0**, FastAPI **0.127.1**, Starlette **0.50.0**, Pydantic **2.10.6**, Pillow **10.4.0**, Python **3.11 CPU**: Gallery/table chọn ảnh, seed, State bounded, stale token, storage errors và HTTP callback/download PNG nguyên byte |
+| Cả hai UI | Smoke dựng app/native-tab thật, host/API giả lập; CFG/profile/replace/workflow/generation cũ giữ nguyên và có hook refresh album |
+| Installer / notebook | **113 + 14 đạt**; thêm source guards không ghi dở extension và fixture repo cũ fast-forward có đủ helper mới |
+| Headless / diagnostics / checkpoint / compat | **4 + 8 + 16 + 10 đạt**; matrix callback giống package runtime, source Settings/API/UiLoadsave/Checkpoint constructor Neo pinned dùng cho kiểm tra tương ứng; engine/GPU vẫn giả lập |
+| Prompt / workflow / JS / data | **15 + 10**, JS **9** với insertion TAC pinned, CSV **3 đạt + 1 bỏ qua** đối chiếu file nguồn tải lại được |
+
+Live preview dùng **6 ảnh minh hoạ fixture, không ảnh WAI/GPU**; callback trả thumbnail
+với forwarded preview host, không browser-facing localhost. Python/notebook AST,
+Bash/Node syntax và diff check đạt. Không có output/secret trong notebook.
+
+**Giới hạn:** chưa chạy full Forge/GPU/native browser Colab; không benchmark RAM,
+VRAM/latency hoặc chứng minh album sửa tăng RAM backend. File gốc fixture tải qua
+HTTP giữ cùng SHA256/PNG parameters; cần người dùng cập nhật extension và xác nhận
+album với ảnh thật đã lưu. Các phần dưới là lịch sử trước bản album.
+
+---
+
 
 ## Bổ sung 1.0.6 — Gradio share mặc định cho cài mới — 12/10/2026
 

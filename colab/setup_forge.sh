@@ -437,6 +437,7 @@ stage_extras() {
   [[ -f "$REPO_DIR/danbooru_e621.csv" ]] || die "Chạy stage 'repo' trước (thiếu kho prompt ở $REPO_DIR)."
   local source_file
   for source_file in colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
+                     colab/prompt_lib/history.py colab/prompt_lib/history_ui.py \
                      colab/extension/vi-prompt-builder/javascript/vi_prompt.js; do
     [[ -s "$REPO_DIR/$source_file" ]] || die "Repo thiếu $source_file. Cập nhật cùng nhánh trước; chưa thay đổi extension đang có."
   done

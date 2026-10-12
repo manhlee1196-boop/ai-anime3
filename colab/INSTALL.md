@@ -3,7 +3,7 @@
 Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
-Bản hiện tại **1.0.6**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
+Bản hiện tại **1.0.7**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
 
 ## 1. Cách dễ nhất: notebook một ô
 
@@ -22,8 +22,8 @@ and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ l
 Đừng dùng bản notebook cũ đã lưu trong Drive nếu muốn nhận các ô mới. Notebook
 không tự xóa repo/model/ảnh hoặc mount Drive.
 
-Cả hai notebook dùng bootstrap có **version guard ≥1.0.6 + Bash syntax check**.
-Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy cache <1.0.6.
+Cả hai notebook dùng bootstrap có **version guard ≥1.0.7 + Bash syntax check**.
+Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm chạy cache <1.0.7.
 
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.
@@ -206,6 +206,55 @@ Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đ
 chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
 
 
+### Bảng ảnh đã tạo (1.0.7)
+
+**Prompt VN → Ảnh đã tạo** (phía dưới bộ dựng prompt) có:
+
+- Gallery thumbnail **12/24 ảnh mỗi trang**, mới nhất trước; bảng thời gian lưu
+  (UTC+7), tên file, seed, kích thước và dung lượng. Bấm thumbnail **hoặc dòng bảng**.
+- **Xem ảnh gốc / Tải ảnh gốc**: đọc file đã lưu, không nén/sửa ảnh gốc hoặc metadata.
+- **Dùng seed ảnh lịch sử**: chỉ điền seed vào ô sinh hiện tại, không thay prompt,
+  sampler/steps/CFG/Hires. Không dùng seed ảnh lưới hoặc ảnh thiếu seed xác định.
+- Đọc cả ảnh txt2img/img2img/Prompt VN đã tồn tại trong thư mục output cấu hình,
+  cùng ảnh của ví dụ API notebook. Ảnh mới từ Prompt VN tự làm mới lịch sử sau callback;
+  sinh trong txt2img/img2img thì bấm **Làm mới**. Không cần sinh lại ảnh cũ.
+
+**Lưu trên đĩa:** chỉ mục/preview trong `FORGE_DIR/outputs/.wai-history/`;
+State chỉ có id/trang/signature nhỏ, không tích luỹ toàn bộ PIL/base64. Mỗi preview
+đọc một ảnh, WebP tối đa 384px; ảnh trên 16 megapixel dùng placeholder để tránh
+thumbnail decode quá lớn. Ảnh gốc chỉ được đưa tới viewer/download khi chọn.
+Có thể đọc lại sau restart Forge; `/content` vẫn mất khi xóa runtime. Không mount Drive.
+Đây là thiết kế album nhẹ, **không phải kết luận/bản vá rò rỉ RAM của Forge**.
+Người có link public UI cũng có thể xem album; không chia sẻ link công khai.
+
+#### Cập nhật phiên Colab đang chạy, không tải lại model/Torch
+
+Đợi tác vụ sinh ảnh kết thúc. Repo cần sạch và đang ở đúng nhánh; không reset/xóa
+repo nếu có thay đổi riêng. Chạy một ô Colab mới:
+
+```bash
+%%bash
+set -euo pipefail
+repo=/content/ai-anime3
+[[ "$(git -C "$repo" branch --show-current)" == "arena/88f01d31-ai-anime3" ]] || { echo "Repo khác nhánh; dừng để giữ thay đổi của bạn."; exit 1; }
+git -C "$repo" pull --ff-only origin arena/88f01d31-ai-anime3
+cp "$repo/colab/install.sh" /content/install.sh
+cp "$repo/colab/setup_forge.sh" /content/setup_forge.sh
+bash /content/install.sh --version
+bash /content/install.sh --tunnel share --only extras,launch,verify --restart
+```
+
+Phiên bản phải **1.0.7 hoặc mới hơn**. Chỉ cắm extension/verify/restart process do
+bộ cài quản lý, không chạy stage model/torch. Giữ lựa chọn model/thư mục/VRAM đã lưu;
+đặt rõ `share` để không quay lại Cloudflare. Mở **link Gradio mới**, vào **Prompt VN →
+Ảnh đã tạo → Làm mới**. Nếu dùng `REPO_DIR` khác, thay đường dẫn repo cho đúng.
+
+App độc lập có tab **Ảnh đã tạo**, đọc file cục bộ. Có thể truyền
+`--forge-dir /path/to/Forge` hoặc `--history-dir /path/to/images`. Forge ở máy
+khác không có filesystem chung thì cần ảnh cục bộ; album không âm thầm tải ảnh
+qua URL hoặc đọc tuỳ ý toàn bộ `/content`/thư mục nhà. Không theo symlink ra ngoài output.
+
+
 ### Ảnh hiển thị chậm / Unexpected token < (1.0.6)
 
 Khi Forge đã sinh xong nhưng gallery/mở ảnh chậm và giao diện báo
@@ -268,7 +317,7 @@ bash /content/install.sh --version
 bash /content/install.sh --only launch,verify --restart
 ```
 
-Phiên bản cần **≥1.0.5** (hiện tại **1.0.6**). Chỉ launch/verify; không chạy model/torch/extras/forge.
+Phiên bản cần **≥1.0.5** (hiện tại **1.0.7**). Chỉ launch/verify; không chạy model/torch/extras/forge.
 Mở **link public mới**, đóng trang cũ và reload cứng. Log khởi động in
 `MPLBACKEND=Agg`; chẩn đoán mới có `graphics_env.forge_process: Agg` và metadata
 Matplotlib/inline/pandas. `graphics_env.diagnostics_parent: inline_notebook` vẫn
@@ -496,7 +545,7 @@ không tạo nội dung tình dục hóa trẻ vị thành niên.
 Từ thư mục gốc repo:
 
 ```bash
-python3 colab/tests/test_install_sh.py       # 98 kiểm tra CLI/fixture/vòng đời cài
+python3 colab/tests/test_install_sh.py       # CLI/fixture/vòng đời + source guards
 python3 colab/tests/test_checkpoint_flow.py  # 16 nhóm checkpoint/preset/API/alias
 python3 colab/tests/test_data_integrity.py   # 4 nhóm, kiểm toàn bộ 349.714 dòng CSV
 python3 colab/tests/test_prompt_lib.py       # 15 nhóm hồi quy thư viện prompt
@@ -506,6 +555,8 @@ bash -n colab/setup_forge.sh
 shellcheck colab/install.sh colab/setup_forge.sh
 # Trong venv có Gradio/requests/Pillow:
 python colab/tests/test_prompt_ui.py         # UI thật, API và Forge host giả lập
+python colab/tests/test_image_history.py     # SQLite/header/seed/paging, không sửa ảnh gốc
+python colab/tests/test_image_history_ui.py  # bảng/gallery/seed + HTTP tải PNG nguyên byte
 ```
 
 **Đã kiểm tra:** luồng cài/resume bằng stage stub, tải/checksum model nhỏ qua HTTP cục bộ,

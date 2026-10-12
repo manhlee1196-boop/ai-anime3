@@ -148,7 +148,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.6")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.7")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -439,7 +439,7 @@ namespace["verify_version"]()
     (repo / "colab/extension/vi-prompt-builder/scripts").mkdir(parents=True)
     (repo / "danbooru_e621.csv").write_text("fixture,0,100,\n")
     (repo / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py").write_text("# fixture\n")
-    for name in ("prompt_lib/editing.py", "prompt_lib/workflow.py", "extension/vi-prompt-builder/javascript/vi_prompt.js"):
+    for name in ("prompt_lib/editing.py", "prompt_lib/workflow.py", "prompt_lib/history.py", "prompt_lib/history_ui.py", "extension/vi-prompt-builder/javascript/vi_prompt.js"):
         path = repo / "colab" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# fixture\n")
@@ -464,6 +464,15 @@ namespace["verify_version"]()
     check("Stage extras chép cả adapter JS và marker repo", installed_js.read_bytes() == source_js.read_bytes()
           and (forge / "extensions/vi-prompt-builder/.repo_root").read_text().strip() == str(repo))
     before = cfg.read_bytes(), installed_js.read_bytes()
+    for missing in ("history.py", "history_ui.py"):
+        source = repo / "colab/prompt_lib" / missing
+        content = source.read_bytes()
+        source.unlink()
+        probe = source_call(SETUP, "stage_extras", {**env, "REPO_DIR": str(repo), "UPSCALER_DIR": str(upscaler)})
+        check(f"Repo thiếu {missing} → không ghi dở config/extension", probe.returncode != 0
+              and f"thiếu colab/prompt_lib/{missing}" in probe.stderr
+              and before == (cfg.read_bytes(), installed_js.read_bytes()), probe.stdout + probe.stderr)
+        source.write_bytes(content)
     (repo / "colab/prompt_lib/workflow.py").unlink()
     r = source_call(SETUP, "stage_extras", {**env, "REPO_DIR": str(repo), "UPSCALER_DIR": str(upscaler)})
     check("Repo thiếu workflow → dừng sớm, giữ config/extension đang có", r.returncode != 0
@@ -482,7 +491,8 @@ def test_lifecycle(tmp):
         shutil.copy2(ROOT / "colab" / name, colab / name)
     for f in ("danbooru_e621.csv", "danbooru_e621_nounderscore.csv", "danbooru_e621_vi.csv",
               "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py",
-              "colab/prompt_lib/editing.py", "colab/prompt_lib/workflow.py"):
+              "colab/prompt_lib/editing.py", "colab/prompt_lib/workflow.py",
+              "colab/prompt_lib/history.py", "colab/prompt_lib/history_ui.py"):
         p = repo / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("fixture\n")
     compat_fixture(forge)
     import forge_compat

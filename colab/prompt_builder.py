@@ -14,6 +14,9 @@ Tính năng:
 """
 
 import argparse
+import json
+from functools import lru_cache
+from pathlib import Path
 import os
 import sys
 import time
@@ -30,6 +33,8 @@ from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY
                         QUALITY_PRESETS, RATINGS, SIZE_PRESETS, UPSCALERS, WAI_DEFAULTS,
                         PromptBuilder, TagIndex, pick_upscaler)
 from prompt_lib.api import decode_generation_response
+from prompt_lib.history import ImageHistory, forge_output_roots
+from prompt_lib.history_ui import HistoryPanel
 from prompt_lib.editing import replace_or_append, convert_tags
 from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                  workflow_settings, workflow_note, validate_generation,
@@ -54,7 +59,8 @@ def profile_note():
         f"(mặc định CFG {WAI_DEFAULTS['cfg_scale']}, steps {WAI_DEFAULTS['steps']}, "
         f"{WAI_DEFAULTS['sampler_name']}, clip skip {WAI_DEFAULTS['clip_skip']})._\n"
     )
-CFG = {"forge_url": "http://127.0.0.1:7860", "demo": False}
+CFG = {"forge_url": "http://127.0.0.1:7860", "demo": False,
+       "forge_dir": os.environ.get("FORGE_DIR", "/content/sd-webui-forge-neo"), "history_dir": None}
 
 # --- Lớp tương thích Gradio -------------------------------------------------
 # Forge Neo chạy Gradio 4.40, còn môi trường mới có thể là Gradio 5/6, nơi
@@ -327,6 +333,31 @@ def do_explain(prompt):
     return head + "\n".join(lines), ", ".join(out_tags)
 
 
+@lru_cache(maxsize=4)
+def _cached_history(roots, cache_dir):
+    return ImageHistory(roots, cache_dir)
+
+
+def image_history():
+    forge_dir = Path(CFG["forge_dir"]).expanduser().resolve()
+    options = {}
+    try:
+        with (forge_dir / "config.json").open(encoding="utf-8") as stream:
+            options = json.loads(stream.read(1048576))
+        if not isinstance(options, dict):
+            options = {}
+    except (OSError, ValueError):
+        pass
+    roots = forge_output_roots(forge_dir, options)
+    roots.append(Path(ROOT) / "colab" / "outputs")
+    if CFG.get("history_dir"):
+        roots.append(Path(CFG["history_dir"]).expanduser())
+    cache = forge_dir / "outputs" / ".wai-history"
+    if CFG.get("history_dir"):
+        cache = Path(CFG["history_dir"]).expanduser() / ".wai-history"
+    return _cached_history(tuple(str(p) for p in roots), str(cache))
+
+
 # ------------------------------------------------------------------ giao diện
 def build_ui():
     cat_choices = list(CATEGORY_NAMES.values())
@@ -479,6 +510,11 @@ def build_ui():
                     out_tags = gr.Textbox(label="Chỉ lấy danh sách tag", lines=3,
                                           **COPY_BTN)
 
+            with gr.Tab("🗂️ Ảnh đã tạo"):
+                gr.Markdown("App độc lập chỉ đọc ảnh trên máy đang chạy app; Forge ở máy khác cần thư mục ảnh cục bộ (`--history-dir`).")
+                history_panel = HistoryPanel(image_history, seed)
+            demo.wai_history_panel = history_panel
+
             # ------------------------------------------------ TAB 3: hướng dẫn
             with gr.Tab("📖 WAI v17 & Colab"):
                 gr.Markdown(GUIDE_MD)
@@ -513,12 +549,13 @@ def build_ui():
         btn_upscalers.click(do_refresh_upscalers, inputs=[url_box],
                             outputs=[upscaler, upscaler_note])
 
-        btn_generate.click(do_generate,
+        generation_event = btn_generate.click(do_generate,
                            inputs=[prompt_out, negative_out, size, steps, cfg_scale,
                                    sampler, seed, batch, enable_hr, hr_scale, hr_steps,
                                    denoise, upscaler, url_box],
                            outputs=[gallery, gen_note, generation_state],
                            concurrency_limit=1, concurrency_id="wai_gpu")
+        history_panel.after_generation(generation_event)
 
         btn_explain.click(do_explain, inputs=[in_prompt],
                           outputs=[out_explain, out_tags])
@@ -593,6 +630,8 @@ def main():
                                                               "http://127.0.0.1:7860"))
     parser.add_argument("--root", default=None,
                         help="thư mục chứa các file CSV của kho prompt")
+    parser.add_argument("--forge-dir", default=CFG["forge_dir"], help="thư mục Forge cục bộ để đọc ảnh đã lưu")
+    parser.add_argument("--history-dir", default=None, help="thêm thư mục ảnh cục bộ vào bảng Ảnh đã tạo")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7861)))
     parser.add_argument("--share", action="store_true", help="tạo link public gradio.live")
@@ -602,6 +641,8 @@ def main():
 
     CFG["forge_url"] = args.forge_url
     CFG["demo"] = args.demo
+    CFG["forge_dir"] = args.forge_dir
+    CFG["history_dir"] = args.history_dir
 
     global INDEX, BUILDER
     root = args.root or ROOT

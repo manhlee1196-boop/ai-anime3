@@ -14,7 +14,7 @@ colab/
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
   diagnostics.py                chẩn đoán checkpoint/venv/GPU/API/config UI chỉ đọc
   forge_compat.py               vá schema cmd-flags và choices/value Checkpoint (có guard/backup)
-  AUDIT.md                      báo cáo tunnel 1.0.6 + headless 1.0.5 + compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
+  AUDIT.md                      báo cáo album 1.0.7 + tunnel 1.0.6 + headless 1.0.5 + compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
@@ -51,8 +51,9 @@ Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, ch�
 trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
 không mount Drive; **Gradio share** mặc định (`gradio.live`), Cloudflare tùy chọn; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
 
-[**Mở notebook cài mới 1.0.6 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
-→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.6.
+[**Mở notebook cài mới 1.0.7 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.7.
+**Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong Prompt VN rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.
 **API đã có WAI nhưng dropdown trống:** dùng [ô cập nhật 1.0.4](INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104), chỉ cập nhật phần mềm và restart; không xóa runtime/tải lại weights.
@@ -94,6 +95,22 @@ Có `--smoke-test` để thử nạp trọng số bằng một ảnh trên GPU v
 
 Repo public không cần GitHub token. Nếu dùng repo private, bật `USE_GITHUB_SECRET`
 ở Ô 1 và đọc token từ **Colab Secrets**; không dán token vào source/URL clone.
+
+## 🗂️ Bảng ảnh đã tạo (1.0.7)
+
+Mở **Prompt VN → Ảnh đã tạo → Làm mới**, hoặc tab **Ảnh đã tạo** trong app độc lập.
+Gallery + bảng phân trang 12/24 ảnh: thời gian lưu UTC+7, tên, seed, kích thước,
+dung lượng. Chọn ảnh/dòng để xem/tải bản gốc, bấm **Dùng seed ảnh lịch sử** khi cần.
+Chỉ điền seed; không tự chuyển prompt hoặc sampling. Ảnh lưới/không có seed thì không dùng.
+Đọc cả ảnh txt2img/img2img đã lưu trước khi cập nhật; không cần tạo lại.
+
+Lịch sử/thumbnail ở `FORGE_DIR/outputs/.wai-history/` trên đĩa, State chỉ giữ id nhỏ,
+không thêm tất cả PIL/base64 vào RAM. Thumbnail WebP tối đa 384px; file gốc và PNG
+metadata không bị sửa. Khởi động lại Forge vẫn đọc được; xóa runtime Colab vẫn mất
+`/content`. Album không tự mount Drive và không phải bản vá đã xác định cho RAM tăng.
+Người có link UI cũng xem được album. [Ô cập nhật chỉ phần mềm](INSTALL.md#bảng-ảnh-đã-tạo-107).
+App riêng có `--forge-dir`/`--history-dir` để trỏ file trên máy chạy app, không tải ảnh
+qua URL của Forge ở máy khác. Không theo symlink ra ngoài thư mục output.
 
 ## Ba cách dùng kho prompt
 

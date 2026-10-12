@@ -1,4 +1,4 @@
-"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.6.
+"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.7.
 
 Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import generator.
 """
@@ -21,7 +21,7 @@ def code(text):
                   "outputs": [], "source": text.splitlines(True)})
 
 
-md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.6
+md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.7
 ### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.513 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
@@ -111,8 +111,8 @@ print(f"✔ {MODEL} · model {MODEL_DIR} · Forge {os.environ['FORGE_DIR']} · {
 
 md("""## Ô 2 — Lấy bộ cài mới và repo đúng nhánh
 
-Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.6** và cú pháp trước khi
-chạy. Không chạy cache <1.0.6. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
+Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.7** và cú pháp trước khi
+chạy. Không chạy cache <1.0.7. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
 thay Việt → Anh; repo sẵn có được fast-forward khi sạch/cùng nhánh, không reset hard.
 Không đổi sang main/master hoặc xóa repo có thay đổi của bạn.
 """)
@@ -257,7 +257,7 @@ md("""---
 | Triệu chứng | Xử lý |
 |---|---|
 | Không có GPU | Runtime → Change runtime type → GPU T4 rồi chạy lại từ Ô 1 |
-| Không lấy được bộ cài ≥1.0.6 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.6 |
+| Không lấy được bộ cài ≥1.0.7 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.7 |
 | Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
 | Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
 | Tag Việt còn sau chọn | Kiểm tab Prompt VN có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
@@ -277,7 +277,7 @@ file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content`
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.6",
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.7",
                   "collapsed_sections": []},
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"}, "accelerator": "GPU",
@@ -285,4 +285,4 @@ notebook = {
     "cells": cells,
 }
 OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.6")
+print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.7")

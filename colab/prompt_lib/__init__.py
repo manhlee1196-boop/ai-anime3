@@ -30,4 +30,4 @@ __all__ = [
     "MODEL_PROFILES", "ACTIVE_PROFILE_ID", "apply_model_profile",
 ]
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

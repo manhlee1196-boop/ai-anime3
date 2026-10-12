@@ -28,6 +28,8 @@ Colab: `python3 colab/prompt_builder.py --demo`.
 cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
 Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
+> **Bộ cài 1.0.7:** thêm **Ảnh đã tạo** trong Prompt VN và app: bảng + thumbnail phân trang, xem/tải ảnh gốc, dùng lại seed. Lịch sử ở SQLite trên đĩa, không gom toàn bộ PIL/base64 vào RAM; ảnh gốc/metadata giữ nguyên. [Cập nhật chỉ phần mềm](colab/INSTALL.md#bảng-ảnh-đã-tạo-107).
+
 > **Bộ cài 1.0.6:** cài mới mặc định **Gradio share** (`gradio.live`), Cloudflare vẫn chọn được. Người dùng báo ảnh mở nhanh hơn/chưa lặp lại lỗi HTML→JSON sau khi đổi tunnel; không sửa model/chất lượng ảnh. Phiên Gradio share đang ổn **không cần restart/cài lại**. [Hướng dẫn tunnel](colab/INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106).
 
 > **Bộ cài 1.0.5:** đặt `MPLBACKEND=Agg` riêng cho Forge con, tránh backend inline Colab gây lỗi import Matplotlib/ControlNet/pandas Styler. [Ô cập nhật chỉ phần mềm](colab/INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), **không tải lại model/Torch**. Giữ schema/dropdown 1.0.4 và toàn bộ workflow/prompt.
@@ -36,8 +38,8 @@ Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
 > **Quy trình 1.0.3:** thêm quy trình Nháp → Chuẩn → Hoàn thiện, seed ảnh đã chọn, sinh tuần tự tiết kiệm VRAM; sửa thay toàn cụm Việt → Anh mà không sót chữ Việt/mất tag khác. Giữ toàn bộ bản sửa checkpoint 1.0.2. [Hướng dẫn](colab/README.md#quy-trình-tối-ưu-bản-103) · [Rà soát checkpoint](colab/AUDIT.md).
 
-**Chạy lại từ đầu:** [mở notebook Colab 1.0.6](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**.
-Notebook lấy bộ cài mới, chặn cache <1.0.6, đã tích hợp hướng dẫn thay Việt → Anh và
+**Chạy lại từ đầu:** [mở notebook Colab 1.0.7](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**.
+Notebook lấy bộ cài mới, chặn cache <1.0.7, đã tích hợp hướng dẫn thay Việt → Anh và
 Nháp/Chuẩn/Hoàn thiện. Muốn runtime hoàn toàn mới, tải ảnh về trước khi **Disconnect
 and delete runtime**; không có bước tự xóa dữ liệu/mount Drive.
 

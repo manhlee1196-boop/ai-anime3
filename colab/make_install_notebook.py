@@ -24,7 +24,7 @@ def current_branch():
 
 BRANCH = os.environ.get("WAI_BRANCH") or current_branch()
 
-INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.6
+INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.7
 
 **Cài mới từ đầu:** bật GPU rồi dùng **Runtime → Run all** (chỉ có 1 ô code).
 Nếu đang dùng phiên cũ và muốn môi trường hoàn toàn mới, **tải ảnh cần giữ về trước**,
@@ -73,15 +73,15 @@ không tải lại model/Torch hay xóa runtime.
 
 Dự trù **25 GB trống** và khoảng **10–25 phút** cho lần đầu (tuỳ tốc độ mạng/runtime).
 Chạy lại ô được: bỏ qua phần đã cài hợp lệ, kiểm tra lại model và API, không chạy trùng Forge.
-Ô cài luôn tải script mới từ đúng nhánh và kiểm tra **phiên bản ≥1.0.6 + cú pháp Bash**.
-Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầm chạy cache <1.0.6**.
+Ô cài luôn tải script mới từ đúng nhánh và kiểm tra **phiên bản ≥1.0.7 + cú pháp Bash**.
+Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầm chạy cache <1.0.7**.
 
 > Dữ liệu `/content` mất khi runtime kết thúc — tải ảnh về trước khi ngắt phiên.
 > Tuân thủ điều khoản Colab và giấy phép model; không dùng cách cài này để né hạn chế
 > của dịch vụ. Hệ thống mặc định mức `general`; negative prompt không bảo đảm lọc hoàn toàn nội dung.
 """
 
-CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.6) { display-mode: "form" }
+CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.7) { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 MODEL_DIR = "/content/models" #@param {type:"string"}
 TUNNEL = "share" #@param ["share", "cloudflared", "none"]
@@ -184,7 +184,7 @@ Các kiểm tra cài đặt không thay thế một lần sinh ảnh thật trê
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab một ô 1.0.6"},
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab một ô 1.0.7"},
         "accelerator": "GPU",
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"},

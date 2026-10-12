@@ -382,6 +382,7 @@ repo_git() {
     cp "$PROJECT_SOURCE/colab/checkpoint_tools.py" "$PROJECT_SOURCE/colab/diagnostics.py" "$PROJECT_SOURCE/colab/forge_compat.py" "$REPO_DIR/colab/"
     cp "$PROJECT_SOURCE/colab/setup_forge.sh" "$REPO_DIR/colab/setup_forge.sh"
     cp "$PROJECT_SOURCE/colab/prompt_lib/editing.py" "$PROJECT_SOURCE/colab/prompt_lib/workflow.py" "$REPO_DIR/colab/prompt_lib/"
+    cp "$PROJECT_SOURCE/colab/prompt_lib/history.py" "$PROJECT_SOURCE/colab/prompt_lib/history_ui.py" "$REPO_DIR/colab/prompt_lib/"
   fi
   return 0
 }

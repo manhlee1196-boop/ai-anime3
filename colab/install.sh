@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.6"
+INSTALLER_VERSION="1.0.7"
 DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
@@ -346,6 +346,7 @@ repo_ready() {
   for f in danbooru_e621.csv danbooru_e621_nounderscore.csv danbooru_e621_vi.csv \
     danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py \
     colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
+    colab/prompt_lib/history.py colab/prompt_lib/history_ui.py \
     colab/checkpoint_tools.py colab/diagnostics.py colab/forge_compat.py; do
     [[ -s "$REPO_DIR/$f" ]] || return 1
   done
@@ -805,7 +806,7 @@ stage_verify() {
   check "PyTorch chạy được kernel CUDA" torch_ready
   check_detail "UI headless: pandas Styler / Gradio Dataframe khởi tạo được" headless_ui_ready
   if [[ -x "$FORGE_DIR/venv/bin/python" ]]; then
-    check "prompt_lib và quy trình import được" env PYTHONPATH="$REPO_DIR/colab" "$FORGE_DIR/venv/bin/python" -c 'import prompt_lib; from prompt_lib.editing import convert_tags; from prompt_lib.workflow import validate_generation; assert prompt_lib.SYSTEM_TAGS'
+    check "prompt_lib + quy trình + bảng ảnh import được" env MPLBACKEND=Agg PYTHONPATH="$REPO_DIR/colab" "$FORGE_DIR/venv/bin/python" -c 'import prompt_lib; from prompt_lib.editing import convert_tags; from prompt_lib.workflow import validate_generation; from prompt_lib.history import ImageHistory; from prompt_lib.history_ui import HistoryPanel; assert prompt_lib.SYSTEM_TAGS'
   fi
   if [[ ! -s "$FORGE_DIR/models/ESRGAN/RealESRGAN_x4plus_anime_6B.pth" ]]; then
     warn "Chưa có upscaler anime (không chặn cài); tải lại với --only extras."

@@ -10,6 +10,8 @@ extension cục bộ miễn là có thư mục scripts/).
 
 import os
 import sys
+from functools import lru_cache
+from pathlib import Path
 
 import gradio as gr
 import requests
@@ -68,6 +70,8 @@ if LIB_DIR:
                             UPSCALERS, WAI_DEFAULTS, PromptBuilder, TagIndex)
 
     from prompt_lib.api import decode_generation_response
+    from prompt_lib.history import ImageHistory, forge_output_roots
+    from prompt_lib.history_ui import HistoryPanel
     from prompt_lib.editing import replace_or_append, convert_tags
     from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                      workflow_settings, workflow_note, validate_generation,
@@ -126,6 +130,19 @@ def _forge_url():
     """URL API của chính Forge đang chạy extension này."""
     port = getattr(shared.cmd_opts, "port", 7860) or 7860
     return f"http://127.0.0.1:{port}"
+
+
+@lru_cache(maxsize=4)
+def _cached_history(forge_dir, roots):
+    return ImageHistory(roots, Path(forge_dir) / "outputs" / ".wai-history")
+
+
+def image_history():
+    forge_dir = Path(EXT_DIR).parent.parent.resolve()
+    roots = forge_output_roots(forge_dir, getattr(shared, "opts", None))
+    # Bao gồm ảnh của ví dụ API notebook, không giữ chúng trong State.
+    roots.append(Path(CSV_ROOT) / "colab" / "outputs")
+    return _cached_history(str(forge_dir), tuple(str(p) for p in roots))
 
 
 # ------------------------------------------------------------------ các handler
@@ -370,6 +387,10 @@ def build_tab():
                 image_index = gr.State(0)
                 btn_seed = gr.Button("🔒 Dùng seed của ảnh đã chọn")
 
+        with gr.Accordion("🗂️ Ảnh đã tạo", open=True):
+            history_panel = HistoryPanel(image_history, seed)
+        tab.wai_history_panel = history_panel
+
         btn_search.click(do_search, [query, cats, limit, allow_nsfw],
                          [results, state, note])
         query.submit(do_search, [query, cats, limit, allow_nsfw],
@@ -395,10 +416,11 @@ def build_tab():
                        js="viPromptFill")
         btn_undo.click(fn=None, inputs=None, outputs=None, js="viPromptUndo")
 
-        btn_generate.click(do_generate,
+        generation_event = btn_generate.click(do_generate,
                            [prompt_out, negative_out, size, steps, cfg_scale, sampler,
                             seed, enable_hr, hr_scale, denoise, upscaler, hr_steps, batch],
                            [gallery, gen_note, generation_state], concurrency_limit=1, concurrency_id="wai_gpu")
+        history_panel.after_generation(generation_event)
     return tab
 
 
