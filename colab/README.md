@@ -19,6 +19,8 @@ colab/
   setup_forge.sh                 script cài đặt theo từng bước (notebook gọi dần)
   make_notebook.py               script sinh ra file .ipynb ở trên
   make_tagcomplete_assets.py     sinh file tag hệ thống + bản dịch gộp cho tagcomplete
+  make_mobile_assets.py          sinh style.css + JS mobile cho extension từ prompt_lib/mobile.py
+  MOBILE.md                      bản tối ưu trình duyệt điện thoại, chia 10 mục
   prompt_builder.py              app Gradio độc lập (chạy được cả ngoài Colab)
   prompt_lib/                    thư viện lõi: tra cứu, phân nhóm, ghép prompt
     index.py                       mục lục tra cứu 2 chiều Việt <-> Anh
@@ -27,9 +29,12 @@ colab/
     editing.py                     thay Việt → Anh, giữ cú pháp/mục khác
     workflow.py                    preset, validation, metadata seed theo ảnh
     system_tags.py                 tag hệ thống WAI-Illustrious + preset tham số
+    mobile.py                      nguồn CSS/JS tối ưu điện thoại duy nhất (10 mục)
   extension/vi-prompt-builder/   extension Forge: thêm tab "Prompt VN"
     scripts/vi_prompt_tab.py
+    style.css                      TỰ SINH: CSS mobile toàn trang Forge (make_mobile_assets.py)
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
+    javascript/vi_mobile.js        TỰ SINH: bàn phím ảo/lazy ảnh cho điện thoại
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
@@ -41,6 +46,7 @@ colab/
   tests/test_forge_compat.py      10 nhóm compat trên Neo/FastAPI/Gradio (CPU)
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
+  tests/test_mobile.py           9 nhóm bản tối ưu điện thoại (stdlib + node nếu có)
   assets/                        file sinh ra khi chạy (không đưa vào git)
   outputs/                       ảnh sinh ra từ notebook (không đưa vào git)
 ```
@@ -111,6 +117,18 @@ metadata không bị sửa. Khởi động lại Forge vẫn đọc được; x�
 Người có link UI cũng xem được album. [Ô cập nhật chỉ phần mềm](INSTALL.md#bảng-ảnh-đã-tạo-107).
 App riêng có `--forge-dir`/`--history-dir` để trỏ file trên máy chạy app, không tải ảnh
 qua URL của Forge ở máy khác. Không theo symlink ra ngoài thư mục output.
+
+## 📱 Bản tối ưu cho trình duyệt điện thoại
+
+Mở link `gradio.live` bằng điện thoại sẽ tự nhận bản tối ưu (máy tính không đổi),
+chia **10 mục** trong [`MOBILE.md`](MOBILE.md): 1 viewport/vùng an toàn/chống tràn
+ngang · 2 một cột ≤900px · 3 vùng bấm ≥48px · 4 chữ 16px chống iOS zoom + tắt tự
+sửa bàn phím khi gõ tag · 5 bảng kết quả cuộn ngang, cột tag dính · 6 gallery ảnh
+dọc 1 cột ≤480px + lazy-load · 7 nút Sinh ảnh dính đáy · 8 chữ/mật độ · 9 bỏ mờ
+nền tốn GPU, giảm chuyển động · 10 focus rõ + nằm ngang. Áp dụng cho tab
+**Prompt VN**, cả txt2img/img2img gốc của Forge và app độc lập
+(`--no-mobile`/`WAI_MOBILE_OPT=0` để tắt ở app). Một nguồn
+`prompt_lib/mobile.py`; file extension sinh bằng `make_mobile_assets.py`.
 
 ## Ba cách dùng kho prompt
 
@@ -260,6 +278,7 @@ python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ t�
 python3 colab/tests/test_install_sh.py      # 98 kiểm tra bộ cài, fixture/offline
 python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
 python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV
+python3 colab/tests/test_mobile.py          # 9 nhóm tối ưu điện thoại (stdlib)
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
 python3 colab/tests/test_prompt_workflow.py # 10 nhóm CPU, không cần Gradio
 python3 colab/tests/test_notebooks.py       # 13 nhóm CPU; cần requests/Pillow (venv Forge/demo)

@@ -1,0 +1,151 @@
+/* ==========================================================================
+   Prompt VN — tối ưu trình duyệt điện thoại (10 mục, xem colab/MOBILE.md)
+   FILE TỰ SINH từ colab/prompt_lib/mobile.py bởi colab/make_mobile_assets.py
+   — KHÔNG sửa tay file đích. Mọi quy tắc (trừ nền Mục 1) nằm trong @media
+   bề rộng/cảm ứng nên màn hình máy tính không thay đổi.
+   ========================================================================== */
+
+/* ----- Mục 1 — Viewport, vùng an toàn (tai thỏ) và chống tràn ngang ----- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.gradio-container { overflow-x: clip; }
+.gradio-container * { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 900px) {
+  .gradio-container {
+    max-width: 100% !important;
+    padding-left: max(8px, env(safe-area-inset-left)) !important;
+    padding-right: max(8px, env(safe-area-inset-right)) !important;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+  }
+  /* Con của flex mà không co được (min-width mặc định = auto) là nguyên nhân
+     số 1 làm UI Gradio tràn ngang trên điện thoại. */
+  .gradio-container .wai-row-main > *, .gradio-container .wai-row-2 > * { min-width: 0 !important; }
+  .gradio-container img, .gradio-container video, .gradio-container canvas { max-width: 100%; }
+}
+
+/* ----- Mục 2 — Bố cục một cột: cột trái (tìm tag) xếp trên cột phải (dựng prompt) ----- */
+@media (max-width: 900px) {
+  .gradio-container .wai-row-main { flex-wrap: wrap !important; }
+  .gradio-container .wai-row-main > .wai-col-main {
+    flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important;
+  }
+}
+@media (max-width: 640px) {
+  /* Hàng đôi (hai slider, hai dropdown...) cũng xếp dọc để kéo slider bằng
+     ngón tay còn đủ chính xác. */
+  .gradio-container .wai-row-2 { flex-wrap: wrap !important; }
+  .gradio-container .wai-row-2 > * { flex: 1 1 100% !important; }
+}
+
+/* ----- Mục 3 — Cảm ứng: vùng bấm >=48px, núm slider to, bỏ trễ chạm/zoom hai lần ----- */
+@media (pointer: coarse) {
+  .gradio-container button, .gradio-container input, .gradio-container select,
+  .gradio-container textarea, .gradio-container a { touch-action: manipulation; }
+  .gradio-container button:not(.thumbnail-item) { min-height: 48px; padding-top: 10px; padding-bottom: 10px; }
+  .gradio-container .gallery button, .gradio-container button.thumbnail-item { min-height: 0; padding: 0; }
+  .gradio-container .tab-nav button, .gradio-container [role="tab"] { min-height: 48px; padding: 10px 14px; }
+  .gradio-container select { min-height: 48px; }
+  .gradio-container input[type="range"] { height: 36px; }
+  .gradio-container input[type="range"]::-webkit-slider-thumb { width: 28px; height: 28px; }
+  .gradio-container input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; }
+  .gradio-container input[type="checkbox"], .gradio-container input[type="radio"] { width: 22px; height: 22px; flex: none; }
+  /* Mục chọn trong dropdown Gradio */
+  .gradio-container ul.options li, .gradio-container .options li { padding: 12px 10px; min-height: 44px; }
+  /* Tiêu đề accordion (vd "Ảnh đã tạo") cũng là vùng bấm */
+  .gradio-container .accordion > button, .gradio-container .accordion .label-wrap { min-height: 48px; }
+}
+
+/* ----- Mục 4 — Nhập liệu: chữ 16px chống iOS tự phóng to, ô prompt không chiếm hết màn hình ----- */
+@media (max-width: 900px) {
+  /* iOS Safari tự zoom khi ô nhập có chữ <16px rồi không thu lại; 16px là
+     ngưỡng tắt hành vi đó mà không cần chặn quyền zoom của người dùng. */
+  .gradio-container input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  .gradio-container textarea, .gradio-container select { font-size: 16px !important; line-height: 1.45; }
+  .gradio-container textarea { max-height: 45dvh; }
+  .gradio-container .wai-prompt-box textarea { overflow-y: auto; }
+}
+
+/* ----- Mục 5 — Bảng kết quả & danh sách gợi ý tag: cuộn ngang có kiểm soát, dòng đủ cao để bấm ----- */
+@media (max-width: 900px) {
+  .gradio-container .wai-results .table-wrap, .gradio-container .wai-history-table .table-wrap,
+  .gradio-container .wai-group-table .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Bảng giữ bề rộng đọc được rồi cuộn ngang, thay vì bị ép cho chữ vỡ vụn. */
+  .gradio-container .wai-results table { min-width: 540px; }
+  .gradio-container .wai-history-table table { min-width: 520px; }
+  .gradio-container .wai-results td, .gradio-container .wai-results th,
+  .gradio-container .wai-history-table td, .gradio-container .wai-history-table th { padding: 12px 10px; font-size: 14px; }
+  /* Cột tag dính trái để cuộn xem nghĩa Việt mà không lạc mất tag. */
+  .gradio-container .wai-results td:first-child, .gradio-container .wai-results th:first-child {
+    position: sticky; left: 0; background: var(--block-background-fill, #fff); font-weight: 600;
+  }
+  /* Bảng trong Markdown (tab hướng dẫn, ghi chú) cũng cuộn ngang thay vì tràn. */
+  .gradio-container .prose table, .gradio-container .markdown table, .gradio-container .md table {
+    display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%;
+  }
+  /* Hộp gợi ý của tagcomplete trong txt2img/img2img của Forge (best-effort:
+     tên class do extension đó quyết định, không khớp thì vô hại). */
+  .autocompleteResults, [class*="autocomplete"] ul { max-height: 45dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+}
+@media (pointer: coarse) {
+  .autocompleteResults li, [class*="autocomplete"] li { padding: 12px 10px; min-height: 44px; }
+}
+@media (max-width: 480px) {
+  .gradio-container .wai-results table, .gradio-container .wai-history-table table { min-width: 460px; }
+}
+
+/* ----- Mục 6 — Ảnh & gallery: ảnh dọc xem toàn bề rộng, thumbnail lịch sử 3/2 cột ----- */
+@media (max-width: 900px) {
+  .gradio-container .wai-gallery { height: auto !important; max-height: 80dvh; }
+  .gradio-container .wai-result-gallery .grid,
+  .gradio-container .wai-result-gallery [class*="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .gradio-container .wai-history-gallery .grid,
+  .gradio-container .wai-history-gallery [class*="grid"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .gradio-container .wai-history-original img { max-height: 70dvh; object-fit: contain; }
+}
+@media (max-width: 480px) {
+  /* Ảnh kết quả thường là ảnh dọc 832x1216: 1 cột mới nhìn rõ mặt/tay. */
+  .gradio-container .wai-result-gallery .grid,
+  .gradio-container .wai-result-gallery [class*="grid"] { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+  .gradio-container .wai-history-gallery .grid,
+  .gradio-container .wai-history-gallery [class*="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+/* ----- Mục 7 — Nút hành động chính dính đáy (kèm vùng an toàn), Generate của Forge dễ bấm ----- */
+@media (max-width: 900px) {
+  .gradio-container button.wai-build-action, .gradio-container button.wai-generate-action { width: 100%; min-height: 52px; font-size: 16px; }
+  /* Dính trong lúc cuộn xem kết quả bên dưới; sticky (không fixed) nên không
+     che nội dung khi bàn phím ảo mở và tự nhả ở cuối cột. */
+  .gradio-container button.wai-generate-action {
+    position: sticky; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 30;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  }
+  /* Tab gốc của Forge: id do Forge đặt, chỉ khớp trong trang Forge. */
+  #txt2img_generate, #img2img_generate { min-height: 52px; }
+  #txt2img_prompt textarea, #txt2img_neg_prompt textarea,
+  #img2img_prompt textarea, #img2img_neg_prompt textarea { font-size: 16px !important; }
+}
+
+/* ----- Mục 8 — Chữ & mật độ: tiêu đề gọn lại, prompt/tag dài tự xuống dòng để chép ----- */
+@media (max-width: 900px) {
+  .gradio-container h1 { font-size: 22px; line-height: 1.3; }
+  .gradio-container h2 { font-size: 19px; line-height: 1.35; }
+  .gradio-container h3 { font-size: 16px; line-height: 1.4; }
+  .gradio-container .prose, .gradio-container .markdown, .gradio-container .md { font-size: 15px; }
+  .gradio-container code { overflow-wrap: anywhere; word-break: break-word; }
+}
+
+/* ----- Mục 9 — Hiệu năng điện thoại yếu: tắt mờ nền đắt tiền, tôn trọng giảm chuyển động ----- */
+@media (max-width: 900px) {
+  .gradio-container * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gradio-container *, .gradio-container *::before, .gradio-container *::after {
+    animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+  }
+}
+
+/* ----- Mục 10 — Khả dụng: vòng focus rõ khi dùng bàn phím/phím chuyển, chế độ nằm ngang ----- */
+.gradio-container :focus-visible { outline: 3px solid var(--color-accent, #2563eb); outline-offset: 2px; }
+@media (max-width: 900px) and (orientation: landscape) {
+  .gradio-container .wai-gallery { max-height: 85dvh; }
+  .gradio-container textarea { max-height: 35dvh; }
+}

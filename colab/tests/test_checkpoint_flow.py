@@ -382,7 +382,7 @@ repo_git() {
     cp "$PROJECT_SOURCE/colab/checkpoint_tools.py" "$PROJECT_SOURCE/colab/diagnostics.py" "$PROJECT_SOURCE/colab/forge_compat.py" "$REPO_DIR/colab/"
     cp "$PROJECT_SOURCE/colab/setup_forge.sh" "$REPO_DIR/colab/setup_forge.sh"
     cp "$PROJECT_SOURCE/colab/prompt_lib/editing.py" "$PROJECT_SOURCE/colab/prompt_lib/workflow.py" "$REPO_DIR/colab/prompt_lib/"
-    cp "$PROJECT_SOURCE/colab/prompt_lib/history.py" "$PROJECT_SOURCE/colab/prompt_lib/history_ui.py" "$REPO_DIR/colab/prompt_lib/"
+    cp "$PROJECT_SOURCE/colab/prompt_lib/history.py" "$PROJECT_SOURCE/colab/prompt_lib/history_ui.py" "$PROJECT_SOURCE/colab/prompt_lib/mobile.py" "$REPO_DIR/colab/prompt_lib/"
   fi
   return 0
 }
@@ -393,6 +393,7 @@ stage_repo
                            env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue((repo / "colab/checkpoint_tools.py").exists())
+        self.assertTrue((repo / "colab/prompt_lib/mobile.py").exists())
         self.assertIn("fast-forward", r.stdout)
 
 

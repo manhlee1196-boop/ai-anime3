@@ -438,7 +438,9 @@ stage_extras() {
   local source_file
   for source_file in colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
                      colab/prompt_lib/history.py colab/prompt_lib/history_ui.py \
-                     colab/extension/vi-prompt-builder/javascript/vi_prompt.js; do
+                     colab/prompt_lib/mobile.py colab/extension/vi-prompt-builder/style.css \
+                     colab/extension/vi-prompt-builder/javascript/vi_prompt.js \
+                     colab/extension/vi-prompt-builder/javascript/vi_mobile.js; do
     [[ -s "$REPO_DIR/$source_file" ]] || die "Repo thiếu $source_file. Cập nhật cùng nhánh trước; chưa thay đổi extension đang có."
   done
   ensure_forge_compat

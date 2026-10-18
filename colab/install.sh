@@ -346,7 +346,7 @@ repo_ready() {
   for f in danbooru_e621.csv danbooru_e621_nounderscore.csv danbooru_e621_vi.csv \
     danbooru_e621_vi_translation.csv colab/setup_forge.sh colab/prompt_lib/index.py \
     colab/prompt_lib/editing.py colab/prompt_lib/workflow.py \
-    colab/prompt_lib/history.py colab/prompt_lib/history_ui.py \
+    colab/prompt_lib/history.py colab/prompt_lib/history_ui.py colab/prompt_lib/mobile.py \
     colab/checkpoint_tools.py colab/diagnostics.py colab/forge_compat.py; do
     [[ -s "$REPO_DIR/$f" ]] || return 1
   done
@@ -357,7 +357,9 @@ extras_ready() {
            a1111-sd-webui-tagcomplete/tags/wai-illustrious-system-tags.csv \
            a1111-sd-webui-tagcomplete/tags/danbooru_e621_vi_translation_wai.csv \
            vi-prompt-builder/scripts/vi_prompt_tab.py \
-           vi-prompt-builder/javascript/vi_prompt.js; do
+           vi-prompt-builder/style.css \
+           vi-prompt-builder/javascript/vi_prompt.js \
+           vi-prompt-builder/javascript/vi_mobile.js; do
     [[ -s "$ext/$f" ]] || return 1
   done
   [[ -s "$FORGE_DIR/config.json" && -s "$FORGE_DIR/styles.csv" ]]

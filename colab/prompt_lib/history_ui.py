@@ -17,23 +17,25 @@ class HistoryPanel:
             "Chỉ mục nằm trên đĩa, không giữ toàn bộ ảnh trong RAM. "
             "Người có link UI cũng có thể xem album này."
         )
-        with gr.Row():
+        with gr.Row(elem_classes=["wai-row-2"]):
             self.refresh_button = gr.Button("🔄 Làm mới ảnh đã tạo", variant="primary")
             self.previous_button = gr.Button("← Trang trước")
             self.next_button = gr.Button("Trang sau →")
             self.page_size = gr.Dropdown([12, 24], value=12, label="Ảnh mỗi trang", allow_custom_value=False)
         self.note = gr.Markdown("Chưa đọc lịch sử. Bấm **Làm mới**; không sinh thêm ảnh.")
         self.gallery = gr.Gallery(label="Ảnh đã tạo — chọn thumbnail", columns=4, height=300,
-                                  object_fit="contain", allow_preview=False, show_download_button=False)
+                                  object_fit="contain", allow_preview=False, show_download_button=False,
+                                  elem_classes=["wai-gallery", "wai-history-gallery"])
         self.table = gr.Dataframe(headers=["Thời gian lưu (UTC+7)", "Tên ảnh", "Seed", "Kích thước", "Dung lượng"],
-                                  datatype="str", type="array", interactive=False, height=220,
+                                  datatype="str", type="array", interactive=False, height=220, wrap=True,
+                                  elem_classes=["wai-history-table"],
                                   label="Bảng ảnh đã tạo — chọn một dòng")
         self.ids = gr.State([])
         self.page_number = gr.State(1)
         self.selected_id = gr.State(None)
-        with gr.Row():
+        with gr.Row(elem_classes=["wai-row-2"]):
             self.original = gr.Image(label="Ảnh gốc đã chọn", type="filepath", format="png",
-                                     interactive=False, height=420)
+                                     interactive=False, height=420, elem_classes=["wai-history-original"])
             with gr.Column():
                 self.download = gr.File(label="Tải ảnh gốc (giữ metadata)", interactive=False)
                 self.selected_note = gr.Markdown("Chưa chọn ảnh trong lịch sử.")

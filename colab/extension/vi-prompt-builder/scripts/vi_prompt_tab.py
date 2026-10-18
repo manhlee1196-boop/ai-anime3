@@ -276,6 +276,9 @@ LOST_NOTE = (
 
 
 # ------------------------------------------------------------------ dựng tab
+# Tối ưu điện thoại: các class wai-* dưới đây là móc cho style.css (Forge tự
+# nạp, sinh từ prompt_lib/mobile.py — xem colab/MOBILE.md). Blocks con trong
+# tab Forge không nhận css= riêng nên KHÔNG truyền css/head ở đây.
 def build_tab():
     with gr.Blocks(**BLOCKS_THEME) as tab:
         if INDEX is None:
@@ -292,16 +295,17 @@ def build_tab():
             f"CFG {WAI_DEFAULTS['cfg_scale']} · {WAI_DEFAULTS['steps']} bước."
         )
 
-        with gr.Row():
-            with gr.Column(scale=5):
+        with gr.Row(elem_classes=["wai-row-main"]):
+            with gr.Column(scale=5, min_width=0, elem_classes=["wai-col-main"]):
                 query = gr.Textbox(label="Tìm tag (tiếng Việt, không cần gõ dấu)",
+                                   elem_classes=["wai-search"],
                                    placeholder="áo dài, tóc dài, đồng phục học sinh, ao dai…")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     cats = gr.Dropdown(list(CATEGORY_NAMES.values()),
                                        label="Giới hạn category", multiselect=True)
                     limit = gr.Slider(5, 60, value=20, step=5, label="Số kết quả")
                 allow_nsfw = gr.Checkbox(label="Hiện cả tag 18+", value=False)
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     btn_search = gr.Button("🔎 Tìm", variant="primary")
                     group_box = gr.Dropdown([GROUP_LABELS[g] for g in BROWSE_GROUPS],
                                             label="…hoặc duyệt nhóm",
@@ -309,22 +313,23 @@ def build_tab():
                     btn_browse = gr.Button("📚 Duyệt")
                 results = gr.Dataframe(
                     headers=["tag", "nghĩa tiếng Việt", "category", "số ảnh", "nhóm"],
-                    interactive=False, label="BẤM VÀO MỘT DÒNG để chọn/thay tag")
+                    interactive=False, wrap=True, elem_classes=["wai-results"],
+                    label="BẤM VÀO MỘT DÒNG để chọn/thay tag")
                 note = gr.Markdown("")
 
-                selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3)
+                selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3, elem_classes=["wai-prompt-box"])
                 btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     btn_random = gr.Button("🎲 Ngẫu nhiên")
                     rnd_n = gr.Slider(4, 20, value=8, step=1, label="Số tag")
                     btn_clear = gr.Button("🗑️ Xoá")
                 picked = gr.Markdown("")
             state = gr.State([])
 
-            with gr.Column(scale=5):
+            with gr.Column(scale=5, min_width=0, elem_classes=["wai-col-main"]):
                 description = gr.Textbox(label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
                                          placeholder="A girl in an ao dai under cherry blossoms")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     rating = gr.Dropdown(RATING_CHOICES, value=RATING_CHOICES[0],
                                          label="Mức phân loại")
                     quality = gr.Dropdown(list(QUALITY_PRESETS),
@@ -333,17 +338,18 @@ def build_tab():
                 neg_preset = gr.Dropdown(list(NEGATIVE_PRESETS),
                                          value="WAI khuyến nghị (ngắn)",
                                          label="Negative mẫu")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     artist_prefix = gr.Dropdown(["", "artist:", "@"], value="",
                                                 label="Tiền tố hoạ sĩ")
                     extra_pos = gr.Textbox(label="Thêm positive")
                     extra_neg = gr.Textbox(label="Thêm negative")
 
-                btn_build = gr.Button("🪄 Dựng prompt", variant="primary")
-                prompt_out = gr.Textbox(label="Positive prompt", lines=4, **COPY_BTN)
-                negative_out = gr.Textbox(label="Negative prompt", lines=3, **COPY_BTN)
+                btn_build = gr.Button("🪄 Dựng prompt", variant="primary", elem_classes=["wai-build-action"])
+                prompt_out = gr.Textbox(label="Positive prompt", lines=4, elem_classes=["wai-prompt-box"], **COPY_BTN)
+                negative_out = gr.Textbox(label="Negative prompt", lines=3, elem_classes=["wai-prompt-box"], **COPY_BTN)
                 build_note = gr.Markdown("")
-                group_table = gr.Dataframe(headers=["Nhóm", "Tag"], interactive=False,
+                group_table = gr.Dataframe(headers=["Nhóm", "Tag"], interactive=False, wrap=True,
+                                           elem_classes=["wai-group-table"],
                                            label="Cấu trúc prompt")
                 vi_preview = gr.Textbox(label="Xem trước tiếng Việt", lines=5)
 
@@ -356,20 +362,20 @@ def build_tab():
                 gr.Markdown("### Nháp → Chuẩn → Hoàn thiện (API)")
                 mode = gr.Dropdown(list(WORKFLOW_PRESETS), value=DEFAULT_WORKFLOW, label="Quy trình")
                 mode_note = gr.Markdown(workflow_note(DEFAULT_WORKFLOW))
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     size = gr.Dropdown(list(SIZE_PRESETS),
                                        value="Dọc cao 832×1216",
                                        label="Kích thước")
                     sampler = gr.Dropdown(
                         SAMPLERS,
                         value=WAI_DEFAULTS["sampler_name"], label="Sampler")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
                                       label="Steps (theo biến thể model)")
                     cfg_scale = gr.Slider(0.5, 12, value=WAI_DEFAULTS["cfg_scale"], step=0.5,
                                           label="CFG (theo biến thể model)")
                     seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)", precision=0)
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     enable_hr = gr.Checkbox(label="Hires. fix (sau khi chọn ảnh/seed)", value=False)
                     hr_scale = gr.Slider(1.0, 2.0, value=WAI_DEFAULTS["hr_scale"],
                                          step=0.05, label="Hires scale")
@@ -377,11 +383,12 @@ def build_tab():
                                         step=0.05, label="Denoising")
                     upscaler = gr.Dropdown(UPSCALERS, value=WAI_DEFAULTS["hr_upscaler"],
                                            label="Upscaler")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     hr_steps = gr.Slider(0, 40, value=WAI_DEFAULTS["hr_second_pass_steps"], step=1, label="Hires steps")
                     batch = gr.Slider(1, 4, value=1, step=1, label="Số ảnh tuần tự (batch=1)")
-                btn_generate = gr.Button("🖼️ Sinh ảnh", variant="primary")
-                gallery = gr.Gallery(label="Kết quả", columns=2, height=480)
+                btn_generate = gr.Button("🖼️ Sinh ảnh", variant="primary", elem_classes=["wai-generate-action"])
+                gallery = gr.Gallery(label="Kết quả", columns=2, height=480,
+                                     elem_classes=["wai-gallery", "wai-result-gallery"])
                 gen_note = gr.Markdown("")
                 generation_state = gr.State({})
                 image_index = gr.State(0)

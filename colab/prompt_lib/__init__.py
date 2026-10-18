@@ -16,6 +16,7 @@ from .builder import PromptBuilder, parse_pieces, render
 from .groups import BROWSE_GROUPS, GROUP_LABELS, GROUP_ORDER, classify, strip_namespace
 from .index import (CATEGORY_NAMES, TagIndex, TagResult, find_repo_root, get_index,
                     norm, unaccent)
+from .mobile import mobile_css, mobile_head
 from .system_tags import (ACTIVE_PROFILE_ID, MODEL_PROFILES, NEGATIVE_PRESETS,
                           QUALITY_PRESETS, RATINGS, SIZE_PRESETS, SYSTEM_TAGS, UPSCALERS,
                           WAI_DEFAULTS, apply_model_profile, pick_upscaler)
@@ -28,6 +29,7 @@ __all__ = [
     "SYSTEM_TAGS", "QUALITY_PRESETS", "NEGATIVE_PRESETS", "RATINGS",
     "SIZE_PRESETS", "UPSCALERS", "WAI_DEFAULTS", "pick_upscaler",
     "MODEL_PROFILES", "ACTIVE_PROFILE_ID", "apply_model_profile",
+    "mobile_css", "mobile_head",
 ]
 
 __version__ = "1.2.0"

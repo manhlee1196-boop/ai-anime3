@@ -35,6 +35,7 @@ from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY
 from prompt_lib.api import decode_generation_response
 from prompt_lib.history import ImageHistory, forge_output_roots
 from prompt_lib.history_ui import HistoryPanel
+from prompt_lib.mobile import mobile_css, mobile_head
 from prompt_lib.editing import replace_or_append, convert_tags
 from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                  workflow_settings, workflow_note, validate_generation,
@@ -59,7 +60,7 @@ def profile_note():
         f"(mặc định CFG {WAI_DEFAULTS['cfg_scale']}, steps {WAI_DEFAULTS['steps']}, "
         f"{WAI_DEFAULTS['sampler_name']}, clip skip {WAI_DEFAULTS['clip_skip']})._\n"
     )
-CFG = {"forge_url": "http://127.0.0.1:7860", "demo": False,
+CFG = {"forge_url": "http://127.0.0.1:7860", "demo": False, "mobile": True,
        "forge_dir": os.environ.get("FORGE_DIR", "/content/sd-webui-forge-neo"), "history_dir": None}
 
 # --- Lớp tương thích Gradio -------------------------------------------------
@@ -70,6 +71,19 @@ GRADIO_MAJOR = int(str(getattr(gr, "__version__", "4")).split(".")[0] or 4)
 COPY_BTN = {"show_copy_button": True} if GRADIO_MAJOR < 6 else {}
 BLOCKS_THEME = {"theme": gr.themes.Soft()} if GRADIO_MAJOR < 6 else {}
 LAUNCH_THEME = {"theme": gr.themes.Soft()} if GRADIO_MAJOR >= 6 else {}
+
+
+def _mobile_kwargs(where):
+    """CSS/JS tối ưu điện thoại (xem prompt_lib/mobile.py + MOBILE.md).
+
+    Gradio <6 nhận css/head ở Blocks(); Gradio >=6 chuyển sang launch() —
+    cùng chỗ với theme ở trên. Tắt bằng --no-mobile hoặc WAI_MOBILE_OPT=0.
+    """
+    if not CFG.get("mobile", True):
+        return {}
+    kwargs = {"css": mobile_css(), "head": mobile_head()}
+    return kwargs if (where == "blocks") == (GRADIO_MAJOR < 6) else {}
+
 
 RESULT_HEADERS = ["tag (tiếng Anh)", "nghĩa tiếng Việt", "category", "số ảnh", "nhóm"]
 RATING_CHOICES = [r["label"] for r in RATINGS]
@@ -364,7 +378,8 @@ def build_ui():
     group_choices = [GROUP_LABELS[g] for g in BROWSE_GROUPS]
 
     with gr.Blocks(title="Bộ dựng prompt tiếng Việt — WAI-Illustrious v17",
-                   **BLOCKS_THEME) as demo:
+                   **BLOCKS_THEME, **_mobile_kwargs("blocks")) as demo:
+        demo.wai_mobile = bool(CFG.get("mobile", True))
         gr.Markdown(
             "# 🎨 Bộ dựng prompt tiếng Việt cho WAI-Illustrious v17\n"
             f"Nguồn nhắc: **{len(INDEX):,} tag** Danbooru + e621, trong đó "
@@ -377,55 +392,57 @@ def build_ui():
         with gr.Tabs():
             # ------------------------------------------------ TAB 1: dựng prompt
             with gr.Tab("🧩 Dựng prompt"):
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     url_box = gr.Textbox(label="Địa chỉ Forge (API)",
                                          value=CFG["forge_url"], scale=4)
                     btn_check = gr.Button("🔌 Kiểm tra kết nối", scale=1)
                 status = gr.Markdown("Chưa kiểm tra kết nối.")
 
-                with gr.Row():
-                    with gr.Column(scale=5):
+                with gr.Row(elem_classes=["wai-row-main"]):
+                    with gr.Column(scale=5, min_width=0, elem_classes=["wai-col-main"]):
                         gr.Markdown("### 1. Tìm tag")
                         query = gr.Textbox(label="Gõ tiếng Việt hoặc tiếng Anh",
+                                           elem_classes=["wai-search"],
                                            placeholder="áo dài, tóc dài, đồng phục học sinh, "
                                                        "cầm kiếm, hoa anh đào, ao dai...")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             cats = gr.Dropdown(cat_choices, label="Giới hạn category",
                                                multiselect=True)
                             limit = gr.Slider(5, 60, value=20, step=5, label="Số kết quả")
                         allow_nsfw = gr.Checkbox(label="Hiện cả tag 18+ khi tìm/duyệt",
                                                  value=False)
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             btn_search = gr.Button("🔎 Tìm", variant="primary")
                             group_box = gr.Dropdown(group_choices, label="…hoặc duyệt nhóm",
                                                     value=group_choices[0])
                             btn_browse = gr.Button("📚 Duyệt")
-                        results = gr.Dataframe(headers=RESULT_HEADERS, interactive=False,
+                        results = gr.Dataframe(headers=RESULT_HEADERS, interactive=False, wrap=True,
+                                               elem_classes=["wai-results"],
                                                label="Kết quả — BẤM VÀO MỘT DÒNG để chọn/thay tag")
                         note = gr.Markdown("")
 
                         gr.Markdown("### 2. Tag đã chọn (sửa tay được)")
-                        selected = gr.Textbox(label="Danh sách tag", lines=3,
+                        selected = gr.Textbox(label="Danh sách tag", lines=3, elem_classes=["wai-prompt-box"],
                                               placeholder="1girl, ao_dai, long_hair, "
                                                           "holding_sword, cherry_blossoms")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             btn_random = gr.Button("🎲 Ngẫu nhiên")
                             rnd_n = gr.Slider(4, 20, value=8, step=1, label="Số tag")
                             rnd_seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)",
                                                  precision=0)
                         btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             btn_drop = gr.Button("↩️ Bỏ tag cuối")
                             btn_reset = gr.Button("🗑️ Xoá hết")
                         picked = gr.Markdown("")
                     state = gr.State([])
 
-                    with gr.Column(scale=5):
+                    with gr.Column(scale=5, min_width=0, elem_classes=["wai-col-main"]):
                         gr.Markdown("### 3. Tuỳ chọn prompt")
                         description = gr.Textbox(
                             label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
                             placeholder="A girl in an ao dai, standing under cherry blossoms")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             rating = gr.Dropdown(RATING_CHOICES, value=RATING_CHOICES[0],
                                                  label="Mức phân loại nội dung")
                             quality = gr.Dropdown(list(QUALITY_PRESETS), 
@@ -434,61 +451,62 @@ def build_ui():
                         neg_preset = gr.Dropdown(list(NEGATIVE_PRESETS),
                                                  value="WAI khuyến nghị (ngắn)",
                                                  label="Negative mẫu")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             artist_prefix = gr.Dropdown(
                                 ["", "artist:", "@"], value="",
                                 label="Tiền tố tag hoạ sĩ")
                             use_break = gr.Checkbox(label="Chèn BREAK giữa các nhóm",
                                                     value=False)
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             extra_pos = gr.Textbox(label="Thêm vào positive (tuỳ ý)")
                             extra_neg = gr.Textbox(label="Thêm vào negative (tuỳ ý)")
 
                         gr.Markdown("### 4. Nháp → Chuẩn → Hoàn thiện")
                         mode = gr.Dropdown(list(WORKFLOW_PRESETS), value=DEFAULT_WORKFLOW, label="Quy trình")
                         mode_note = gr.Markdown(workflow_note(DEFAULT_WORKFLOW))
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             size = gr.Dropdown(list(SIZE_PRESETS),
                                                value="Dọc cao 832×1216",
                                                label="Kích thước")
                             sampler = gr.Dropdown(
                                 SAMPLERS,
                                 value=WAI_DEFAULTS["sampler_name"], label="Sampler")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
                                               label="Số bước (thẻ model: 15–30)")
                             cfg_scale = gr.Slider(0.5, 12, value=WAI_DEFAULTS["cfg_scale"],
                                                   step=0.5, label="CFG (theo biến thể model)")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)",
                                              precision=0)
                             batch = gr.Slider(1, 4, value=1, step=1, label="Số ảnh tuần tự (batch=1)")
                         enable_hr = gr.Checkbox(label="Hires. fix (chỉ bật sau khi chọn ảnh/seed)", value=False)
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             hr_scale = gr.Slider(1.0, 2.0, value=WAI_DEFAULTS["hr_scale"],
                                                  step=0.05, label="Hires scale")
                             hr_steps = gr.Slider(0, 40, value=WAI_DEFAULTS["hr_second_pass_steps"],
                                                  step=1, label="Hires steps")
                             denoise = gr.Slider(0.1, 0.8, value=WAI_DEFAULTS["denoising_strength"],
                                                 step=0.05, label="Denoising (0.35–0.5)")
-                        with gr.Row():
+                        with gr.Row(elem_classes=["wai-row-2"]):
                             upscaler = gr.Dropdown(UPSCALERS, value=WAI_DEFAULTS["hr_upscaler"],
                                                    label="Upscaler", scale=4)
                             btn_upscalers = gr.Button("🔄 Nạp từ Forge", scale=1)
                         upscaler_note = gr.Markdown("")
 
-                        btn_build = gr.Button("🪄 Dựng prompt", variant="primary")
+                        btn_build = gr.Button("🪄 Dựng prompt", variant="primary", elem_classes=["wai-build-action"])
                         prompt_out = gr.Textbox(label="Positive prompt (dán vào Forge)",
-                                                lines=4, **COPY_BTN)
+                                                lines=4, elem_classes=["wai-prompt-box"], **COPY_BTN)
                         negative_out = gr.Textbox(label="Negative prompt", lines=3,
-                                                  **COPY_BTN)
+                                                  elem_classes=["wai-prompt-box"], **COPY_BTN)
                         build_note = gr.Markdown("")
                         group_table = gr.Dataframe(headers=["Nhóm", "Tag"],
-                                                   interactive=False,
+                                                   interactive=False, wrap=True, elem_classes=["wai-group-table"],
                                                    label="Prompt được xếp nhóm thế nào")
                         vi_preview = gr.Textbox(label="Xem trước bằng tiếng Việt", lines=6)
-                        btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary")
-                        gallery = gr.Gallery(label="Kết quả", columns=2, height=520)
+                        btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary", elem_classes=["wai-generate-action"])
+                        gallery = gr.Gallery(label="Kết quả", columns=2, height=520,
+                                             elem_classes=["wai-gallery", "wai-result-gallery"])
                         gen_note = gr.Markdown("")
                         generation_state = gr.State({})
                         image_index = gr.State(0)
@@ -499,13 +517,13 @@ def build_ui():
                 gr.Markdown("Dán một prompt tiếng Anh (từ Forge, Civitai, hay chỗ khác) "
                             "để xem nghĩa tiếng Việt của từng tag, tra từ chính kho "
                             f"{INDEX.stats()['có_nghĩa_tiếng_việt']:,} bản dịch.")
-                with gr.Row():
-                    in_prompt = gr.Textbox(label="Prompt tiếng Anh", lines=6,
+                with gr.Row(elem_classes=["wai-row-2"]):
+                    in_prompt = gr.Textbox(label="Prompt tiếng Anh", lines=6, elem_classes=["wai-prompt-box"],
                                            placeholder="masterpiece, best quality, 1girl, "
                                                        "long_hair, school_uniform, "
                                                        "cherry_blossoms, from_behind")
                     out_explain = gr.Markdown("### Nghĩa tiếng Việt\n_(chưa có gì)_")
-                with gr.Row():
+                with gr.Row(elem_classes=["wai-row-2"]):
                     btn_explain = gr.Button("🔍 Dịch", variant="primary")
                     out_tags = gr.Textbox(label="Chỉ lấy danh sách tag", lines=3,
                                           **COPY_BTN)
@@ -637,10 +655,14 @@ def main():
     parser.add_argument("--share", action="store_true", help="tạo link public gradio.live")
     parser.add_argument("--demo", action="store_true",
                         help="không gọi Forge (chỉ dựng prompt) — dùng để xem thử giao diện")
+    parser.add_argument("--mobile", action=argparse.BooleanOptionalAction,
+                        default=os.environ.get("WAI_MOBILE_OPT", "1") != "0",
+                        help="bản tối ưu trình duyệt điện thoại (mặc định bật; --no-mobile để tắt)")
     args = parser.parse_args()
 
     CFG["forge_url"] = args.forge_url
     CFG["demo"] = args.demo
+    CFG["mobile"] = args.mobile
     CFG["forge_dir"] = args.forge_dir
     CFG["history_dir"] = args.history_dir
 
@@ -659,7 +681,7 @@ def main():
     demo = build_ui()
     demo.queue(default_concurrency_limit=2).launch(
         server_name=args.host, server_port=args.port, share=args.share,
-        show_error=True, prevent_thread_lock=False, **LAUNCH_THEME)
+        show_error=True, prevent_thread_lock=False, **LAUNCH_THEME, **_mobile_kwargs("launch"))
 
 
 if __name__ == "__main__":

@@ -439,7 +439,7 @@ namespace["verify_version"]()
     (repo / "colab/extension/vi-prompt-builder/scripts").mkdir(parents=True)
     (repo / "danbooru_e621.csv").write_text("fixture,0,100,\n")
     (repo / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py").write_text("# fixture\n")
-    for name in ("prompt_lib/editing.py", "prompt_lib/workflow.py", "prompt_lib/history.py", "prompt_lib/history_ui.py", "extension/vi-prompt-builder/javascript/vi_prompt.js"):
+    for name in ("prompt_lib/editing.py", "prompt_lib/workflow.py", "prompt_lib/history.py", "prompt_lib/history_ui.py", "prompt_lib/mobile.py", "extension/vi-prompt-builder/style.css", "extension/vi-prompt-builder/javascript/vi_prompt.js", "extension/vi-prompt-builder/javascript/vi_mobile.js"):
         path = repo / "colab" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# fixture\n")
@@ -463,6 +463,11 @@ namespace["verify_version"]()
     source_js = repo / "colab/extension/vi-prompt-builder/javascript/vi_prompt.js"
     check("Stage extras chép cả adapter JS và marker repo", installed_js.read_bytes() == source_js.read_bytes()
           and (forge / "extensions/vi-prompt-builder/.repo_root").read_text().strip() == str(repo))
+    check("Stage extras chép cả CSS/JS tối ưu điện thoại",
+          (forge / "extensions/vi-prompt-builder/style.css").read_bytes()
+          == (repo / "colab/extension/vi-prompt-builder/style.css").read_bytes()
+          and (forge / "extensions/vi-prompt-builder/javascript/vi_mobile.js").read_bytes()
+          == (repo / "colab/extension/vi-prompt-builder/javascript/vi_mobile.js").read_bytes())
     before = cfg.read_bytes(), installed_js.read_bytes()
     for missing in ("history.py", "history_ui.py"):
         source = repo / "colab/prompt_lib" / missing
@@ -492,7 +497,7 @@ def test_lifecycle(tmp):
     for f in ("danbooru_e621.csv", "danbooru_e621_nounderscore.csv", "danbooru_e621_vi.csv",
               "danbooru_e621_vi_translation.csv", "colab/prompt_lib/index.py",
               "colab/prompt_lib/editing.py", "colab/prompt_lib/workflow.py",
-              "colab/prompt_lib/history.py", "colab/prompt_lib/history_ui.py"):
+              "colab/prompt_lib/history.py", "colab/prompt_lib/history_ui.py", "colab/prompt_lib/mobile.py"):
         p = repo / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("fixture\n")
     compat_fixture(forge)
     import forge_compat
@@ -541,6 +546,8 @@ case "$1" in
     for f in danbooru_e621.csv wai-illustrious-system-tags.csv danbooru_e621_vi_translation_wai.csv; do echo fixture > "$d/$f"; done
     echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/scripts/vi_prompt_tab.py"
     echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/javascript/vi_prompt.js"
+    echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/javascript/vi_mobile.js"
+    echo fixture > "$FORGE_DIR/extensions/vi-prompt-builder/style.css"
     echo style > "$FORGE_DIR/styles.csv"
     echo '{"tac_tagFile":"danbooru_e621.csv","tac_translation.translationFile":"danbooru_e621_vi_translation_wai.csv","tac_translation.searchByTranslation":true,"tac_translation.oldFormat":false}' > "$FORGE_DIR/config.json"
     echo "fixture credential: ${CIVITAI_TOKEN:-}; ?token=${CIVITAI_TOKEN:-}" ;;
@@ -577,6 +584,10 @@ esac
         missing_js.unlink(); trace.write_text("")
         r = cli(base, env, install)
         check("Marker cũ nhưng adapter JS mất → tự cắm lại extras", r.returncode == 0 and missing_js.exists() and "extras" in trace.read_text(), r.stdout + r.stderr)
+        missing_css = forge / "extensions/vi-prompt-builder/style.css"
+        missing_css.unlink(); trace.write_text("")
+        r = cli(base, env, install)
+        check("Marker cũ nhưng CSS điện thoại mất → tự cắm lại extras", r.returncode == 0 and missing_css.exists() and "extras" in trace.read_text(), r.stdout + r.stderr)
         trace.write_text("")
         r = cli(["--model", "fp8", "--only", "model", "--model-url", url, "--model-sha", SHA, "--no-launch"], env, install)
         check("Đổi FP8 không bỏ qua stage model bởi marker FP16", r.returncode == 0 and trace.read_text().splitlines() == ["model"], r.stdout + r.stderr)
