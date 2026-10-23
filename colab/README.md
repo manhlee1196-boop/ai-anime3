@@ -1,7 +1,7 @@
 # Hệ thống tạo ảnh WAI-Illustrious v17 trên Google Colab
 ### dùng kho prompt tiếng Việt của repo này làm bộ nhắc
 
-Mục này biến danh sách tag Danbooru + e621 đã dịch (349.714 tag, 45.513 bản dịch
+Mục này biến danh sách tag Danbooru + e621 đã dịch (349.714 tag, 45.557 bản dịch
 tiếng Việt) thành **bộ nhắc prompt** cho một hệ sinh ảnh chạy trên Colab.
 
 ```
@@ -145,6 +145,14 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
 - Khớp đủ mọi từ theo bất kỳ thứ tự nào: “nhìn người xem” vẫn ra `looking_at_viewer`
   dù bản dịch là “nhìn vào người xem”.
 - Duyệt theo 18 nhóm (Trang phục, Ngoại hình, Tư thế, Bối cảnh, Góc máy, 18+…).
+- **Mục chọn phong cách vẽ**: 506 tag phong cách / 9 nhóm (chất liệu truyền thống, chất liệu
+  số, kỹ thuật hoàn thiện, ánh sáng, trường phái, thể loại, thời kỳ, tác giả `_(style)`),
+  lọc theo nhóm hoặc gõ tìm không dấu. Có **12 công thức sẵn** (màu nước, cel-shading, anime
+  1990, ukiyo-e, Art Nouveau, sơn dầu, 3D, pixel art, truyện đen trắng, phác thảo chì, anime
+  chi tiết, hoạt hình cổ) — chọn là tick sẵn cả bộ, bấm **Thêm tag phong cách** để ghép vào
+  prompt. Bảng bên dưới cho biết từng tag mạnh hay yếu theo số bài đăng. Dữ liệu lấy từ
+  `style_tags.csv`; chi tiết và công thức ở [`STYLE_TAGS.md`](../STYLE_TAGS.md).
+  Ô **Styles** của Forge cũng có 12 style `Phong cách — …` bấm là ăn ngay.
 - Bấm một dòng kết quả: nếu đã có mục Việt tương ứng thì **thay tại chỗ**,
   nếu chưa có thì thêm tag. Ví dụ `1girl, (áo dài:1.2), long_hair` →
   `1girl, (ao_dai:1.2), long_hair`; không còn cả Việt + Anh.
@@ -170,7 +178,7 @@ python3 colab/prompt_builder.py --forge-url http://127.0.0.1:7860 --port 7861 --
 python3 colab/prompt_builder.py --demo          # không cần Forge/GPU, chỉ dựng prompt
 ```
 Có thêm tab **“Dịch prompt Anh → Việt”**: dán một prompt bất kỳ để xem nghĩa tiếng Việt
-của từng tag, tra từ chính kho 45.513 bản dịch.
+của từng tag, tra từ chính kho 45.557 bản dịch.
 
 ## Thứ tự prompt mà hệ thống tạo ra
 

@@ -39,6 +39,7 @@ from vi_extra2 import VI_EXTRA_E621_2, VI_EXTRA_GENERAL_2  # noqa: E402
 from vi_extra3 import EMOTICONS, VI_EXTRA_E621_3, VI_EXTRA_GENERAL_3  # noqa: E402
 from vi_extra4 import VI_EXTRA_SPECIES_2  # noqa: E402
 from vi_extra5 import VI_EXTRA_E621_5, VI_EXTRA_GENERAL_5  # noqa: E402
+from vi_style import VI_STYLE  # noqa: E402
 
 def _merge(*dicts):
     """Gộp nhiều từ điển; từ điển đứng sau ưu tiên hơn."""
@@ -50,23 +51,24 @@ def _merge(*dicts):
 
 # category -> từ điển thủ công
 BY_CAT = {
+    # VI_STYLE đứng cuối mỗi _merge() nên thắng các từ điển cũ (sửa bản dịch sai).
     "0": _merge(VI_GENERAL, VI_EXTRA_GENERAL, VI_EXTRA_GENERAL_2,
                VI_EXTRA_GENERAL_3, EMOTICONS,
-               VI_EXTRA_GENERAL_5),               # General (danbooru)
-    "5": VI_META,                                   # Meta (danbooru)
+               VI_EXTRA_GENERAL_5, VI_STYLE),      # General (danbooru)
+    "5": _merge(VI_META, VI_STYLE),                 # Meta (danbooru)
     "7": _merge(VI_E621, VI_EXTRA_E621, VI_EXTRA_E621_2,
                VI_EXTRA_E621_3, EMOTICONS,
-               VI_EXTRA_E621_5),                  # General (e621)
-    "12": _merge(VI_SPECIES, VI_EXTRA_SPECIES, VI_EXTRA_SPECIES_2),  # Species (e621)
-    "14": VI_META,                                  # Meta (e621)
-    "15": VI_LORE,                                  # Lore (e621)
+               VI_EXTRA_E621_5, VI_STYLE),         # General (e621)
+    "12": _merge(VI_SPECIES, VI_EXTRA_SPECIES, VI_EXTRA_SPECIES_2, VI_STYLE),  # Species (e621)
+    "14": _merge(VI_META, VI_STYLE),                # Meta (e621)
+    "15": _merge(VI_LORE, VI_STYLE),                # Lore (e621)
 }
 TRANSLATABLE = set(BY_CAT)
 
 # tra cứu hợp nhất, dùng cho quy tắc mẫu và cho tag lệch category.
 # Ưu tiên: từ điển đúng category > các từ điển khác > hình vị gốc.
 MERGED = {}
-for d in [VI_GENERAL, VI_E621, VI_META, VI_SPECIES, VI_LORE,
+for d in [VI_STYLE, VI_GENERAL, VI_E621, VI_META, VI_SPECIES, VI_LORE,
           VI_EXTRA_GENERAL, VI_EXTRA_E621, VI_EXTRA_SPECIES,
           VI_EXTRA_GENERAL_2, VI_EXTRA_E621_2,
           VI_EXTRA_GENERAL_3, VI_EXTRA_E621_3, EMOTICONS,

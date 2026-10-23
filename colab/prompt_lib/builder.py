@@ -10,6 +10,7 @@ import re
 from . import groups as G
 from .editing import split_prompt, piece_body, rewrite_piece
 from .index import norm
+from .styles import PRESETS as STYLE_PRESETS
 from .system_tags import (NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
                           WAI_DEFAULTS, pick_upscaler)
 
@@ -259,7 +260,11 @@ class PromptBuilder:
 
     # ------------------------------------------------------------------ styles.csv
     def styles_csv(self):
-        """Sinh nội dung styles.csv cho Forge (mỗi preset là một Style bấm được)."""
+        """Sinh nội dung styles.csv cho Forge (mỗi preset là một Style bấm được).
+
+        Gồm 4 mức phân loại nội dung và 12 công thức phong cách vẽ — chọn trong ô
+        **Styles** của Forge là có ngay bộ tag phong cách, khỏi gõ tay.
+        """
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["name", "prompt", "negative_prompt"])
@@ -269,6 +274,14 @@ class PromptBuilder:
                 [QUALITY_PRESETS["WAI khuyến nghị (đầy đủ)"]] + rating["positive"])
             writer.writerow([name, positive,
                              self.negative(rating["id"], "Chuẩn cộng đồng (đầy đủ)")])
+        for name, (tags, _note) in STYLE_PRESETS.items():
+            # Negative mẫu có sẵn `sketch`, `monochrome`... nên phải bỏ đúng những tag
+            # mà công thức này dùng ở positive, nếu không hai bên triệt nhau.
+            chosen = {norm(t) for t in tags}
+            negative = ", ".join(
+                p for p in _split(self.negative("general", "Chuẩn cộng đồng (đầy đủ)"))
+                if norm(piece_body(p)[0]) not in chosen)
+            writer.writerow([f"Phong cách — {name}", ", ".join(tags), negative])
         return buf.getvalue()
 
 

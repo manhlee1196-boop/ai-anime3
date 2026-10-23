@@ -2,7 +2,7 @@
 
 Nạp từ chính các file CSV đã build ở thư mục gốc repo:
 - `danbooru_e621.csv`              : tag, category, post_count, aliases (bản gốc)
-- `danbooru_e621_vi_translation.csv`: tag gốc, bản dịch tiếng Việt (45.513 dòng)
+- `danbooru_e621_vi_translation.csv`: tag gốc, bản dịch tiếng Việt (45.557 dòng)
 - `system_tags.SYSTEM_TAGS`        : tag hệ thống Illustrious/WAI không có trong CSV
 
 Tìm kiếm không phân biệt dấu tiếng Việt ("ao dai" vẫn ra "áo dài").

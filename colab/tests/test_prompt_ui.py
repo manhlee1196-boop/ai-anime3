@@ -35,7 +35,20 @@ def cfg_slider(ui):
 def main():
     app.INDEX = app.TagIndex(ROOT)
     app.BUILDER = app.PromptBuilder(app.INDEX)
+    app.STYLES = app.StyleLibrary(ROOT)
     app_ui = app.build_ui()
+    # mục chọn phong cách: có dropdown nhóm + checkbox group + nút thêm
+    labels = [c["props"].get("label", "") for c in app_ui.get_config_file()["components"]]
+    assert "Nhóm phong cách" in labels and "Công thức sẵn (chọn là tick sẵn)" in labels
+    assert any("Tick tag phong cách" in label for label in labels)
+    choices, rows, note = app.do_style_group("Ánh sáng", "")
+    assert len(choices["choices"]) >= 10 and rows and "ánh sáng" in note.lower()
+    checked, rows, note = app.do_style_preset("Pixel art game cũ")
+    assert len(checked["value"]) == 4 and "pixel_art" in checked["choices"][0]
+    merged, queued = app.do_style_add("1girl", checked["value"])
+    assert merged.startswith("1girl") and all(t in merged for t in
+                                              ("pixel_art", "pixel_animation", "limited_palette"))
+    assert app.do_style_add("1girl", [])[0] == "1girl"
     slider = cfg_slider(app_ui)
     assert slider["minimum"] <= 1.0 <= slider["maximum"] and slider["value"] == 1.0
     assert "hswq" in app.profile_note()

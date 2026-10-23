@@ -52,9 +52,32 @@ Chi tiết hệ thống/bộ dựng prompt: [`colab/README.md`](colab/README.md)
 | `danbooru_e621.csv` | **Bản gốc**, byte-identical với file nguồn | Nạp vào sd-webui-tagcomplete để autocomplete ra tag tiếng Anh thật (prompt đúng chuẩn) |
 | `danbooru_e621_nounderscore.csv` | Bản gốc nhưng **đã bỏ dấu `_`** (thay bằng khoảng trắng) ở cả cột tag lẫn cột aliases | Đọc/tìm kiếm dễ hơn, hoặc dùng cho công cụ hiển thị tag dạng có khoảng trắng |
 | `danbooru_e621_vi.csv` | **Bản tiếng Việt**, vẫn 4 cột `tag,category,post_count,aliases`; cột aliases giữ nguyên tag tiếng Anh để tra ngược | Tra cứu ý nghĩa tag bằng tiếng Việt |
-| `danbooru_e621_vi_translation.csv` | 2 cột `<English tag>,<Translation>` — **45.513 dòng**, chỉ gồm tag có bản dịch thật | Nạp vào **Translation filename** của sd-webui-tagcomplete: gõ/tìm bằng tiếng Việt vẫn ra tag tiếng Anh, và thấy nghĩa tiếng Việt trong danh sách gợi ý |
+| `danbooru_e621_vi_translation.csv` | 2 cột `<English tag>,<Translation>` — **45.557 dòng**, chỉ gồm tag có bản dịch thật | Nạp vào **Translation filename** của sd-webui-tagcomplete: gõ/tìm bằng tiếng Việt vẫn ra tag tiếng Anh, và thấy nghĩa tiếng Việt trong danh sách gợi ý |
+| `style_tags.csv` | **506 tag phong cách vẽ** chia 9 nhóm, 6 cột `tag,vi,category,post_count,nhom,nguon_vi` — **dịch đủ 100%** | Chọn chất liệu/kỹ thuật/trường phái cho prompt; hướng dẫn, 12 công thức mẫu và mục chọn trong app ở [`STYLE_TAGS.md`](STYLE_TAGS.md) |
 
 Ba file đầu: UTF-8, xuống dòng LF, **349.714 dòng**, không có dòng tiêu đề.
+
+### Thẻ phong cách vẽ
+
+[`style_tags.csv`](style_tags.csv) lọc ra **506 tag phong cách vẽ** từ chính kho tag trên —
+chất liệu truyền thống, chất liệu số, kỹ thuật hoàn thiện (cel shading, line art, palette),
+ánh sáng, trường phái mỹ thuật, phong cách thể loại, thời kỳ/thiết kế, và 229 tag `*_(style)`
+của từng tác giả/series — **tất cả đã có nghĩa tiếng Việt** kèm số bài đăng để biết tag nào đủ mạnh.
+
+**Chọn thẻ phong cách ngay trong app:** tab **🧩 Dựng prompt** → mục **“2. Chọn phong cách vẽ”**
+(chọn nhóm, chọn 1 trong 12 công thức sẵn, hoặc gõ tìm không cần dấu) → tick tag → **➕ Thêm tag
+phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô **Styles** có 12 style
+`Phong cách — …` bấm là điền cả bộ tag.
+
+Tài liệu [`STYLE_TAGS.md`](STYLE_TAGS.md) có 12 công thức prompt mẫu, lưu ý khi trộn chất liệu,
+bảng độ mạnh của từng tag, và ghi lại các bản dịch đã sửa (`lego`, `spine_(medium)`, 41 tag thiếu…).
+
+```bash
+python3 tools/find_style_tags.py             # ghi lại style_tags.csv
+python3 tools/find_style_tags.py --markdown  # in bảng Markdown như STYLE_TAGS.md
+python3 tools/find_style_tags.py --check     # kiểm mọi tag có thật trong danbooru_e621.csv
+python3 colab/tests/test_style_tags.py       # hồi quy
+```
 
 **Ngoại lệ duy nhất khi bỏ dấu `_`:** 26 tag là emoticon (`^_^`, `o_o`, `|_|`, `+_+`,
 `._.`, `3_3`, `ಠ_ಠ`...) được **giữ nguyên dấu `_`**, vì ở đó `_` là nét vẽ của khuôn mặt
@@ -106,18 +129,18 @@ Category 2, 6, 13 không hợp lệ nên không xuất hiện trong file.
 
 | Category | Số tag | Từ điển | Quy tắc mẫu | Ghép đệ quy | Chưa dịch | Độ phủ (theo post_count) |
 |---|---|---|---|---|---|---|
-| 0 General (dbr) | 41.914 | 3.379 | 3.935 | 16.528 | 18.072 | **97,59%** |
-| 5 Meta (dbr) | 605 | 392 | 133 | 23 | 57 | **99,74%** |
-| 7 General (e621) | 34.518 | 1.382 | 5.045 | 14.718 | 13.373 | **97,09%** |
+| 0 General (dbr) | 41.914 | 3.408 | 3.934 | 16.526 | 18.046 | **97,60%** |
+| 5 Meta (dbr) | 605 | 407 | 118 | 23 | 57 | **99,74%** |
+| 7 General (e621) | 34.518 | 1.400 | 5.040 | 14.723 | 13.355 | **97,10%** |
 | 12 Species (e621) | 5.647 | 869 | 427 | 928 | 3.423 | **98,63%** |
-| 14 Meta (e621) | 393 | 312 | 72 | 3 | 6 | **99,85%** |
+| 14 Meta (e621) | 393 | 313 | 71 | 3 | 6 | **99,85%** |
 | 15 Lore (e621) | 110 | 44 | 66 | 0 | 0 | **100%** |
 | Tên riêng (1,3,4,8,9,10,11) | 266.527 | — | — | — | giữ nguyên, chỉ bỏ `_` |
 
 Tag chưa dịch được giữ nguyên tiếng Anh (đã bỏ `_`). Đó gần như toàn bộ là tag rất hiếm
 (post_count thấp, đuôi dài của phân phối) hoặc tên riêng của loài/nhân vật trong từng series.
 
-Tổng cộng **45.513 tag** có bản dịch tiếng Việt thật; phần còn lại là tên riêng
+Tổng cộng **45.557 tag** có bản dịch tiếng Việt thật; phần còn lại là tên riêng
 (artist, copyright, character, 266.527 tag) vốn không dịch.
 
 ## Cách bản dịch được tạo
@@ -125,7 +148,8 @@ Tổng cộng **45.513 tag** có bản dịch tiếng Việt thật; phần còn
 1. **Từ điển thủ công** (`tools/dict/`): `vi_general.py` (cat 0), `vi_e621.py` (cat 7),
    `vi_meta.py` (cat 5 + 14), `vi_species.py` (cat 12 + 15), `vi_extra.py`, `vi_extra2.py`,
    `vi_extra3.py`, `vi_extra4.py` (các đợt bổ sung tag tần suất cao còn sót, kèm bảng chú
-   thích emoticon).
+   thích emoticon), `vi_style.py` (chất liệu / kỹ thuật / trường phái / ánh sáng — nhóm
+   phong cách vẽ; đứng đầu bảng ưu tiên nên cũng dùng để **sửa** bản dịch sai như `lego`).
 2. **Quy tắc mẫu** (`tools/vi_rules.py`): tự ghép bản dịch cho tag có cấu trúc đều đặn,
    chỉ khi **mọi** thành phần đều tra được — nên không sinh ra bản dịch sai:
    - `X_(lore)`, `A_and_B_(lore)` → "… (theo cốt truyện)"
@@ -186,14 +210,18 @@ danbooru_e621.csv                    bản gốc phục hồi
 danbooru_e621_nounderscore.csv       bản bỏ dấu gạch dưới
 danbooru_e621_vi.csv                 bản tiếng Việt (4 cột)
 danbooru_e621_vi_translation.csv     bản dịch 2 cột cho tính năng Translation
+style_tags.csv                     506 tag phong cách vẽ (9 nhóm, kèm nghĩa VI)
+STYLE_TAGS.md                       tài liệu tra cứu + công thức prompt phong cách
 tools/
   build_vi.py                        script sinh 4 file trên
+  find_style_tags.py                 lọc tag phong cách vẽ -> style_tags.csv
   vi_rules.py                        bộ quy tắc dịch theo mẫu
   vi_compose.py                      bộ ghép đệ quy cho tag tổ hợp
   source_merged_2026-10-01.csv       file nguồn (gitignored)
   dict/
     vi_general.py  vi_e621.py  vi_meta.py   vi_species.py
     vi_extra.py    vi_extra2.py vi_extra3.py vi_extra4.py vi_extra5.py
+    vi_style.py                         bản dịch + sửa bản dịch nhóm phong cách vẽ
     vi_morphemes.py vi_vocab.py
   work/                              danh sách tag trung gian (gitignored)
 colab/                               hệ thống tạo ảnh WAI-Illustrious v17 trên Colab

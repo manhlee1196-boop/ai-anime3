@@ -9,20 +9,11 @@ import os
 import subprocess
 from pathlib import Path
 
-from notebook_support import BOOTSTRAP_SOURCE, WORKFLOW_GUIDE
+from notebook_support import BOOTSTRAP_SOURCE, BRANCH, WORKFLOW_GUIDE
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "WAI_v17_1click.ipynb"
 
-
-def current_branch():
-    r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                       cwd=HERE.parent, capture_output=True, text=True, timeout=15)
-    branch = r.stdout.strip()
-    return branch if r.returncode == 0 and branch != "HEAD" else "main"
-
-
-BRANCH = os.environ.get("WAI_BRANCH") or current_branch()
 
 INTRO = """# ⚡ WAI-Illustrious v17 — bộ cài Colab một ô · 1.0.7
 
@@ -196,5 +187,8 @@ notebook = {
         {"cell_type": "markdown", "metadata": {"id": "after"}, "source": AFTER.splitlines(True)},
     ],
 }
-OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+# Link INSTALL.md trong phần hướng dẫn phải trỏ đúng nhánh đang checkout.
+text = json.dumps(notebook, ensure_ascii=False, indent=1).replace(
+    "arena/88f01d31-ai-anime3", BRANCH)
+OUT.write_text(text + "\n", encoding="utf-8")
 print(f"Đã sinh {OUT.name}: 1 ô code, 2 ô hướng dẫn, nhánh {BRANCH}")

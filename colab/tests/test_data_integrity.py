@@ -20,7 +20,7 @@ class DataIntegrity(unittest.TestCase):
                 self.assertTrue(row[0] and row[1])
                 self.assertNotIn(row[0], translations)
                 translations[row[0]] = row[1]
-        self.assertEqual(len(translations), 45513)
+        self.assertEqual(len(translations), 45557)
         seen, last_count, total = set(), float("inf"), 0
         with ((ROOT / "danbooru_e621.csv").open(encoding="utf-8", newline="") as original,
               (ROOT / "danbooru_e621_nounderscore.csv").open(encoding="utf-8", newline="") as no_under,

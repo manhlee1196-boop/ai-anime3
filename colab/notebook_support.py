@@ -179,3 +179,24 @@ if RUN_API_SAMPLE:
 else:
     print("Bỏ qua sinh ảnh API. Dùng tab Prompt VN, hoặc bật RUN_API_SAMPLE khi Forge đã chạy.")
 '''
+
+
+# ------------------------------------------------------------------ nhánh nguồn
+import os
+import subprocess
+from pathlib import Path as _Path
+
+
+def current_branch():
+    """Nhánh đang checkout — notebook Colab phải tải đúng nhánh này."""
+    root = _Path(__file__).resolve().parent.parent
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root,
+                           capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return "main"
+    branch = r.stdout.strip()
+    return branch if r.returncode == 0 and branch and branch != "HEAD" else "main"
+
+
+BRANCH = os.environ.get("WAI_BRANCH") or current_branch()

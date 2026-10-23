@@ -31,7 +31,7 @@ sys.path.insert(0, HERE)
 from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY_NAMES,  # noqa: E402
                         MODEL_PROFILES, NEGATIVE_PRESETS,
                         QUALITY_PRESETS, RATINGS, SIZE_PRESETS, UPSCALERS, WAI_DEFAULTS,
-                        PromptBuilder, TagIndex, pick_upscaler)
+                        PromptBuilder, StyleLibrary, TagIndex, pick_upscaler)
 from prompt_lib.api import decode_generation_response
 from prompt_lib.history import ImageHistory, forge_output_roots
 from prompt_lib.history_ui import HistoryPanel
@@ -42,6 +42,9 @@ from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
 
 INDEX = None
 BUILDER = None
+STYLES = None
+STYLE_HEADERS = ["tag", "nghĩa", "số ảnh", "độ mạnh", "nhóm"]
+NO_PRESET = "(không dùng công thức)"
 
 
 def profile_note():
@@ -178,6 +181,64 @@ def do_browse(group, limit, allow_nsfw):
     note = (f"Nhóm **{GROUP_LABELS.get(key, key)}**: {total:,} tag có ≥20 ảnh, "
             f"đang hiện {len(results)} tag phổ biến nhất.")
     return _row(results), _tags(results), note
+
+
+# ------------------------------------------------------------- mục chọn phong cách vẽ
+def style_ready():
+    return STYLES is not None and STYLES.loaded
+
+
+def style_group_choices():
+    return STYLES.groups() if style_ready() else []
+
+
+def style_preset_choices():
+    return [NO_PRESET] + (STYLES.preset_names() if style_ready() else [])
+
+
+def do_style_group(group, query):
+    """Đổi nhóm / gõ tìm → nạp lại danh sách tag phong cách để tick."""
+    if not style_ready():
+        return gr.update(choices=[], value=[]), [], (
+            "Chưa nạp được `style_tags.csv`. Chạy `python3 tools/find_style_tags.py`.")
+    choices = STYLES.choices(group, query or "")
+    rows = STYLES.rows(STYLES.tags_of(choices))
+    note = (f"Nhóm **{group}** — " + STYLES.summary(group)
+            if not (query or "").strip()
+            else f"Tìm “{query}” trong **{group}**: {len(choices)} tag.")
+    note += "\n\n_Tick tag muốn dùng rồi bấm **Thêm tag phong cách**; chỉ nên chọn 1 chất liệu "
+    note += "+ 1 kỹ thuật (+ 1 ánh sáng)._"
+    return gr.update(choices=choices, value=[]), rows, note
+
+
+def do_style_preset(name, group=None):
+    """Chọn công thức sẵn → tick sẵn đúng bộ tag của công thức."""
+    if not style_ready() or name not in STYLES.preset_names():
+        if not style_ready():
+            return gr.update(), [], ("Chưa nạp được `style_tags.csv`. Chạy "
+                                     "`python3 tools/find_style_tags.py`.")
+        return gr.update(), [], "Chọn một công thức ở danh sách bên trên."
+    tags = STYLES.preset(name)
+    labels = [STYLES.info(t).label() for t in tags]
+    note = (f"🎨 **{name}** — {STYLES.preset_note(name)}.\n\n"
+            f"Đã tick sẵn {len(tags)} tag: " + ", ".join(f"`{t}`" for t in tags)
+            + "\n\nBấm **Thêm tag phong cách** để đưa vào prompt.")
+    return gr.update(choices=labels, value=labels), STYLES.rows(tags), note
+
+
+def do_style_add(selected, checked):
+    """Ghép các tag đã tick vào danh sách tag của prompt."""
+    tags = STYLES.tags_of(checked) if style_ready() else []
+    if not tags:
+        return selected, "Chưa tick tag phong cách nào để thêm."
+    weak = [t for t in tags if (STYLES.info(t) and STYLES.info(t).post_count < 300)]
+    note = "✅ Đã thêm " + ", ".join(f"`{t}`" for t in tags)
+    if len(tags) > 3:
+        note += "\n\n⚠️ Từ 4 tag phong cách trở lên model dễ trung bình hoá — nên bỏ bớt."
+    if weak:
+        note += ("\n\n⚠️ Tag ít hơn 300 ảnh nên ảnh hưởng yếu: "
+                 + ", ".join(f"`{t}`" for t in weak) + ".")
+    return _merge(selected, tags), note
 
 
 def on_pick(state, selected, evt: gr.SelectData):
@@ -404,7 +465,29 @@ def build_ui():
                                                label="Kết quả — BẤM VÀO MỘT DÒNG để chọn/thay tag")
                         note = gr.Markdown("")
 
-                        gr.Markdown("### 2. Tag đã chọn (sửa tay được)")
+                        gr.Markdown("### 2. Chọn phong cách vẽ")
+                        with gr.Row():
+                            style_group = gr.Dropdown(style_group_choices(),
+                                                      value=(style_group_choices() or [None])[0],
+                                                      label="Nhóm phong cách", scale=3)
+                            style_preset = gr.Dropdown(style_preset_choices(), value=NO_PRESET,
+                                                       label="Công thức sẵn (chọn là tick sẵn)",
+                                                       scale=4)
+                        style_query = gr.Textbox(
+                            label="Tìm trong kho phong cách (không cần dấu)",
+                            placeholder="màu nước, cel, ukiyo-e, ánh sáng viền, pixel...")
+                        style_checked = gr.CheckboxGroup(
+                            choices=[], value=[],
+                            label="Tick tag phong cách — 1 chất liệu + 1 kỹ thuật là đủ")
+                        with gr.Row():
+                            btn_style_add = gr.Button("➕ Thêm tag phong cách",
+                                                      variant="secondary", scale=3)
+                            btn_style_clear = gr.Button("☐ Bỏ tick", scale=1)
+                        style_note = gr.Markdown("")
+                        style_table = gr.Dataframe(headers=STYLE_HEADERS, interactive=False,
+                                                   label="Độ mạnh của từng tag (theo số bài đăng)")
+
+                        gr.Markdown("### 3. Tag đã chọn (sửa tay được)")
                         selected = gr.Textbox(label="Danh sách tag", lines=3,
                                               placeholder="1girl, ao_dai, long_hair, "
                                                           "holding_sword, cherry_blossoms")
@@ -421,7 +504,7 @@ def build_ui():
                     state = gr.State([])
 
                     with gr.Column(scale=5):
-                        gr.Markdown("### 3. Tuỳ chọn prompt")
+                        gr.Markdown("### 4. Tuỳ chọn prompt")
                         description = gr.Textbox(
                             label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
                             placeholder="A girl in an ao dai, standing under cherry blossoms")
@@ -444,7 +527,7 @@ def build_ui():
                             extra_pos = gr.Textbox(label="Thêm vào positive (tuỳ ý)")
                             extra_neg = gr.Textbox(label="Thêm vào negative (tuỳ ý)")
 
-                        gr.Markdown("### 4. Nháp → Chuẩn → Hoàn thiện")
+                        gr.Markdown("### 5. Nháp → Chuẩn → Hoàn thiện")
                         mode = gr.Dropdown(list(WORKFLOW_PRESETS), value=DEFAULT_WORKFLOW, label="Quy trình")
                         mode_note = gr.Markdown(workflow_note(DEFAULT_WORKFLOW))
                         with gr.Row():
@@ -530,6 +613,17 @@ def build_ui():
                          outputs=[results, state, note])
         results.select(on_pick, inputs=[state, selected], outputs=[selected, picked])
 
+        # mục chọn phong cách vẽ: đổi nhóm / gõ tìm / chọn công thức sẵn
+        style_group.change(do_style_group, inputs=[style_group, style_query],
+                           outputs=[style_checked, style_table, style_note], queue=False)
+        style_query.submit(do_style_group, inputs=[style_group, style_query],
+                           outputs=[style_checked, style_table, style_note], queue=False)
+        style_preset.change(do_style_preset, inputs=[style_preset],
+                            outputs=[style_checked, style_table, style_note], queue=False)
+        btn_style_add.click(do_style_add, inputs=[selected, style_checked],
+                            outputs=[selected, picked])
+        btn_style_clear.click(lambda: gr.update(value=[]), None, [style_checked], queue=False)
+
         btn_random.click(do_random, inputs=[rnd_n, rnd_seed, allow_nsfw, selected],
                          outputs=[selected, picked])
         btn_convert.click(do_convert, [selected], [selected, picked], queue=False)
@@ -584,12 +678,15 @@ Bảng dưới dành cho **FP16 gốc**; FP8/INT8/HSWQ dùng profile/quy trình 
 
 ### Quy trình tiết kiệm VRAM
 1. Nhập tag Việt, chọn kết quả hoặc bấm **Thay mục Việt → tag Anh**. Không để “áo dài, ao_dai”.
-2. Dựng prompt ngắn: chủ thể, ngoại hình, trang phục, hành động, bối cảnh/góc máy.
+2. Sang mục **2. Chọn phong cách vẽ** nếu muốn đổi chất ảnh: chọn 1 công thức sẵn
+   (màu nước, cel-shading, anime 1990, ukiyo-e, pixel…) hoặc tick tay 1 chất liệu + 1 kỹ thuật,
+   rồi bấm **➕ Thêm tag phong cách**. Đừng trộn quá 3 tag phong cách.
+3. Dựng prompt ngắn: chủ thể, ngoại hình, trang phục, hành động, bối cảnh/góc máy.
    Câu tự nhiên nên viết tiếng Anh; app chỉ dịch tag đã biết, không đoán cả câu.
-3. Chọn **Nháp**: FP16 tối đa 18 bước, HSWQ vẫn 10/CFG 1. Hires tắt.
-4. Chọn ảnh trong Gallery → **Dùng seed của ảnh đã chọn**, giữ kích thước gốc.
-5. **Chuẩn**: FP16 25/CFG 6, FP8/INT8 25/CFG 6.5, HSWQ 10/CFG 1.
-6. **Hoàn thiện**: Hires 1.5×/denoise 0.35, tự đặt 1 ảnh/lượt và giữ sampler đã chọn.
+4. Chọn **Nháp**: FP16 tối đa 18 bước, HSWQ vẫn 10/CFG 1. Hires tắt.
+5. Chọn ảnh trong Gallery → **Dùng seed của ảnh đã chọn**, giữ kích thước gốc.
+6. **Chuẩn**: FP16 25/CFG 6, FP8/INT8 25/CFG 6.5, HSWQ 10/CFG 1.
+7. **Hoàn thiện**: Hires 1.5×/denoise 0.35, tự đặt 1 ảnh/lượt và giữ sampler đã chọn.
    Preset áp lại steps/CFG; seed không bảo đảm kết quả giống hệt khi thay tham số.
 
 Mỗi lượt ảnh được sinh tuần tự, batch_size=1; không tăng batch để tránh tốn VRAM.
@@ -644,7 +741,7 @@ def main():
     CFG["forge_dir"] = args.forge_dir
     CFG["history_dir"] = args.history_dir
 
-    global INDEX, BUILDER
+    global INDEX, BUILDER, STYLES
     root = args.root or ROOT
     if not os.path.exists(os.path.join(root, "danbooru_e621.csv")):
         raise SystemExit(f"Không thấy danbooru_e621.csv trong {root}. "
@@ -653,8 +750,10 @@ def main():
     started = time.time()
     INDEX = TagIndex(root)
     BUILDER = PromptBuilder(INDEX)
+    STYLES = StyleLibrary(root)
     print(f"Xong trong {time.time() - started:.1f}s: {len(INDEX):,} tag, "
-          f"{INDEX.stats()['có_nghĩa_tiếng_việt']:,} bản dịch tiếng Việt.")
+          f"{INDEX.stats()['có_nghĩa_tiếng_việt']:,} bản dịch tiếng Việt, "
+          f"{len(STYLES) if STYLES.loaded else 0} tag phong cách.")
 
     demo = build_ui()
     demo.queue(default_concurrency_limit=2).launch(

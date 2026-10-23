@@ -326,9 +326,10 @@ preset model khác không bị xóa. Model, ảnh, venv, repo và thay đổi lo
 | `test_install_sh.py` | **95/95** kiểm tra; downloader/checksum thật với safetensors nhỏ/HTTP cục bộ, lifecycle stub, resume/cache/exit code/tokens/notebook |
 | `test_checkpoint_flow.py` | **16 nhóm đạt**, có subtests: container hỏng, .part, alias/collision/ownership, backup, profile HSWQ, chuẩn bị launch thật, registry/preset/API/PNG, diagnostics chỉ đọc, stale buddy và nâng repo cũ |
 | Mã upstream | Chạy lại hồi quy cùng hàm guard UID, preset, scanner và selector nguyên bản từ revision Forge nêu trên; **không import toàn engine** |
-| `test_prompt_lib.py` | **15 nhóm đạt**: index, tra tiếng Việt/alias, nhóm, negative, cấu trúc prompt, profile model/payload |
+| `test_prompt_lib.py` | **15 nhóm đạt**: index, tra tiếng Việt/alias, nhóm, negative, cấu trúc prompt, profile model/payload, 16 style Forge (4 mức phân loại + 12 phong cách) |
 | `test_prompt_ui.py` | UI thật trên **Gradio 4.40.0 và 6.30.0**; API/Forge host giả lập. Đã đi hết đường giải mã ảnh của cả app và extension |
-| `test_data_integrity.py` | **4 nhóm đạt**; duyệt toàn bộ **349.714 dòng** ở 3 CSV 4 cột và **45.513** translation; category/count/sort/alias/tên riêng/emoticon, đối chiếu nguồn đã chỉ định nếu có |
+| `test_style_tags.py` | **9 nhóm đạt**: 506 tag phong cách / 9 nhóm, `style_tags.csv` khớp bản sinh lại, không trùng, đủ `*_(style)`, 12 công thức sẵn + `StyleLibrary` (nhóm, tìm không dấu, nhãn ↔ tag) |
+| `test_data_integrity.py` | **4 nhóm đạt**; duyệt toàn bộ **349.714 dòng** ở 3 CSV 4 cột và **45.557** translation; category/count/sort/alias/tên riêng/emoticon, đối chiếu nguồn đã chỉ định nếu có |
 | Cú pháp | Python AST toàn bộ mã; 11 ô code notebook chi tiết + 1 ô một lệnh; notebook chưa có output; Bash syntax, ShellCheck, JS syntax |
 
 Asset tagcomplete được sinh từ kho đầy đủ, không thiếu CSV và không trùng khóa.

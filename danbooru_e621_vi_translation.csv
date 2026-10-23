@@ -435,7 +435,7 @@ black_hat,mũ đen
 puffy_short_sleeves,tay ngắn phồng
 upper_teeth_only,chỉ răng trên
 gynomorph,dạng nữ
-3d_(artwork),tác phẩm làm bằng 3D
+3d_(artwork),tác phẩm 3D
 bovid,họ trâu bò
 night,ban đêm
 pantherine,phân họ báo
@@ -1322,7 +1322,7 @@ facial_markings,vằn trên mặt
 twin_drills,hai lọn tóc xoăn ốc
 shota,bé trai
 faceless,không có mặt
-spot_color,một điểm màu
+spot_color,điểm xuyết màu
 red_gloves,găng tay đỏ
 legendary_pokemon,Pokémon huyền thoại
 skull,đầu lâu
@@ -2988,7 +2988,7 @@ coffee,cà phê
 muscular_thighs,đùi cơ bắp
 brown_shorts,quần đùi màu nâu
 huge_ahoge,sợi tóc dựng rất to
-halftone,chấm nửa sắc độ
+halftone,chấm tram (halftone)
 cum_splatter,tinh dịch văng
 orange_tail,đuôi màu cam
 notched_lapels,ve áo khía
@@ -4323,6 +4323,7 @@ cervix,cổ tử cung
 multiple_moles,nhiều nốt ruồi
 streaming_tears,phát trực tiếp nước mắt
 spoken_musical_note,ghi chú thuộc âm nhạc được nói ra
+sidelighting,ánh sáng chiếu ngang
 tying_hair,buộc tóc
 showering,tắm vòi sen
 chair_position,tư thế trên ghế
@@ -4773,6 +4774,7 @@ monotreme,thú đơn huyệt
 wearing_chastity_device,đeo thiết bị trinh tiết
 kitchen_utensils,dụng cụ nhà bếp
 breast_curtains,rèm cửa ngực
+painterly,nét vẽ kiểu hội hoạ
 darkner,darkner (Deltarune)
 blue_ascot,khăn cổ ascot màu xanh lam
 mottled,loang lổ
@@ -5024,7 +5026,7 @@ anal_knotting,thắt nút giao phối hậu môn
 octopus,bạch tuộc
 hands_on_legs,bàn tay trên chân
 ambiguous_anthro,thú nhân mơ hồ
-halftone_background,phông nền chấm nửa sắc độ
+halftone_background,phông nền chấm tram (halftone)
 white_cat,mèo trắng
 good_boy,chàng trai thiện
 bodily_noises,tiếng động cơ thể
@@ -6135,7 +6137,7 @@ flower_ornament,phụ kiện hoa
 undressing_another,cởi đồ người khác
 membranous_frill,diềm dạng màng
 writing,viết
-surreal,siêu thực mộng
+surreal,siêu thực
 drawing_(action),vẽ (hành động)
 cloth_gag,bịt miệng tấm vải
 nude_cover,bìa khoả thân
@@ -6446,7 +6448,7 @@ aqua_jacket,áo khoác màu xanh nước
 indoor_sex,quan hệ tình dục trong nhà
 lolita_(fashion),phong cách lolita (fashion)
 cool_colors,màu lạnh
-toon_(style),quá (phong cách)
+toon_(style),phong cách toon (hoạt hình)
 restrained_by_tentacles,bị giữ chặt bởi xúc tu
 food_on_head,đồ ăn trên đầu
 holding_whip,cầm roi
@@ -6485,7 +6487,7 @@ pattern_thigh_highs,tất cao đùi hoa văn
 twitching_penis,dương vật giật nhẹ
 cross-laced_dress,đầm buộc dây chéo
 black_hakama,hakama màu đen
-screentones,tông màu chấm
+screentones,chấm tram truyện tranh (screentones)
 grey_horns,sừng màu xám
 ring_light_reflection,hình phản chiếu đèn vòng
 thin_tail,đuôi mỏng
@@ -6759,6 +6761,7 @@ gynomorph_(lore),dạng nữ (theo cốt truyện)
 sleeve_garter,dây nịt tất tay áo
 heart_button,nút bấm trái tim
 purple_umbrella,cái ô màu tím
+abstract,trừu tượng
 pattern_footwear,giày dép hoa văn
 larger_ambiguous,mơ hồ lớn hơn
 ring-tailed_lemur,vượn cáo đuôi vòng
@@ -7102,6 +7105,7 @@ new_world_jay,giẻ cùi Tân Thế giới
 scar_on_stomach,sẹo trên bụng
 reference_image,ảnh tham chiếu
 tights,bó sát
+linear_hatching,đánh bóng bằng nét thẳng song song
 sketchbook,sổ phác thảo
 japanese_audio,âm thanh tiếng Nhật
 shuriken,shuriken (phi tiêu hình sao)
@@ -7441,6 +7445,7 @@ rainbow_pride_colors,màu cờ tự hào LGBT màu cầu vồng
 window_shadow,bóng đổ cửa sổ
 plaid_bikini,bikini kẻ ca rô
 grey_bra,áo ngực màu xám
+faux_retro_artstyle,phong cách vẽ cổ điển giả
 leg_belt,thắt lưng chân
 muzzle_(marking),rọ mõm (vằn)
 squirrel,sóc
@@ -7923,7 +7928,7 @@ throat,cổ họng
 hand_on_own_shoulder,bàn tay trên vai của chính mình
 caracal,linh miêu tai đen
 equine_humanoid,ngựa hình người
-lego,chân
+lego,xếp hình Lego
 hospital,bệnh viện
 diaper_under_clothing,tã dưới quần áo
 teasing_viewer,người xem trêu chọc
@@ -8276,7 +8281,7 @@ german_text,chữ tiếng Đức
 drill,mũi khoan
 coffin,quan tài
 no_testicles,không có tinh hoàn
-dithering,pha màu điểm ảnh
+dithering,kỹ thuật chấm pha điểm ảnh
 mismatched_sleeves,tay áo lệch nhau
 neon,màu neon
 thyreophoran,bò sát có giáp
@@ -8494,6 +8499,7 @@ wiping_sweat,lau mồ hôi
 multiple_necklaces,nhiều vòng cổ
 dark_room,căn phòng tối
 watching_television,tivi quan sát
+style_emulation,mô phỏng phong cách
 older_on_young,lớn tuổi hơn trên trẻ tuổi
 nurse_headwear,đồ đội đầu y tá
 dragonborn_(dnd),long nhân D&D
@@ -8669,6 +8675,7 @@ legs_behind_head,chân phía sau đầu
 textured_background,nền có kết cấu
 mongoose,cầy mangut
 japanese_school_uniform,đồng phục trường học Nhật Bản
+art_nouveau,trường phái Art Nouveau
 cotton_tail,đuôi bằng cotton
 male_raped,cưỡng bức nam giới
 red_anus,hậu môn màu đỏ
@@ -9657,6 +9664,7 @@ blue_bandana,khăn bandana màu xanh lam
 white_sky,bầu trời màu trắng
 mole_on_shoulder,nốt ruồi trên vai
 brown_face,mặt nâu
+low_poly,đồ hoạ đa giác thấp (low-poly)
 backless_clothing,quần áo hở lưng
 hole_on_body,lỗ trên cơ thể
 music_video,video ca nhạc
@@ -10051,13 +10059,14 @@ two-tone_sports_bra,áo ngực thể thao màu hai tông màu
 penis_shrinking,đang thu nhỏ dương vật
 creature_focus,tiêu điểm sinh vật
 backless_swimsuit,đồ bơi hở lưng
-multiple_monochrome,đơn sắc nhiều
+multiple_monochrome,nhiều hình đơn sắc
 crease,nếp gấp
 hooded_vest,áo ghi lê có mũ trùm
 penetrating_while_penetrated,xâm nhập trong khi bị xâm nhập
 spotted_scales,vảy có đốm
 nipple_jewelry,trang sức núm vú
 blue_umbrella,cái ô màu xanh lam
+y2k_(graphic_design),thiết kế đồ hoạ Y2K
 mimic_chest,ngực quái vật bắt chước
 clothes_between_thighs,quần áo giữa đùi
 aqua_shoes,giày màu xanh nước
@@ -10439,7 +10448,7 @@ eurasian_red_squirrel,sóc đỏ Á-Âu
 larid,họ mòng biển
 post-apocalypse,hậu tận thế
 science,khoa học
-screentone,tông màu chấm
+screentone,chấm tram truyện tranh (screentone)
 green_glans,quy đầu màu xanh lục
 thylacine,sói có túi
 building_destruction,xây phá huỷ
@@ -11332,6 +11341,7 @@ multiple_insertions,nhiều đưa vào
 bovine_horn,một chiếc sừng bò
 double_\m/,\m/ (dấu tay rock) đôi
 seed,hạt giống tạo ảnh
+psychedelic,phong cách ảo giác
 blue_thigh_highs,vớ đùi màu xanh lam
 shaking_head,đầu rung lắc
 white_paws,bàn chân thú màu trắng
@@ -11872,6 +11882,7 @@ reindeer_girl,cô gái tuần lộc
 aunt_and_niece,cô/dì và cháu gái
 micro_bra,áo ngực siêu nhỏ
 spiked_boots,bốt có gai
+underlighting,ánh sáng chiếu từ dưới
 full_diaper,tã đầy
 vaginal_fluids_puddle,vũng nước dịch âm đạo
 nipples_visible_through_clothing,núm vú nhìn thấy được xuyên qua quần áo
@@ -12043,6 +12054,7 @@ grey_collar,vòng cổ màu xám
 penis_in_tentacle,dương vật trong xúc tu
 abstract_art,nghệ thuật trừu tượng
 grey_tuft,chỏm lông màu xám
+nihonga,tranh Nhật hiện đại (nihonga)
 imminent_oral_vore,nuốt chửng quan hệ bằng miệng sắp xảy ra
 bikini_top_under_shirt,áo bikini dưới áo sơ mi
 arched_soles,gan bàn chân ưỡn
@@ -12302,6 +12314,7 @@ bandaged_tail,đuôi băng bó
 latex_thigh_boots,bốt qua đùi bằng latex
 wearing_strapon,mặc dương vật đeo
 holding_both_thighs,cầm cả hai đùi
+surrealism,trường phái Siêu thực
 submissive_andromorph,dạng nam kẻ phục tùng
 torn_footwear,giày dép rách
 arms_around_another's_back,cánh tay quanh lưng của người khác
@@ -13120,6 +13133,7 @@ ice_skating,trượt băng
 radar_hair_ornament,đồ trang trí tóc ra đa
 heavy_chromatic_aberration,sai lệch màu nặng
 black_thigh_socks,tất đùi đen
+synthwave,phong cách synthwave
 nail_(weapon),cái đinh (vũ khí)
 black_tentacles,xúc tu màu đen
 skull_hat_ornament,đồ trang trí mũ đầu lâu
@@ -14478,7 +14492,7 @@ flash_game,trò chơi Flash
 ambiguous_on_anthro,mơ hồ trên thú nhân
 holding_headphones,cầm tai nghe
 foot_pussy,âm hộ bàn chân
-lego_brick,viên gạch chân
+lego_brick,viên gạch xếp hình Lego
 nintendo_console,máy chơi game Nintendo
 see-through_pelvic_curtain,vạt che hông trong suốt nhìn xuyên thấu
 ass_hair,tóc mông
@@ -14877,7 +14891,7 @@ crystal_hair_ornament,trang sức tóc pha lê
 leaf_arms,cánh tay chiếc lá
 pokemon_day,ban ngày Pokémon
 waist_hug,ôm eo
-spine_(medium),phần gáy sách
+spine_(medium),phần mềm Spine 2D
 clothes_in_front,quần áo trong phía trước
 bright_colors,nhiều màu rực
 penetrating_with_multiple,xâm nhập với nhiều
@@ -15535,6 +15549,7 @@ camisole_over_clothes,áo hai dây phủ lên quần áo
 armless_amputee,người cụt chi không tay áo
 star_censor,kiểm duyệt bằng hình sao
 horn_(instrument),một chiếc sừng (nhạc cụ)
+fleischer_style_toon,hoạt hình kiểu Fleischer
 love_triangle,hình tam giác tình yêu
 biting_partner,bạn đồng hành cắn
 red_crop_top,áo croptop màu đỏ
@@ -15776,6 +15791,7 @@ purple_inner_ear_fluff,lông trong tai màu tím
 sparkling_clothing,quần áo lấp lánh
 too_many_birds,quá nhiều chim
 blue_swim_trunks,quần bơi nam màu xanh lam
+vaporwave,phong cách vaporwave
 imminent_cunnilingus,quan hệ bằng miệng với nữ sắp xảy ra
 glistening_bodysuit,bộ đồ liền thân bóng loáng
 stick_poster,áp phích cây gậy
@@ -15873,6 +15889,7 @@ weapon_between_breasts,vũ khí giữa ngực
 hand_fan_writing,viết quạt tay
 spire,tháp nhọn
 dragon_costume,trang phục hoá trang con rồng
+minimalism,trường phái Tối giản
 carnotaurus,khủng long Carnotaurus
 multicolored_bra,áo ngực màu nhiều màu
 pattern_bra,áo ngực hoa văn
@@ -15913,6 +15930,7 @@ wing_print,hoạ tiết in cánh
 green_pubes,lông mu màu xanh lục
 leashed_pov,góc nhìn thứ nhất bị dắt bằng dây
 frilled_nightgown,váy ngủ viền xếp nếp
+impressionism,trường phái Ấn tượng
 yellow_urine,nước tiểu màu vàng
 bruise_on_leg,vết bầm trên chân
 foot_on_back,bàn chân trên lưng
@@ -16223,7 +16241,7 @@ cocky_smile,nụ cười dương vật
 no,không
 blizzard,bão tuyết
 balls_focus,tiêu điểm tinh hoàn
-cel_rendering,quá trình kết xuất tấm cel
+cel_rendering,render kiểu cel
 against_door,dựa vào cửa
 grid_print,hoạ tiết in lưới ô
 rabbit_mask,mặt nạ thỏ
@@ -16402,6 +16420,7 @@ light_markings,vằn vện nhẹ
 bikini_briefs,quần lót nam bikini
 head_between_pecs,đầu giữa cơ ngực
 head_bow,cái nơ đầu
+impasto,kỹ thuật sơn dày (impasto)
 no_heterochromia,không có hai màu mắt khác nhau
 gold_teeth,răng màu vàng kim
 balls_in_mouth,tinh hoàn trong miệng
@@ -16722,6 +16741,7 @@ fluffy_butt,mông bông xù
 oriental_shorthair,mèo phương Đông lông ngắn
 presenting_bulge,trình ra vết phồng
 plaid_collar,vòng cổ kẻ ca rô
+dramatic_lighting,ánh sáng kịch tính
 bandage_on_hair,băng gạc trên tóc
 striped_scrunchie,dây buộc tóc vải có sọc
 brown_camisole,áo hai dây màu nâu
@@ -17613,6 +17633,7 @@ sphinx,nhân sư
 inbred_(lore),cận huyết (theo cốt truyện)
 human_dog,chó con người
 leather_legwear,tất quần bằng da
+chiaroscuro,tương phản sáng tối mạnh (chiaroscuro)
 blue_internal,bên trong màu xanh lam
 dress_pants,quần dài đầm
 adobe_animate_(artwork),làm bằng Adobe Animate
@@ -17779,6 +17800,7 @@ open_toe_heels,giày cao gót ngón chân mở
 squid_girl,cô gái mực ống
 humanoid_ears,tai hình người
 purple_hanfu,trang phục Hán màu tím
+tapestry,thảm dệt treo tường
 cracked,bị nứt
 sword_print,hoạ tiết in kiếm
 corn_snake,con rắn ngô
@@ -18749,6 +18771,7 @@ snow_boots,bốt tuyết
 hands_on_another's_leg,bàn tay trên chân của người khác
 weasel_humanoid,chồn hình người
 pink_elbow_gloves,găng tay đến khuỷu màu hồng
+art_deco,trường phái Art Deco
 on_animal,trên động vật
 zipper_jumpsuit,bộ liền quần khoá kéo
 sitting_on_arm,ngồi trên cánh tay
@@ -20015,6 +20038,7 @@ holding_apple,cầm quả táo
 egyptian_vulture,kền kền Ai Cập
 holy_ring,nhẫn thánh thiêng
 soap_bar,quán bar xà phòng
+psychedelic_background,phông nền phong cách ảo giác
 bola_(weapon),bola (vũ khí)
 monotone_panties,quần lót nữ một màu
 translucent_loincloth,khố màu trong mờ
@@ -20412,7 +20436,7 @@ cumdrip_onto_panties,tinh dịch chảy nhỏ giọt lên trên quần lót nữ
 chinese_wedding,đám cưới Trung Quốc
 against_locker,dựa vào tủ khoá
 light_head,đầu ánh sáng
-halftone_outline,đường viền nét chấm nửa sắc độ
+halftone_outline,đường viền nét chấm tram (halftone)
 on_weapon,trên vũ khí
 slime_censor,kiểm duyệt chất nhờn
 rotoscoping,đồ lại từ phim thật
@@ -21138,7 +21162,7 @@ vaginal_egg_insertion,đưa vào quả trứng quan hệ âm đạo
 see-through_shorts,quần đùi trong suốt nhìn xuyên thấu
 open_sign,biển báo mở
 tight_bikini,bikini bó sát
-simulated_traditional_(artwork),tác phẩm làm bằng Simulated Traditional
+simulated_traditional_(artwork),giả chất liệu truyền thống
 double_knotting,thắt nút giao phối đôi
 man_face,mặt người đàn ông
 fan_speaking,nói cái quạt
@@ -21688,6 +21712,7 @@ ears_tied_back,lưng tai bị buộc
 text_on_jacket,chữ trên áo khoác
 veil_over_eyes,khăn voan phủ lên mắt
 licking_object,vật thể liếm
+cubism,trường phái Lập thể
 slingshot,ná cao su
 organ_(instrument),đàn organ (nhạc cụ)
 french_artist,hoạ sĩ Pháp
@@ -22136,6 +22161,7 @@ insect_hair_ornament,đồ trang trí tóc côn trùng
 black_saliva,nước bọt màu đen
 lowered_pants,quần dài hạ xuống
 hand_on_own_calf,bàn tay trên bê con của chính mình
+mood_lighting,ánh sáng theo tâm trạng
 monochrome_body,cơ thể đơn sắc
 bongo_cat_(meme),mèo trống bongo (meme)
 licking_another's_finger,ngón tay của người khác liếm
@@ -23544,6 +23570,7 @@ ambient_arachnid,hình nhện trong bối cảnh
 cafe_maid_(love_live!),hầu gái quán cà phê (love live!)
 glove_nails,móng găng tay
 raccoon_tails_(hairstyle),đuôi gấu mèo (hairstyle)
+semi-realistic,bán thực tế
 vertical-striped_sports_bra,áo ngực thể thao sọc dọc
 medium_penis,dương vật vừa
 yellow_piercing,xỏ khuyên màu vàng
@@ -23815,6 +23842,7 @@ grey_back,lưng màu xám
 turkey_meat,thịt Thổ Nhĩ Kỳ
 pink_ball_gag,bịt miệng kiểu quả cầu màu hồng
 balls_shrinking,đang thu nhỏ tinh hoàn
+dunhuang_style,phong cách tranh Đôn Hoàng
 gold_wrist_cuffs,vòng cườm tay màu vàng kim
 partially_offscreen_character,nhân vật ngoài khung hình một phần
 improvised_toilet,bồn cầu tự chế
@@ -24263,7 +24291,7 @@ visible_sniffing,ngửi nhìn thấy được
 touching_breasts,chạm ngực
 death_flag,lá cờ cái chết
 tailmouth_(species),tailmouth (loài)
-moe_(phrase),moe (câu)
+moe_(phrase),phong cách moe (câu)
 forced_cloacal,lỗ huyệt cưỡng ép
 happy_white_day,ban ngày trắng vui vẻ
 skirt_in_mouth,váy trong miệng
@@ -25232,6 +25260,7 @@ animal_earmuffs,bịt tai giữ ấm động vật
 armband_grab,nắm băng đeo tay
 clitoris_bar,quán bar âm vật
 foam_mustache,ria mép bọt
+rim_lighting,ánh sáng viền
 pink_gills,mang cá màu hồng
 monotone_bikini,bikini một màu
 human_rimming_anthro,con người quan hệ bằng miệng ở hậu môn thú nhân
@@ -26361,6 +26390,7 @@ garter_belt_legwear,tất quần nịt tất
 text_markings,vằn vện chữ
 sitting_on_planet,ngồi trên hành tinh
 fundoshi_pull,kéo khố fundoshi
+kirigami,nghệ thuật cắt giấy (kirigami)
 shy_expression,biểu cảm e thẹn
 yellow_soles,gan bàn chân màu vàng
 tracen_ondo_(song),tracen ondo (bài hát)
@@ -26587,14 +26617,16 @@ nipple_tie,cà vạt núm vú
 two-tone_arm_warmers,ống giữ ấm tay màu hai tông màu
 horn_bell,cái chuông một chiếc sừng
 print_crop_top,phần trên cắt ảnh hoạ tiết in
-halftone_shading,đổ bóng chấm nửa sắc độ
+halftone_shading,đổ bóng chấm tram (halftone)
 pink_speedo,quần bơi speedo màu hồng
 red_gills,mang cá màu đỏ
 actress,diễn viên nữ
 wide_feet,bàn chân rộng
 peacock_spider,con nhện con công
+memphis_design,thiết kế Memphis
 two-tone_eyewear,kính mắt màu hai tông màu
 holding_pecs,cầm cơ ngực
+greek_painting_style,phong cách tranh Hy Lạp cổ
 possum_girl,cô gái chồn túi possum
 vertical-striped_sash,dải thắt lưng sọc dọc
 gradient_tongue,lưỡi màu chuyển sắc
@@ -26658,6 +26690,7 @@ figure_stage,sân khấu mô hình nhân vật
 burned,bị cháy
 clock_hair_ornament,đồ trang trí tóc đồng hồ
 1992,năm 1992
+complex_shading,đổ bóng phức tạp
 green_tree_viper,rắn lục cây xanh lục
 wing_ring,nhẫn cánh
 see-through_scarf,khăn quàng trong suốt nhìn xuyên thấu
@@ -27852,7 +27885,7 @@ antler_ring,nhẫn gạc hươu
 dark_headwear,đồ đội đầu tối
 purple_cloaca,lỗ huyệt màu tím
 leather_jockstrap,quần jockstrap da thuộc
-brush_(medium),chất liệu Brush
+brush_(medium),cọ vẽ
 gradient_markings,vằn vện màu chuyển sắc
 evening_dress,đầm buổi tối
 purple_boxer_briefs,quần lót nam dạng đùi màu tím
@@ -29103,6 +29136,7 @@ axe_guitar,đàn ghi ta rìu
 extra_limbs,thừa tay chân
 zombie_costume,trang phục hoá trang thây ma
 centipede_humanoid,con rết hình người
+pointillism,trường phái Điểm sắc
 yellow_toe_claws,móng vuốt ngón chân màu vàng
 blue_neckwear,trang phục cổ màu xanh lam
 hand_on_handle,bàn tay trên tay cầm
@@ -29120,7 +29154,7 @@ tail_muscles,cơ bắp đuôi
 shaking_fist,nắm đấm rung lắc
 red_toe_claws,móng vuốt ngón chân màu đỏ
 holding_jockstrap,cầm quần jockstrap
-opencanvas_(medium),chất liệu Opencanvas
+opencanvas_(medium),vẽ bằng OpenCanvas
 looking_back_through_legs,nhìn lưng xuyên qua chân
 teal_countershading,màu lông tương phản màu xanh cổ vịt
 cum_manipulation,thao túng tinh dịch
@@ -29187,7 +29221,7 @@ anus_transformation,biến hình hậu môn
 high_heeled_boots_only,bốt cao gót chỉ có
 gap_teeth,răng khe hở
 deadly_nadder,Nadder chết chóc
-adobe_illustrator_(medium),chất liệu Adobe Illustrator
+adobe_illustrator_(medium),vẽ bằng Adobe Illustrator
 spiked_chastity_device,thiết bị trinh tiết có gai
 markings_on_cheeks,vằn vện trên má
 mounted_sign,biển báo đang cưỡi lên
@@ -29397,6 +29431,7 @@ black_knife_(elden_ring),con dao đen (elden ring)
 ice_cream_print,hoạ tiết in kem
 glans_brushing,chải quy đầu
 arm_behind,phía sau cánh tay
+art_deco_architecture,kiến trúc trường phái Art Deco
 futuristic_weapon,vũ khí tương lai
 octopus_print,hoạ tiết in bạch tuộc
 spanking_mark,vết đánh vào mông
@@ -30487,7 +30522,7 @@ pride_flag_question_mark_(meme),vết dấu hỏi lá cờ niềm tự hào (mem
 lagomorph_vulva,âm hộ bộ thỏ
 open_gift,quà tặng mở
 applying_bandaid,thoa băng dán cá nhân
-airbrush_(medium),chất liệu phun sơn
+airbrush_(medium),vẽ bằng cọ phun (airbrush)
 light_through_window,ánh sáng xuyên qua cửa sổ
 soiling_shorts,quần đùi làm bẩn
 candy_heart,trái tim kẹo
@@ -31701,7 +31736,7 @@ blood_on_balls,máu trên tinh hoàn
 notched_leaf,chiếc lá khía
 male_rimming_gynomorph,nam giới quan hệ bằng miệng ở hậu môn dạng nữ (có dương vật)
 breast_in_mouth,ngực trong miệng
-tapestry_(medium),chất liệu Tapestry
+tapestry_(medium),chất liệu thảm dệt treo tường
 lion_hood,mũ trùm sư tử
 chipmunk_humanoid,sóc chuột hình người
 translucent_horn,một chiếc sừng màu trong mờ
@@ -31881,7 +31916,7 @@ hairy_penis,dương vật nhiều lông
 bandeau_bra,áo ngực áo bandeau
 holding_disposable_cup,cầm cốc dùng một lần
 spider_wasp,ong bắp cày con nhện
-acrylic_gouache_(medium),chất liệu Acrylic Gouache
+acrylic_gouache_(medium),màu acrylic gouache
 sitelen_pona,chữ Sitelen Pona
 vertical-striped_hat,mũ sọc dọc
 scissor_doors,cửa ra vào kéo
@@ -32045,6 +32080,7 @@ fffm,ba nữ
 two_tone_border,viền hai tông màu
 cure_melody_(cosplay),giai điệu chó Cur (cosplay)
 brown_whiskers,râu ria màu nâu
+semi-realistic_feral,thú thật (bốn chân) bán thực tế
 shell_hat,mũ vỏ sò
 tentacle_hair_ornament,đồ trang trí tóc xúc tu
 pink_inner_pussy,âm hộ bên trong hồng
@@ -32243,7 +32279,7 @@ sitting_on_mecha,ngồi trên robot người lái
 looking_at_television,nhìn vào tivi
 hyper_glans,quy đầu cường điệu
 deep_one_(h.p._lovecraft),một đậm (h.p. lovecraft)
-felt_(medium),chất liệu Felt
+felt_(medium),vải nỉ
 musky_sheath,bao kiếm có mùi hôi
 musky_armpits,nách có mùi hôi
 coin_stack,chồng đồng xu
@@ -32981,7 +33017,7 @@ pink_chair,ghế màu hồng
 floral_topwear,áo hoa văn hoa
 ambiguous_penetrating_ambiguous,mơ hồ xâm nhập mơ hồ
 o_(symbol),o (biểu tượng)
-lego_set,bộ chân
+lego_set,bộ xếp hình Lego
 orgasm_from_frottage,lên đỉnh từ cọ xát
 moob_play,chơi ngực nam to
 vibrator_in_urethra,máy rung trong niệu đạo
@@ -33371,7 +33407,7 @@ purple_sling_bikini,bikini dạng dây màu tím
 neck_stripes,sọc cổ
 huge_nails,móng rất to
 kiss_mark_on_thigh,vết nụ hôn trên đùi
-autodesk_sketchbook_(medium),chất liệu Autodesk Sketchbook
+autodesk_sketchbook_(medium),vẽ bằng Autodesk Sketchbook
 tentacles_around_tail,xúc tu quanh đuôi
 orange_foreskin,bao quy đầu màu cam
 mouse_mask,mặt nạ chuột nhắt
@@ -33686,7 +33722,7 @@ dildo_with_face,dương vật giả với mặt
 cheese_singles,đơn phô mai
 open_blouse,áo blouse mở
 candle_in_ass,nến trong mông
-halftone_dots,chấm nửa sắc độ
+halftone_dots,chấm tram (halftone)
 wet_swimwear,đồ bơi ướt
 purse_over_shoulder,ví phủ lên vai
 slingshot_dress,đầm ná cao su
@@ -34170,7 +34206,7 @@ after_inflation,sau phình to
 monotone_belt,thắt lưng một màu
 wiggle_stereogram,ảnh lập thể dao động
 print_overalls,quần yếm hoạ tiết in
-engraving_(medium),chất liệu tranh khắc kim loại
+engraving_(medium),tranh khắc (engraving)
 floating_blood,máu lơ lửng
 athletic_top,phần trên săn chắc
 hand_under_pillow,bàn tay dưới gối
@@ -34358,7 +34394,7 @@ snake_wyvern,rồng hai chân con rắn
 bad_dlsite_link,liên kết Dlsite hỏng
 wedding_garter,dây nịt tất đám cưới
 public_oral,quan hệ bằng miệng nơi công cộng
-firealpaca_(medium),chất liệu Firealpaca
+firealpaca_(medium),vẽ bằng FireAlpaca
 arrow_pointing_to_face,chỉ tay mũi tên về phía mặt
 brown_beanie,mũ len beanie màu nâu
 pool_tube,ống hồ bơi
@@ -35068,6 +35104,7 @@ hair_bow_only,nơ tóc chỉ có
 jiggling_penis,dương vật rung lắc nảy
 boat_interior,nội thất thuyền
 prosthetic_wings,đôi cánh chi giả
+abstract_colors,nhiều màu trừu tượng
 bamboo_hair_ornament,đồ trang trí tóc tre
 black_horn_tip,đầu một chiếc sừng đen
 musky_jockstrap,quần jockstrap có mùi hôi
@@ -35571,6 +35608,7 @@ pokemon_type_symbol,biểu tượng loại Pokémon
 feces_from_mouth,phân từ miệng
 death_egg,quả trứng cái chết
 lace-trimmed_sash,dải thắt lưng viền ren
+expressionism,trường phái Biểu hiện
 horsetail_(plant),horsetail (thực vật)
 glistening_antlers,gạc hươu bóng loáng
 two_tone_headphones,tai nghe hai tông màu
@@ -35732,7 +35770,7 @@ weapon_shop,cửa hàng vũ khí
 echidna_boy,chàng trai thú lông nhím
 tattoo_machine_(laser),máy móc hình xăm (laser)
 pouring_on_another,rót trên người khác
-art_academy_(medium),chất liệu Art Academy
+art_academy_(medium),vẽ bằng Art Academy
 barely_visible_teeth,hầu như không răng nhìn thấy được
 window_frame,khung cửa sổ
 indian_flying_fox,Ấn Độ bay cáo
@@ -36632,7 +36670,7 @@ water_gun_(pokemon),súng nước (Pokémon)
 horizontal-striped_necktie,cà vạt sọc ngang
 shoulder_ride,trò chơi vai
 gold_band,ban nhạc màu vàng kim
-woodcut_(artwork),tác phẩm làm bằng Woodcut
+woodcut_(artwork),tranh khắc gỗ
 vaginal_squeezing,bóp quan hệ âm đạo
 airplane_ornament,đồ trang trí máy bay
 girly_pose,tư thế cô gái
@@ -37494,7 +37532,7 @@ card_gun,súng tấm thẻ
 card_spring,lò xo tấm thẻ
 two_tone_beanie,mũ len beanie hai tông màu
 cloacal_tugging,giật lỗ huyệt
-ink_(artwork),tác phẩm làm bằng mực
+ink_(artwork),tranh vẽ bằng mực
 penis_in_food,dương vật trong đồ ăn
 hat_print,hoạ tiết in mũ
 blood_on_butt,máu trên mông
@@ -37518,7 +37556,7 @@ urine_on_chin,nước tiểu trên cằm
 topwear_grab,nắm áo
 clothing_sex,quan hệ tình dục quần áo
 running_on_all_fours,chạy trên chống tay và gối
-amigurumi_(medium),chất liệu Amigurumi
+amigurumi_(medium),thú bông móc len
 taut_vest,áo ghi lê căng
 feather_censor,kiểm duyệt lông vũ
 gradient_innertube,phao bơi tròn màu chuyển sắc
@@ -37760,7 +37798,7 @@ hand_on_ceiling,bàn tay trên trần nhà
 leg_out_of_water,chân ra ngoài nước
 leg_over_head,chân phủ lên đầu
 leg_stockings,tất dài chân
-dotpict_(medium),chất liệu Dotpict
+dotpict_(medium),vẽ bằng Dotpict
 legs_around_pole,chân quanh cây sào
 anal_beads_in_cloaca,hạt cườm hậu môn trong lỗ huyệt
 double_high_five,hai năm cao
@@ -37773,6 +37811,7 @@ halo_anklet,vòng cổ chân vòng hào quang
 anatomically_correct_feet,bàn chân giải phẫu chính xác
 half-demon,bán yêu
 realistic_hypnosis,thôi miên thực tế
+yonkoma,truyện 4 khung (yonkoma)
 house_background,phông nền ngôi nhà
 house_martin,chim nhạn ngôi nhà
 sitting_on_cage,ngồi trên lồng
@@ -38637,6 +38676,7 @@ play_piercing,chơi xỏ khuyên
 play_fight,chơi đánh nhau
 light_panties,quần lót nữ nhẹ
 presenting_another's_ass,trình ra mông của người khác
+minimal_shading,đổ bóng tối giản
 robot_transformation,biến hình người máy
 frog_egg,quả trứng ếch
 presenting_to_partner,trình ra về phía bạn đồng hành
@@ -39373,6 +39413,7 @@ grey_bed_sheet,ra trải giường màu xám
 cast_writing,viết bó bột
 tie_pilot,phi công cà vạt
 flamingo_print,hoạ tiết in hồng hạc
+moe,phong cách moe
 blue_popsicle,kem que màu xanh lam
 own_cum_on_tongue,tinh dịch của chính mình trên lưỡi
 heart-shaped_tag,thẻ hình tim
@@ -39663,6 +39704,7 @@ hands_at_sides,bàn tay vào bên
 leather_elbow_gloves,găng tay đến khuỷu bằng da
 striped_balloon,bong bóng bay có sọc
 shadel,bóng tối
+voxel_art,nghệ thuật khối voxel
 chained_to_bed,bị xích về phía giường
 paint_on_penis,sơn trên dương vật
 turkey_costume,trang phục hoá trang Thổ Nhĩ Kỳ
@@ -40228,7 +40270,7 @@ floral_hair,tóc hoa văn hoa
 two-tone_buruma,quần buruma màu hai tông màu
 wisteria_(flower),wisteria (hoa)
 nishimura_kinu_(style),nishimura kinu (phong cách)
-kirigami_(medium),chất liệu Kirigami
+kirigami_(medium),chất liệu nghệ thuật cắt giấy (kirigami)
 rainbow_lights,đèn cầu vồng
 penis_in_another's_pantyhose,dương vật trong quần tất của người khác
 grass_lily,hoa loa kèn cỏ
@@ -40543,7 +40585,7 @@ nursing,cho bú
 hair_in_water,tóc trong nước
 dal_segno_(symbol),dal segno (biểu tượng)
 file_(tool),file (dụng cụ)
-blockbench_(medium),chất liệu Blockbench
+blockbench_(medium),vẽ bằng Blockbench
 ambiguous_masturbation,thủ dâm mơ hồ
 see-through_dress_swimsuit,đồ bơi đầm trong suốt nhìn xuyên thấu
 paint_on_tail,sơn trên đuôi
@@ -41341,6 +41383,7 @@ ruby_ring,nhẫn màu đỏ hồng ngọc
 two_tone_goggles,kính bảo hộ hai tông màu
 winter_soldier_(cosplay),người lính mùa đông (cosplay)
 reed_(instrument),reed (nhạc cụ)
+abstract_text,chữ trừu tượng
 double_cherry_(mario),hai quả anh đào (mario)
 oriole_(bird),chim vàng anh
 miura_kentarou_(style),miura kentarou (phong cách)
@@ -42925,7 +42968,7 @@ triple_cumshot,xuất tinh ba
 big_dress,đầm to
 pantyshot_(standing),lộ quần lót (standing)
 rat_taur,chuột cống dạng nhân mã
-red_spot_color,một điểm màu đỏ
+red_spot_color,điểm xuyết màu đỏ
 red_seam_bottomwear,quần biển đỏ
 octopus_taur,bạch tuộc dạng nhân mã
 arm_on_breast,cánh tay trên ngực
@@ -43213,7 +43256,7 @@ aqua_nightgown,váy ngủ màu xanh nước
 turquoise_skin,da màu xanh ngọc lam
 chalk_(medium),phấn
 implied_cum_inside,trong nhà tinh dịch ám chỉ
-halftone_shadow,bóng đổ chấm nửa sắc độ
+halftone_shadow,bóng đổ chấm tram (halftone)
 implied_hypnosis,thôi miên ám chỉ
 sitting_in_feces,ngồi trong phân
 metronome_(pokemon),máy nhịp (Pokémon)
@@ -43860,7 +43903,7 @@ steam_lines,đường nét hơi nước
 dress_suit,com lê đầm
 dress_socks,tất đầm
 bird_footprints,dấu chân chim
-fudepen_(medium),chất liệu Fudepen
+fudepen_(medium),bút lông nước Nhật (fudepen)
 stated_teenager,tuổi teen được nêu rõ
 under_box,cái hộp dưới
 stone_table,bàn bằng đá
@@ -44238,7 +44281,7 @@ dark_chocolate,sô cô la tối
 small_text,chữ nhỏ
 small_penis_pride,niềm tự hào dương vật nhỏ
 holding_sticker,cầm nhãn dán
-etching_(artwork),tác phẩm làm bằng tranh khắc axit
+etching_(artwork),tranh khắc axit (etching)
 sharp_talons,móng vuốt chim sắc
 sharp_chin,cằm sắc
 sharp_canines,chó sắc
@@ -44258,7 +44301,7 @@ horn_expansion,nở to một chiếc sừng
 slime_on_tail,chất nhờn trên đuôi
 slime_antennae,râu côn trùng chất nhờn
 theater_bell_(dankira!!!),cái chuông nhà hát (dankira!!!)
-digital_pastel_(artwork),tác phẩm làm bằng Digital Pastel
+digital_pastel_(artwork),phấn tiên kỹ thuật số
 digital_inflation,phình to kỹ thuật số
 silk_ball,quả bóng bằng lụa
 silk_moth,bướm đêm bằng lụa
@@ -44445,7 +44488,7 @@ devanagari_text,chữ Devanagari
 airedale_terrier,chó Airedale Terrier
 sitting_on_ass,ngồi trên mông
 bread_in_mouth,bánh mì trong miệng
-embroidery_(medium),chất liệu thêu
+embroidery_(medium),tranh thêu
 purple_crotch_tentacles,xúc tu háng tím
 sitting_on_cock,ngồi trên dương vật
 banana_magazine,tạp chí quả chuối
@@ -44576,6 +44619,7 @@ plaid_boxers,quần đùi lót nam kẻ ca rô
 rubbing_ear,cọ xát tai
 humanoid_rimming_feral,dạng người quan hệ bằng miệng ở hậu môn thú thật (bốn chân)
 looking_at_bottle,nhìn vào cái chai
+outrun_sun,mặt trời phong cách outrun
 looking_at_own_crotch,nhìn vào háng của chính mình
 fox_ear_headphones,tai nghe tai cáo
 brown_hand,bàn tay nâu

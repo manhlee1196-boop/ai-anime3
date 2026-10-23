@@ -5,7 +5,12 @@ Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import g
 import json
 from pathlib import Path
 
-from notebook_support import API_SAMPLE_SOURCE, BOOTSTRAP_SOURCE, WORKFLOW_GUIDE
+from notebook_support import (API_SAMPLE_SOURCE, BOOTSTRAP_SOURCE, BRANCH,
+                              WORKFLOW_GUIDE)
+
+# Nhánh cũ từng ghi cứng trong template; thay bằng BRANCH (nhánh đang checkout)
+# đúng một lần lúc ghi file, để "Run all" tải mã mới nhất.
+LEGACY_BRANCH = "arena/88f01d31-ai-anime3"
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "WAI_Illustrious_v17_vi.ipynb"
@@ -22,7 +27,7 @@ def code(text):
 
 
 md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.7
-### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.513 bản dịch
+### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.557 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
 stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không tự đổi model.
@@ -284,5 +289,8 @@ notebook = {
     },
     "cells": cells,
 }
-OUT.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+# Nhánh trong notebook phải là nhánh đang checkout (xem notebook_support.BRANCH),
+# để "Run all" tải đúng mã nguồn thay vì một nhánh cũ.
+text = json.dumps(notebook, ensure_ascii=False, indent=1).replace(LEGACY_BRANCH, BRANCH)
+OUT.write_text(text + "\n", encoding="utf-8")
 print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.7")

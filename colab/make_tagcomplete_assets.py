@@ -10,7 +10,8 @@ Kết quả (trong `colab/assets/`):
                                          mà danh sách Danbooru không có
   danbooru_e621_vi_translation_wai.csv   translation 2 cột: bản dịch của kho
                                          + tag hệ thống, để Forge hiện nghĩa tiếng Việt
-  styles.csv                             4 Style bấm được trong Forge (theo mức phân loại)
+  styles.csv                             16 Style bấm được trong Forge (4 mức phân loại
+                                         + 12 công thức phong cách vẽ)
 
 Chạy:  python3 colab/make_tagcomplete_assets.py
 """

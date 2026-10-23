@@ -17,7 +17,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "colab"))
-from notebook_support import API_SAMPLE_SOURCE, BOOTSTRAP_SOURCE, MIN_INSTALLER_VERSION
+from notebook_support import (API_SAMPLE_SOURCE, BOOTSTRAP_SOURCE, BRANCH,
+                              MIN_INSTALLER_VERSION)
 
 INSTALLER = (ROOT / "colab/install.sh").read_bytes()
 REAL_RUN = subprocess.run
@@ -60,7 +61,7 @@ class NotebookTests(unittest.TestCase):
 
     def download(self, responses, env=None):
         with patch("urllib.request.urlopen", self.fetcher(responses)), contextlib.redirect_stdout(io.StringIO()):
-            return self.namespace["download_installer"](self.dest, "arena/88f01d31-ai-anime3", env or {})
+            return self.namespace["download_installer"](self.dest, BRANCH, env or {})
 
     def test_01_generated_notebooks_are_synced_valid_and_unexecuted(self):
         for generator, name in (("make_install_notebook.py", "WAI_v17_1click.ipynb"),
@@ -81,7 +82,7 @@ class NotebookTests(unittest.TestCase):
             source = "\n".join(code_cells(nb))
             self.assertNotIn("drive.mount", source)
             self.assertIn('MIN_INSTALLER_VERSION = "1.0.7"', source)
-            self.assertIn('"arena/88f01d31-ai-anime3"', source)
+            self.assertIn(f'"{BRANCH}"', source)
         self.assertEqual(len(code_cells(notebook("WAI_v17_1click.ipynb"))), 1)
         self.assertEqual(MIN_INSTALLER_VERSION, "1.0.7")
 
@@ -95,10 +96,10 @@ class NotebookTests(unittest.TestCase):
         token = "fixture-only-secret"
         output = io.StringIO()
         with patch("urllib.request.urlopen", self.fetcher([OSError("offline"), INSTALLER])), contextlib.redirect_stdout(output):
-            version = self.namespace["download_installer"](self.dest, "arena/88f01d31-ai-anime3", {"GITHUB_TOKEN": token})
+            version = self.namespace["download_installer"](self.dest, BRANCH, {"GITHUB_TOKEN": token})
         self.assertEqual(version, "1.0.7")
         self.assertIn("api.github.com", self.requests[1].full_url)
-        self.assertIn("arena%2F88f01d31-ai-anime3", self.requests[1].full_url)
+        self.assertIn(BRANCH.replace("/", "%2F"), self.requests[1].full_url)
         self.assertTrue(all(token not in request.full_url for request in self.requests))
         self.assertNotIn(token, output.getvalue())
         self.assertEqual(self.requests[1].get_header("Authorization"), "Bearer " + token)
@@ -144,7 +145,7 @@ class NotebookTests(unittest.TestCase):
             stages.append(stage)
             self.assertEqual(args[args.index("--model") + 1], "fp16")
             self.assertEqual(args[args.index("--tunnel") + 1], "share")
-            self.assertEqual(args[args.index("--branch") + 1], "arena/88f01d31-ai-anime3")
+            self.assertEqual(args[args.index("--branch") + 1], BRANCH)
             self.assertTrue(kwargs.get("check"))
             if stage == "repo":
                 repo_install.parent.mkdir(parents=True)

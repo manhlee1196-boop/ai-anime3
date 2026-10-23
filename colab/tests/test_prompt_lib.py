@@ -4,6 +4,8 @@ Chạy:  python3 colab/tests/test_prompt_lib.py      (từ thư mục gốc repo
 Bộ kiểm tra chạy độc lập bằng Python, không cần pytest.
 """
 
+import csv
+import io
 import os
 import sys
 
@@ -199,8 +201,13 @@ def main():
 
     print("\n14) styles.csv cho Forge")
     csv_text = builder.styles_csv()
-    check("có 4 mức phân loại", csv_text.count("\n"), 5)
+    check("4 mức phân loại + 12 công thức phong cách", csv_text.count("\n"), 17)
     check_in("dòng đầu là header", "name,prompt,negative_prompt", csv_text)
+    check_in("có Style phong cách bấm được", "Phong cách — Tranh màu nước", csv_text)
+    sketch_row = [r for r in csv.reader(io.StringIO(csv_text))
+                  if r[0] == "Phong cách — Phác thảo chì"][0]
+    check("negative của Style 'Phác thảo chì' không chứa sketch", 
+          "sketch" in sketch_row[2].split(", "), False)
 
     print("\n15) Biến thể model (profile do colab/install.sh chọn)")
     check("có đủ 4 biến thể trong catalog", sorted(MODEL_PROFILES), ["fp16", "fp8", "hswq", "int8"])
