@@ -51,7 +51,7 @@ Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, ch�
 trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
 không mount Drive; **Gradio share** mặc định (`gradio.live`), Cloudflare tùy chọn; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
 
-[**Mở notebook cài mới 1.0.7 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+[**Mở notebook cài mới 1.0.7 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2Fec9855a4-ai-anime3/colab/WAI_v17_1click.ipynb)
 → chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.7.
 **Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong Prompt VN rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
@@ -63,7 +63,7 @@ kết nối lại/bật GPU. Notebook không tự xóa dữ liệu cũ.
 Hoặc dán một dòng vào Colab:
 
 ```python
-!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/88f01d31-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
+!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/ec9855a4-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
 
 Model tải vào `.part`, chỉ nhận khi SHA256 khớp; chạy lại không cài/khởi động trùng.

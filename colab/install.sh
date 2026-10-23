@@ -19,7 +19,7 @@ for key in "${CONFIG_KEYS[@]}"; do
   [[ ! -v "$key" ]] || ENV_GIVEN[$key]=1
 done
 REPO_URL="${REPO_URL:-https://github.com/manhlee1196-boop/ai-anime3}"
-REPO_BRANCH="${REPO_BRANCH:-arena/88f01d31-ai-anime3}"
+REPO_BRANCH="${REPO_BRANCH:-arena/ec9855a4-ai-anime3}"
 REPO_DIR="${REPO_DIR:-/content/ai-anime3}"
 FORGE_DIR="${FORGE_DIR:-/content/sd-webui-forge-neo}"
 FORGE_REPO="${FORGE_REPO:-https://github.com/Haoming02/sd-webui-forge-classic}"

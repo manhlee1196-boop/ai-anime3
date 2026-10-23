@@ -7,7 +7,7 @@ Bản hiện tại **1.0.7**; xem [báo cáo rà soát toàn dự án](AUDIT.md)
 
 ## 1. Cách dễ nhất: notebook một ô
 
-[**Mở bộ cài trong Google Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F88f01d31-ai-anime3/colab/WAI_v17_1click.ipynb)
+[**Mở bộ cài trong Google Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2Fec9855a4-ai-anime3/colab/WAI_v17_1click.ipynb)
 
 Hoặc tải [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb), rồi Colab → File → Upload notebook.
 
@@ -28,7 +28,7 @@ Mất mạng chỉ dùng cache đủ mới và hợp lệ; không âm thầm ch�
 Cần khoảng **25 GB trống**. Lần đầu có thể mất **10–25 phút**, tùy mạng và runtime.
 Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạy lần lượt các stage.
 
-> Nhánh hiện tại là `arena/88f01d31-ai-anime3`, vì bộ cài chưa nằm trên `main`.
+> Nhánh hiện tại là `arena/ec9855a4-ai-anime3`, vì bộ cài chưa nằm trên `main`.
 > Chỉ đổi nhánh trong link/lệnh khi thay đổi đã được gộp vào nhánh đó.
 
 ## 2. Dán một dòng vào Colab
@@ -36,7 +36,7 @@ Notebook có đúng **1 ô code**, cùng 2 ô hướng dẫn; không cần chạ
 Sau khi bật GPU, dán vào một ô code:
 
 ```python
-!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/88f01d31-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
+!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/ec9855a4-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
 
 Đổi `--model fp16` thành `--model fp8`, `--model int8` hoặc `--model hswq` để chọn biến thể.
@@ -47,7 +47,7 @@ nếu cần token. **Không dán token vào lệnh hoặc URL.**
 Nếu raw GitHub không truy cập được, lấy script qua API:
 
 ```python
-!curl -fsSL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/manhlee1196-boop/ai-anime3/contents/colab/install.sh?ref=arena%2F88f01d31-ai-anime3" -o /content/install.sh && bash /content/install.sh --model fp16
+!curl -fsSL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/manhlee1196-boop/ai-anime3/contents/colab/install.sh?ref=arena%2Fec9855a4-ai-anime3" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
 
 Cài mới mặc định dùng **Gradio share** (`gradio.live`). Có thể chọn `--tunnel cloudflared`
@@ -194,7 +194,7 @@ Nháp/Chuẩn/Hoàn thiện và dùng lại seed. Không chỉnh sửa mã tagco
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
 bash /content/install.sh --only extras,launch,verify --restart
 ```
@@ -236,8 +236,8 @@ repo nếu có thay đổi riêng. Chạy một ô Colab mới:
 %%bash
 set -euo pipefail
 repo=/content/ai-anime3
-[[ "$(git -C "$repo" branch --show-current)" == "arena/88f01d31-ai-anime3" ]] || { echo "Repo khác nhánh; dừng để giữ thay đổi của bạn."; exit 1; }
-git -C "$repo" pull --ff-only origin arena/88f01d31-ai-anime3
+[[ "$(git -C "$repo" branch --show-current)" == "arena/ec9855a4-ai-anime3" ]] || { echo "Repo khác nhánh; dừng để giữ thay đổi của bạn."; exit 1; }
+git -C "$repo" pull --ff-only origin arena/ec9855a4-ai-anime3
 cp "$repo/colab/install.sh" /content/install.sh
 cp "$repo/colab/setup_forge.sh" /content/setup_forge.sh
 bash /content/install.sh --version
@@ -311,7 +311,7 @@ Chạy **trong runtime hiện tại**, không xóa runtime:
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
 bash /content/install.sh --version
 bash /content/install.sh --only launch,verify --restart
@@ -350,7 +350,7 @@ Dán **một ô mới trong runtime hiện tại**:
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
 bash /content/install.sh --only launch,verify --restart
 ```
@@ -390,7 +390,7 @@ Forge và bấm refresh Checkpoint một lần để có traceback mới, rồi 
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 python3 /content/ai-anime3/colab/diagnostics.py \
   --public-url "https://YOUR-LINK.trycloudflare.com/"
 ```
@@ -421,7 +421,7 @@ Chạy trong **runtime hiện tại**, không reset và không tải lại model
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
 bash /content/install.sh --only extras,launch,verify --restart --smoke-test
 ```
@@ -475,7 +475,7 @@ Git, dừng và giữ thay đổi local; không dùng `reset --hard`.
 ```bash
 %%bash
 set -euo pipefail
-git -C /content/ai-anime3 pull --ff-only origin arena/88f01d31-ai-anime3
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
 cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
 bash /content/install.sh --only launch,verify --restart
 ```
