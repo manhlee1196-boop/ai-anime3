@@ -77,7 +77,7 @@ if LIB_DIR:
     from prompt_lib.editing import replace_or_append, convert_tags
     from prompt_lib.generate import (GenerationJob, advice_for, busy_message, format_duration,
                                      interrupt, payload_warnings, progress_info, read_timeout,
-                                     status_line, timeouts)
+                                     status_line, timeouts, wait_diagnosis)
     from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                      workflow_settings, workflow_note, validate_generation,
                                      generation_metadata, generation_error, seed_at)
@@ -451,6 +451,12 @@ def do_stop():
     return message
 
 
+def do_wait_diagnostics(elapsed=0):
+    """Nút 🔎 Chẩn đoán: vì sao còn "đang chờ Forge trả ảnh" (progress/ping/log)."""
+    return ("### 🔎 Chẩn đoán trạng thái sinh ảnh\n\n"
+            + "\n\n".join(wait_diagnosis(_forge_url(), elapsed=elapsed)))
+
+
 LOST_NOTE = (
     "❌ Không tìm thấy `prompt_lib` và các file CSV của kho prompt.\n\n"
     "Hãy đặt biến môi trường `VI_PROMPT_ROOT` trỏ tới thư mục repo "
@@ -590,8 +596,10 @@ def build_tab():
                 with gr.Row():
                     btn_generate = gr.Button("🖼️ Sinh ảnh", variant="primary", scale=3)
                     btn_stop = gr.Button("⛔ Huỷ job", scale=1)
+                    btn_diag = gr.Button("🔎 Chẩn đoán", scale=1)
                 gallery = gr.Gallery(label="Kết quả", columns=2, height=480)
                 gen_note = gr.Markdown("")
+                diag_note = gr.Markdown("")
                 generation_state = gr.State({})
                 image_index = gr.State(0)
                 btn_seed = gr.Button("🔒 Dùng seed của ảnh đã chọn")
@@ -643,6 +651,7 @@ def build_tab():
                            [gallery, gen_note, generation_state], concurrency_limit=1,
                            concurrency_id="wai_gpu")
         btn_stop.click(do_stop, None, [gen_note], queue=False, cancels=[generation_event])
+        btn_diag.click(do_wait_diagnostics, None, [diag_note], queue=False)
         history_panel.after_generation(generation_event)
     return tab
 

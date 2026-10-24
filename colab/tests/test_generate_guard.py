@@ -16,9 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "colab"))
 
 from prompt_lib.generate import (DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT,  # noqa: E402
-                                 GenerationJob, advice_for, busy_message, describe_error,
-                                 format_duration, interrupt, payload_warnings, progress_info,
-                                 read_timeout, status_line, timeouts)
+                                 GenerationJob, advice_for, api_flags, busy_message, describe_error,
+                                 format_duration, interrupt, log_hint, payload_warnings,
+                                 ping, progress_info, read_timeout, status_line, timeouts,
+                                 wait_diagnosis)
 from prompt_lib.workflow import generation_error  # noqa: E402
 
 
@@ -66,13 +67,16 @@ class Progress(unittest.TestCase):
         self.assertEqual((info["step"], info["steps"]), (9, 25))
         self.assertAlmostEqual(info["progress"], 0.36)
 
-    def test_04_broken_endpoint_is_silent(self):
+    def test_04_broken_endpoint_is_silent_but_explained(self):
         def boom(*a, **k):
             raise requests.exceptions.ConnectionError("down")
-        self.assertEqual(progress_info("http://x", get=boom), {})
-        self.assertEqual(progress_info("", get=boom), {})
-        self.assertEqual(progress_info("http://x", get=lambda *a, **k: FakeResponse([], 404)), {})
-        self.assertEqual(progress_info("http://x", get=lambda *a, **k: FakeResponse([1, 2])), {})
+        for info in (progress_info("http://x", get=boom),
+                     progress_info("", get=boom),
+                     progress_info("http://x", get=lambda *a, **k: FakeResponse([], 404)),
+                     progress_info("http://x", get=lambda *a, **k: FakeResponse([1, 2]))):
+            self.assertFalse(info["available"])
+            self.assertIn("reason", info)
+            self.assertNotIn("prompt", str(info).lower())   # không lộ dữ liệu người dùng
 
     def test_05_busy_message_and_status_line(self):
         info = {"busy": True, "progress": 0.4, "eta": 95, "step": 9, "steps": 25}
@@ -83,19 +87,171 @@ class Progress(unittest.TestCase):
         self.assertIn("01:12", line)
         self.assertIn("bước 9/25", line)
         self.assertIn("(40%)", line)
-        self.assertIn("đang chờ Forge", status_line(3, {}))
+        # job đã nhận nhưng chưa bắt đầu (job_count=0) — khác hẳn "không đọc được"
+        idle = {"available": True, "busy": False, "reason": ""}
+        self.assertIn("chưa bắt đầu job", status_line(3, idle))
 
     def test_06_advice_only_when_stalled(self):
         running = {"busy": True, "progress": 0.2, "eta": 10}
         self.assertEqual(advice_for(20, running, stalled=10), "")
         self.assertIn("Không nhích bước", advice_for(200, running, stalled=120))
-        self.assertIn("nạp checkpoint", advice_for(45, {}, stalled=0))
+        idle = {"available": True, "busy": False, "reason": ""}
+        self.assertIn("nạp checkpoint", advice_for(45, idle, stalled=0))
+        self.assertEqual(advice_for(5, idle, stalled=0), "")
+        # không đọc được tiến trình: nói rõ là app vẫn chờ, kèm cách kiểm tra
+        self.assertIn("Không đọc được tiến trình",
+                      advice_for(45, {"available": False, "reason": "HTTP 404"}, stalled=0))
 
     def test_07_format_duration(self):
         self.assertEqual(format_duration(9), "9s")
         self.assertEqual(format_duration(95), "1m 35s")
         self.assertEqual(format_duration(3725), "1h 02m")
         self.assertEqual(format_duration("rác"), "?")
+
+
+class ProgressSources(unittest.TestCase):
+    """Symptom "đang chờ Forge trả ảnh": phải nói rõ vì sao, không im lặng."""
+
+    def test_18_falls_back_to_internal_progress(self):
+        seen = []
+
+        def get(url, **kwargs):
+            seen.append(url)
+            if url.endswith("/sdapi/v1/progress"):
+                return FakeResponse({}, 404)
+            return FakeResponse({"progress": 0.5, "eta_relative": 30,
+                                 "state": {"job_count": 1, "sampling_step": 12,
+                                           "sampling_steps": 25}})
+
+        info = progress_info("http://x", get=get)
+        self.assertTrue(info["available"])
+        self.assertEqual(info["source"], "/internal/progress")
+        self.assertTrue(info["busy"])
+        self.assertEqual(info["step"], 12)
+        self.assertIn("bước 12/25", status_line(45, info))
+        self.assertEqual(len(seen), 2)
+
+    def test_19_both_endpoints_missing_explains_why(self):
+        info = progress_info("http://x", get=lambda *a, **k: FakeResponse({}, 404))
+        self.assertFalse(info["available"])
+        self.assertEqual(info["reason"], "HTTP 404")
+        self.assertFalse(info["maybe_busy"])
+        line = status_line(45, info)
+        self.assertIn("chưa đọc được tiến trình", line)
+        self.assertIn("Chẩn đoán", line)
+        self.assertIn("Không đọc được tiến trình", advice_for(60, info))
+
+    def test_20_slow_progress_means_busy_not_broken(self):
+        def slow(*args, **kwargs):
+            import requests as rq
+            raise rq.exceptions.ReadTimeout("slow")
+
+        info = progress_info("http://x", get=slow)
+        self.assertTrue(info["maybe_busy"])
+        line = status_line(40, info)
+        self.assertIn("đang chạy", line)
+        self.assertIn("đừng bấm lại", line)
+        self.assertIn("không trả lời kịp", advice_for(60, info))
+
+    def test_21_job_accepted_but_not_started(self):
+        info = progress_info("http://x", get=lambda *a, **k: FakeResponse(
+            {"progress": 0, "state": {"job_count": 0}}))
+        self.assertTrue(info["available"])
+        self.assertFalse(info["busy"])
+        self.assertIn("chưa bắt đầu job", status_line(30, info))
+        self.assertIn("quá 2 phút", status_line(150, info))
+        self.assertIn("nạp checkpoint", advice_for(40, info))
+
+    def test_22_ping_distinguishes_dead_from_alive(self):
+        self.assertTrue(ping("http://x", get=lambda *a, **k: FakeResponse({}))["alive"])
+        self.assertFalse(ping("http://x", get=lambda *a, **k: FakeResponse({}, 502))["alive"])
+        dead = ping("http://x", get=lambda *a, **k: (_ for _ in ()).throw(
+            __import__("requests").exceptions.ConnectionError("down")))
+        self.assertFalse(dead["alive"])
+        self.assertIn("ConnectionError", dead["detail"])
+
+    def test_23_diagnosis_covers_three_cases(self):
+        running = {"available": True, "busy": True, "progress": 0.4, "step": 9,
+                   "steps": 25, "eta": 12, "source": "/sdapi/v1/progress"}
+        text = "\n".join(wait_diagnosis("http://x", elapsed=60, info=running,
+                                        ping_result={"alive": True, "detail": "ok"},
+                                        log={"co_log": False, "path": "", "lines": []}))
+        self.assertIn("đang chạy", text)
+        self.assertIn("40%", text)
+
+        broken = {"available": False, "reason": "HTTP 404", "maybe_busy": False}
+        text = "\n".join(wait_diagnosis("http://x", elapsed=95, info=broken,
+                                        ping_result={"alive": False, "detail": "ConnectionError"},
+                                        log={"co_log": True, "path": "/content/forge.log",
+                                             "lines": ["Hết VRAM (CUDA out of memory)"]}))
+        self.assertIn("HTTP 404", text)
+        self.assertIn("không phản hồi", text)
+        self.assertIn("Hết VRAM", text)
+        self.assertIn("Việc nên làm", text)
+
+        slow = {"available": False, "reason": "quá thời gian", "maybe_busy": True}
+        text = "\n".join(wait_diagnosis("http://x", elapsed=60, info=slow,
+                                        ping_result={"alive": True, "detail": "ok"},
+                                        log={"co_log": False, "path": "", "lines": []}))
+        self.assertIn("không trả lời kịp", text)
+
+    def test_27_ping_falls_back_to_root_when_options_busy(self):
+        calls = []
+
+        def get(url, **kwargs):
+            calls.append(url)
+            if url.endswith("/sdapi/v1/options"):
+                import requests as rq
+                raise rq.exceptions.ReadTimeout("busy")
+            if url.endswith("/sdapi/v1/cmd-flags"):
+                return FakeResponse({}, 404)
+            return FakeResponse({}, 200)
+
+        result = ping("http://x", get=get)
+        self.assertTrue(result["alive"])
+        self.assertEqual(result["path"], "/")
+        self.assertEqual(len(calls), 3)
+
+    def test_25_cmd_flags_identifies_foreign_server(self):
+        ok = api_flags("http://x", get=lambda *a, **k: FakeResponse({"api_only": True}))
+        self.assertTrue(ok["available"] and ok["api_only"])
+        missing = api_flags("http://x", get=lambda *a, **k: FakeResponse({}, 404))
+        self.assertFalse(missing["available"])
+        self.assertEqual(missing["reason"], "HTTP 404")
+
+        def boom(*a, **k):
+            raise __import__("requests").exceptions.ConnectionError("down")
+
+        self.assertEqual(api_flags("http://x", get=boom)["reason"], "ConnectionError")
+        self.assertFalse(api_flags("")["available"])
+
+    def test_26_diagnosis_flags_api_off(self):
+        info = {"available": False, "reason": "HTTP 404", "maybe_busy": False}
+        text = "\n".join(wait_diagnosis(
+            "http://x", elapsed=90, info=info,
+            ping_result={"alive": True, "detail": "ok"},
+            log={"co_log": False, "path": "", "lines": []},
+            flags={"available": False, "reason": "HTTP 404"}))
+        self.assertIn("--api", text)
+        text = "\n".join(wait_diagnosis(
+            "http://x", elapsed=90, info=info,
+            ping_result={"alive": True, "detail": "ok"},
+            log={"co_log": False, "path": "", "lines": []},
+            flags={"available": True, "api_only": False, "now": False}))
+        self.assertIn("cmd-flags", text)
+        self.assertIn("ảnh vẫn sinh bình thường", text)
+
+    def test_24_log_hint_reads_signatures_only(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "forge.log"
+            path.write_text("loading model\nRuntimeError: CUDA out of memory\nSECRET_TOKEN=abc\n")
+            hint = log_hint(str(path))
+        self.assertTrue(hint["co_log"])
+        self.assertIn("Hết VRAM (CUDA out of memory)", hint["lines"])
+        self.assertIn("Đang nạp checkpoint/model", hint["lines"])
+        self.assertNotIn("SECRET_TOKEN", " ".join(hint["lines"]))
+        self.assertFalse(log_hint(str(Path(tmp) / "missing.log"))["co_log"])
 
 
 class Job(unittest.TestCase):

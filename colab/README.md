@@ -33,7 +33,7 @@ colab/
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
-  tests/test_generate_guard.py   chống treo: timeout/progress/huỷ job/cảnh báo VRAM
+  tests/test_generate_guard.py   chống treo: timeout/progress/huỷ job/chẩn đoán/log
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
@@ -159,7 +159,9 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
 - **Sinh ảnh không treo**: nút Sinh ảnh cập nhật mỗi giây (`⏳ 01:12 · bước 9/25 · 36% ·
   còn ~1m 20s`) nhờ đọc `/sdapi/v1/progress`; nút **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`;
   connect timeout 10s, read timeout 15 phút (`WAI_GEN_TIMEOUT`); Forge đang bận thì báo rõ
-  thay vì xếp hàng im lặng. Gặp kẹt: xem mục *Bấm Sinh ảnh bị treo* trong
+  thay vì xếp hàng im lặng. Đọc tiến trình từ `/sdapi/v1/progress`, thiếu thì fallback
+  `/internal/progress`; nút **🔎 Chẩn đoán** phân biệt *chưa bắt đầu job* – *Forge bận nên
+  quá giờ* – *thiếu endpoint/không phải API A1111* và đọc loại lỗi từ `forge.log`. Gặp kẹt: xem mục *Bấm Sinh ảnh bị treo* trong
   [`INSTALL.md`](INSTALL.md#bấm-sinh-ảnh-bị-treo--đứng-mãi-không-trả-ảnh).
 - **Prompt dài (CLIP 75 token/cửa sổ)**: mục **📏 Prompt dài** trong app đo token, chia cửa sổ
   và chỉ ra tag nào rơi vào vùng loãng (>150 token); nút **✂️ Nén** bỏ tag trùng nghĩa

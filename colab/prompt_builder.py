@@ -38,8 +38,8 @@ from prompt_lib.history import ImageHistory, forge_output_roots
 from prompt_lib.history_ui import HistoryPanel
 from prompt_lib.editing import replace_or_append, convert_tags
 from prompt_lib.generate import (GenerationJob, advice_for, busy_message, format_duration,
-                                 interrupt, payload_warnings, progress_info, read_timeout,
-                                 status_line, timeouts)
+                                 interrupt, payload_warnings, ping, progress_info, read_timeout,
+                                 status_line, timeouts, wait_diagnosis)
 from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                  workflow_settings, workflow_note, validate_generation,
                                  generation_metadata, generation_error, seed_at)
@@ -490,12 +490,18 @@ def do_generate_stream(prompt, negative, size_label, steps, cfg_scale, sampler, 
         yield gr.update(), message, {}
         return
 
+    # Kiểm tra trước: nếu /options không trả lời (Forge đang bận nạp model), thử ping để
+    # không chặn oan — ping sống thì vẫn gửi job, chỉ bỏ qua bước xác nhận checkpoint.
     ok, status = forge_alive(base)
-    if not ok:
-        yield gr.update(), status, {}
-        return
-
     warnings = payload_warnings(payload)
+    if not ok:
+        alive = ping(base)
+        if not alive.get("alive"):
+            yield gr.update(), status, {}
+            return
+        warnings.append("⚠️ Chưa đọc được `/sdapi/v1/options` (Forge đang bận?) nhưng server "
+                        "vẫn phản hồi — vẫn gửi prompt, bỏ qua bước xác nhận checkpoint.")
+
     head = "\n\n".join(x for x in [*warnings, swapped] if x)
 
     # Forge đang bận job khác: báo rõ thay vì xếp hàng im lặng. Chờ tối đa 20 giây rồi
@@ -543,6 +549,16 @@ def do_stop(url):
     """Nút Huỷ: gửi `/sdapi/v1/interrupt` để Forge dừng job đang kẹt."""
     ok, message = interrupt(url or CFG["forge_url"])
     return message
+
+
+def do_wait_diagnostics(url=None, elapsed=0):
+    """Nút 🔎 Chẩn đoán: vì sao app còn "đang chờ Forge trả ảnh"?
+
+    Kiểm tra 3 thứ tách biệt: endpoint tiến trình (2 đường), Forge còn phản hồi HTTP
+    không, và 40 dòng cuối `forge.log` (chỉ lấy loại lỗi, không in nội dung).
+    """
+    lines = wait_diagnosis(url or CFG["forge_url"], elapsed=elapsed)
+    return "### 🔎 Chẩn đoán trạng thái sinh ảnh\n\n" + "\n\n".join(lines)
 
 
 def do_refresh_upscalers(url):
@@ -795,8 +811,10 @@ def build_ui():
                             btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary",
                                                      scale=3)
                             btn_stop = gr.Button("⛔ Huỷ job", scale=1)
+                            btn_diag = gr.Button("🔎 Chẩn đoán", scale=1)
                         gallery = gr.Gallery(label="Kết quả", columns=2, height=520)
                         gen_note = gr.Markdown("")
+                        diag_note = gr.Markdown("")
                         generation_state = gr.State({})
                         image_index = gr.State(0)
                         btn_seed = gr.Button("🔒 Dùng seed của ảnh đã chọn")
@@ -885,6 +903,8 @@ def build_ui():
             concurrency_limit=1, concurrency_id="wai_gpu")
         btn_stop.click(do_stop, inputs=[url_box], outputs=[gen_note], queue=False,
                        cancels=[generation_event])
+        btn_diag.click(do_wait_diagnostics, inputs=[url_box], outputs=[diag_note],
+                       queue=False)
         history_panel.after_generation(generation_event)
 
         btn_explain.click(do_explain, inputs=[in_prompt],

@@ -261,6 +261,19 @@ Từ bản này nút **🖼️ Sinh ảnh** chạy ở chế độ theo dõi: m�
 `⏳ 01:12 · bước 9/25 · (36%) · còn ~1m 20s` lấy từ `/sdapi/v1/progress`, và có nút
 **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`. Vòng xoay không còn là dấu hiệu duy nhất.
 
+**Nếu dòng trạng thái đứng ở “đã gửi prompt, …”** — app đã gửi request nhưng chưa đọc được
+tiến trình. Bấm **🔎 Chẩn đoán** ngay cạnh nút Sinh ảnh; app phân biệt 3 trường hợp:
+
+| Dòng trạng thái | Nghĩa | Việc cần làm |
+|---|---|---|
+| `đã gửi prompt, Forge **chưa bắt đầu job**` | `/progress` trả lời `job_count=0` | bình thường 1–2 phút đầu (nạp checkpoint). Quá 3 phút → job khác đang giữ model lock |
+| `Forge **đang chạy** (không kịp trả lời số bước)` | endpoint tiến trình quá thời gian chờ | Forge đang chạy nặng (Hires/VRAM swap); **ảnh vẫn đang được tạo**, chờ tiếp |
+| `**chưa đọc được tiến trình** (HTTP 404)` | cả `/sdapi/v1/progress` và `/internal/progress` đều không có | bản Forge khác/thiếu `--api`; Chẩn đoán sẽ kiểm tra thêm `/sdapi/v1/cmd-flags` |
+
+Nút **🔎 Chẩn đoán** còn kiểm tra (1) Forge còn phản hồi HTTP không, (2) 40 dòng cuối
+`/content/forge.log` — chỉ in **loại lỗi** (hết VRAM, không thấy checkpoint, đang nạp model,
+có traceback), không in prompt/token/nội dung log.
+
 **Thứ tự kiểm tra khi vẫn thấy treo:**
 
 1. **Chờ đúng mức:** T4 thường **Nháp 30–60s**, **Chuẩn 60–90s**, **Hires 1.5× 3–6 phút**.

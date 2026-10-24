@@ -57,44 +57,84 @@ def timeouts(env=None):
 
 
 # --------------------------------------------------------------------- tiến trình
-def progress_info(url, timeout=3.0, get=None):
-    """Đọc `/sdapi/v1/progress`. Trả dict chuẩn hoá; `{}` nếu không đọc được.
+PROGRESS_PATHS = ("/sdapi/v1/progress", "/internal/progress")
 
-    Forge/A1111 trả: `progress` (0..1), `eta_relative`, `state.job_count`,
-    `state.sampling_step`, `state.sampling_steps`, `state.interrupted`.
+
+def _empty_progress(reason="", maybe_busy=False):
+    return {"available": False, "source": "", "http_status": 0, "reason": reason,
+            "maybe_busy": maybe_busy}
+
+
+def progress_info(url, timeout=(2.0, 5.0), get=None):
+    """Đọc tiến trình Forge, thử **2 endpoint**; trả dict chuẩn hoá.
+
+    `/sdapi/v1/progress` cần bật `--api`; một số bản Forge chỉ có `/internal/progress`
+    (endpoint mà chính giao diện Forge dùng). Nếu cả hai đều hỏng, trả
+    `{"available": False, "reason": ...}` để UI nói rõ **vì sao** nó không biết tiến trình,
+    thay vì hiện "đang chờ Forge trả ảnh…" mãi mà không có thông tin.
     """
     base = str(url or "").rstrip("/")
     if not base:
-        return {}
+        return _empty_progress("chưa có địa chỉ Forge")
     get = get or _requests().get
-    try:
-        r = get(f"{base}/sdapi/v1/progress", params={"skip_current_image": "true"},
-                timeout=timeout)
-        if getattr(r, "status_code", 0) != 200:
-            return {}
-        data = r.json() or {}
-    except Exception:                             # noqa: BLE001 - chỉ là thông tin phụ
-        return {}
-    if not isinstance(data, dict):
-        return {}
+    last_status, last_error, timed_out = 0, "", False
+    for path in PROGRESS_PATHS:
+        try:
+            r = get(f"{base}{path}", params={"skip_current_image": "true"},
+                    timeout=timeout)
+        except Exception as exc:                  # noqa: BLE001 - chỉ là thông tin phụ
+            last_error = type(exc).__name__
+            # Không trả lời kịp là dấu hiệu **server đang bận** (GPU giữ GIL / đang nạp
+            # model), khác với 404 (endpoint không tồn tại). Phân biệt để không doạ user.
+            if "Timeout" in last_error:
+                timed_out = True
+            continue
+        status = int(getattr(r, "status_code", 0) or 0)
+        if status != 200:
+            last_status = status
+            continue
+        try:
+            data = r.json() or {}
+        except Exception:                         # noqa: BLE001
+            last_error = "JSON hỏng"
+            continue
+        if not isinstance(data, dict):
+            last_error = "JSON không phải object"
+            continue
+        return _normalise_progress(data, path)
+
+    if timed_out and not last_status:
+        return _empty_progress("Forge không kịp trả lời tiến trình (quá thời gian chờ)",
+                               maybe_busy=True)
+    reason = (f"HTTP {last_status}" if last_status else "")
+    if last_error and not reason:
+        reason = last_error
+    return _empty_progress(reason or "không đọc được")
+
+
+def _normalise_progress(data, path):
+    """Chuẩn hoá body của một trong hai endpoint tiến trình."""
     state = data.get("state") if isinstance(data.get("state"), dict) else {}
-    try:
-        ratio = float(data.get("progress") or 0.0)
-    except (TypeError, ValueError):
-        ratio = 0.0
-    try:
-        eta = float(data.get("eta_relative") or 0.0)
-    except (TypeError, ValueError):
-        eta = 0.0
-    job_count = state.get("job_count")
-    if type(job_count) is not int:
-        job_count = 0
-    step, steps = state.get("sampling_step"), state.get("sampling_steps")
-    step = step if type(step) is int else None
-    steps = steps if type(steps) is int else None
+
+    def number(value):
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def integer(value):
+        return value if type(value) is int else None
+
+    ratio = max(0.0, min(1.0, number(data.get("progress"))))
+    job_count = integer(state.get("job_count")) or 0
+    step, steps = integer(state.get("sampling_step")), integer(state.get("sampling_steps"))
     return {
-        "progress": max(0.0, min(1.0, ratio)),
-        "eta": eta,
+        "available": True,
+        "source": path,
+        "http_status": 200,
+        "reason": "",
+        "progress": ratio,
+        "eta": number(data.get("eta_relative")),
         "job_count": job_count,
         "step": step,
         "steps": steps,
@@ -102,6 +142,172 @@ def progress_info(url, timeout=3.0, get=None):
         "busy": job_count > 0 or ratio > 0.001,
         "state": state,
     }
+
+
+PING_PATHS = ("/sdapi/v1/options", "/sdapi/v1/cmd-flags", "/")
+
+
+def ping(url, timeout=(2.0, 6.0), get=None):
+    """Forge còn phản hồi HTTP không? `{"alive": bool, "status": int, "detail": str}`.
+
+    Thử 3 đường (`options` → `cmd-flags` → `/`) vì khi Forge đang chạy nặng, một endpoint
+    có thể quá giờ trong khi server vẫn sống. Dùng để phân biệt *"Forge sống nhưng chưa
+    báo bước"* với *"Forge treo/không phản hồi"* — hai triệu chứng giống nhau trên UI.
+    """
+    base = str(url or "").rstrip("/")
+    if not base:
+        return {"alive": False, "status": 0, "detail": "chưa có địa chỉ Forge"}
+    get = get or _requests().get
+    last = {"alive": False, "status": 0, "detail": "không thử được"}
+    for path in PING_PATHS:
+        try:
+            r = get(f"{base}{path}", timeout=timeout)
+        except Exception as exc:                  # noqa: BLE001
+            last = {"alive": False, "status": 0,
+                    "detail": f"{type(exc).__name__}"}
+            continue
+        status = int(getattr(r, "status_code", 0) or 0)
+        # 401/403 vẫn chứng minh server sống (có auth/đang chặn đường đó).
+        if status in (200, 401, 403):
+            return {"alive": True, "status": status, "path": path,
+                    "detail": f"Forge trả lời {path}"}
+        last = {"alive": False, "status": status, "detail": f"HTTP {status}"}
+    return last
+
+
+def log_path(env=None):
+    """Đường dẫn forge.log: `WAI_LOG`, rồi `/content/forge.log`, rồi `./forge.log`."""
+    env = env or os.environ
+    candidates = [env.get("WAI_LOG"), env.get("FORGE_LOG"),
+                  "/content/forge.log", os.path.join(os.getcwd(), "forge.log")]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return ""
+
+
+def api_flags(url, timeout=(2.0, 6.0), get=None):
+    """`/sdapi/v1/cmd-flags` — phân biệt "Forge thiếu endpoint tiến trình" với "Forge khác API".
+
+    Endpoint này chỉ có khi server chạy `--api`; trả 404 nghĩa là bản Forge đó không phải
+    API kiểu A1111 (hoặc `--api` tắt). Dùng trong chẩn đoán, không dùng trong vòng chờ.
+    """
+    base = str(url or "").rstrip("/")
+    if not base:
+        return {"available": False, "reason": "chưa có địa chỉ Forge"}
+    get = get or _requests().get
+    try:
+        r = get(f"{base}/sdapi/v1/cmd-flags", timeout=timeout)
+    except Exception as exc:                      # noqa: BLE001
+        return {"available": False, "reason": type(exc).__name__}
+    status = int(getattr(r, "status_code", 0) or 0)
+    if status != 200:
+        return {"available": False, "reason": f"HTTP {status}"}
+    try:
+        data = r.json() or {}
+    except Exception:                             # noqa: BLE001
+        return {"available": False, "reason": "JSON hỏng"}
+    if not isinstance(data, dict):
+        return {"available": False, "reason": "JSON không phải object"}
+    return {"available": True, "api_only": bool(data.get("api_only")),
+            "now": bool(data.get("now"))}
+
+
+LOG_SIGNATURES = (
+    ("out of memory", "Hết VRAM (CUDA out of memory)"),
+    ("no checkpoints found", "Không tìm thấy checkpoint"),
+    ("loading", "Đang nạp checkpoint/model"),
+    ("traceback", "Có traceback"),
+)
+
+
+def log_hint(path=None):
+    """Đọc cuối forge.log, chỉ trả **loại lỗi** đã lọc (không in message/token/prompt)."""
+    path = path if path is not None else log_path()
+    if not path or not os.path.exists(path):
+        return {"co_log": False, "path": "", "lines": []}
+    try:
+        with open(path, "rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - 64 * 1024))
+            text = stream.read(64 * 1024).decode("utf-8", errors="replace")
+    except OSError:
+        return {"co_log": False, "path": str(path), "lines": []}
+    lines = [line.strip() for line in text.splitlines() if line.strip()][-40:]
+    found = []
+    for needle, label in LOG_SIGNATURES:
+        if any(needle in line.lower() for line in lines):
+            found.append(label)
+    return {"co_log": True, "path": str(path), "lines": found}
+
+
+def wait_diagnosis(url, elapsed=0, info=None, log=None, ping_result=None, flags=None):
+    """Chẩn đoán khi app đang "chờ Forge trả ảnh": trả list dòng Markdown để hiện cho user.
+
+    Không bao giờ in prompt/token/URL riêng tư; chỉ trạng thái endpoint và loại lỗi log.
+    """
+    info = info if info is not None else progress_info(url)
+    ping_result = ping_result if ping_result is not None else ping(url)
+    log = log if log is not None else log_hint()
+    out = [f"**Chẩn đoán lúc {format_duration(elapsed)} sau khi gửi prompt**"]
+    clock = f"{int(elapsed) // 60:02d}:{int(elapsed) % 60:02d}"
+
+    if info.get("busy"):
+        out.append(f"✅ `/progress` báo **đang chạy**: {int(round((info.get('progress') or 0) * 100))}%"
+                   + (f", bước {info['step']}/{info['steps']}" if info.get("step") is not None
+                      and info.get("steps") else "")
+                   + (f", còn ~{format_duration(info['eta'])}" if info.get("eta") else "")
+                   + f". Nguồn: `{info.get('source') or '/sdapi/v1/progress'}`. "
+                   "Nếu thấy đứng ở một % quá lâu thì là VRAM swap, không phải app treo.")
+    elif info.get("available"):
+        out.append(f"⚪ `/progress` trả lời nhưng **chưa có job nào chạy** "
+                   f"(`job_count=0`) ở phút {clock}. Nghĩa là request đã tới Forge nhưng "
+                   "**chưa được bắt đầu**: thường do đang nạp checkpoint, hoặc một job khác "
+                   "giữ model lock.")
+    elif info.get("maybe_busy"):
+        out.append("🟡 `/progress` và `/internal/progress` **không trả lời kịp** — dấu hiệu "
+                   "server đang bận (GPU/CPU bão hoà khi Hires hoặc swap VRAM). Ảnh vẫn "
+                   "đang được tạo; chỉ không có số %.")
+    else:
+        reason = info.get("reason") or "không rõ"
+        out.append(f"❌ Không đọc được tiến trình từ cả `/sdapi/v1/progress` và "
+                   f"`/internal/progress` ({reason}). App vẫn chờ ảnh trả về, chỉ không vẽ "
+                   "được thanh %.")
+        flags = flags if flags is not None else api_flags(url)
+        if flags.get("available"):
+            out.append("✅ `/sdapi/v1/cmd-flags` trả lời → server đúng chuẩn A1111/Forge API, "
+                       "chỉ riêng endpoint tiến trình hỏng. Có thể dùng bản Forge cũ/khác "
+                       "nhánh; % sẽ không hiện nhưng ảnh vẫn sinh bình thường.")
+        else:
+            out.append(f"❌ `/sdapi/v1/cmd-flags` cũng không có ({flags.get('reason')}) → "
+                       "server này **không phải A1111/Forge API** hoặc chưa bật `--api`. "
+                       "Thêm `--api` vào lệnh chạy Forge rồi khởi động lại.")
+
+    if ping_result.get("alive"):
+        out.append(f"✅ Forge **còn phản hồi** HTTP (`{ping_result.get('detail')}`).")
+    else:
+        out.append(f"❌ Forge **không phản hồi** (`{ping_result.get('detail')}`). Đây là dấu "
+                   "hiệu treo thật: VRAM swap hoặc process chết. Bấm **⛔ Huỷ job**, rồi xem "
+                   "log và restart Forge.")
+
+    if log.get("co_log"):
+        if log.get("lines"):
+            out.append("📄 `forge.log` (chỉ loại lỗi, không in nội dung): "
+                       + ", ".join(f"**{line}**" for line in log["lines"]))
+        else:
+            out.append("📄 `forge.log` không có dấu hiệu lỗi trong 40 dòng cuối — "
+                       "nhiều khả năng Forge đang chạy bình thường nhưng chậm.")
+    else:
+        out.append("📄 Không đọc được `forge.log` từ máy này (app chạy trên máy khác?). "
+                   "Trên Colab: `/content/forge.log`.")
+
+    if not info.get("busy") and elapsed >= 45:
+        out.append("👉 Việc nên làm: (1) chờ thêm 1–2 phút nếu đây là lần sinh đầu tiên "
+                   "(`job_count=0` lúc nạp model là bình thường); (2) nếu quá 3 phút vẫn "
+                   "`job_count=0`, bấm **⛔ Huỷ job** rồi chạy `install.sh --diagnostics`; "
+                   "(3) nếu Forge không phản hồi, restart bằng "
+                   "`bash /content/install.sh --only launch,verify --restart`.")
+    return out
 
 
 def busy_message(info):
@@ -131,10 +337,17 @@ def format_duration(seconds):
 
 
 def status_line(elapsed, info=None, note=""):
-    """Dòng trạng thái: `⏳ 01:12 · bước 9/25 (36%) · còn ~1m 20s`."""
+    """Dòng trạng thái: `⏳ 01:12 · bước 9/25 (36%) · còn ~1m 20s`.
+
+    Ba trạng thái được phân biệt rõ — điểm quan trọng nhất để không thấy "treo":
+    * đang chạy bước (có `step/steps` hoặc %) → hiện % + ETA;
+    * Forge đã nhận nhưng **chưa bắt đầu job** (`job_count=0`) → nói rõ đang nạp model/xếp hàng;
+    * **không đọc được tiến trình** → nói rõ endpoint nào hỏng, kèm gợi ý Chẩn đoán.
+    """
+    info = info or {}
     clock = f"{int(elapsed) // 60:02d}:{int(elapsed) % 60:02d}"
     parts = [f"⏳ **{clock}**"]
-    if info and info.get("busy"):
+    if info.get("busy"):
         if info.get("step") is not None and info.get("steps"):
             parts.append(f"bước {info['step']}/{info['steps']}")
             parts.append(f"({int(round(info['progress'] * 100))}%)")
@@ -142,19 +355,41 @@ def status_line(elapsed, info=None, note=""):
             parts.append(f"{int(round(info['progress'] * 100))}%")
         if info.get("eta"):
             parts.append(f"còn ~{format_duration(info['eta'])}")
+    elif not info.get("available"):
+        reason = info.get("reason") or "không rõ"
+        if info.get("maybe_busy"):
+            # Server không kịp trả lời endpoint tiến trình — thường vì đang chạy nặng.
+            parts.append("Forge **đang chạy** (không kịp trả lời số bước)")
+            parts.append("ảnh vẫn đang được tạo — chờ tiếp, đừng bấm lại")
+        else:
+            parts.append(f"đã gửi prompt, **chưa đọc được tiến trình** ({reason})")
+            parts.append("bấm **🔎 Chẩn đoán** để biết Forge có đang chạy không")
     else:
-        parts.append("đang chờ Forge trả ảnh…")
+        parts.append("đã gửi prompt, Forge **chưa bắt đầu job**")
+        parts.append("(đang nạp checkpoint/xếp hàng)" if elapsed < 120
+                     else "quá 2 phút — bấm **🔎 Chẩn đoán**")
     if note:
         parts.append(note)
     return " · ".join(parts)
 
 
 def advice_for(elapsed, info=None, stalled=0):
-    """Lời khuyên theo tình trạng: chưa nhích bước / bước chậm / đang chạy bình thường."""
-    if not info or not info.get("busy"):
+    """Lời khuyên theo tình trạng: chưa nhích bước / bước chậm / đang chờ / không đọc được."""
+    info = info or {}
+    if not info.get("busy"):
+        if not info.get("available") and info.get("maybe_busy") and elapsed >= 25:
+            return ("ℹ️ Endpoint tiến trình không trả lời kịp — với Forge đang chạy nặng "
+                    "(Hires/VRAM swap) đây là bình thường. Ảnh vẫn được tạo; nếu quá 10 phút "
+                    "hoặc Forge không phản hồi gì thì bấm **⛔ Huỷ job** rồi xem **🔎 Chẩn đoán**.")
+        if not info.get("available") and elapsed >= 20:
+            reason = info.get("reason") or "không rõ"
+            return (f"⚠️ Không đọc được tiến trình ({reason}). App **vẫn đang chờ ảnh**, chỉ "
+                    "không có số %. Bấm **🔎 Chẩn đoán** để kiểm tra Forge còn sống và đọc "
+                    "log; nếu Forge không phản hồi thì bấm **⛔ Huỷ job** rồi restart.")
         if elapsed >= 30:
-            return ("ℹ️ Forge chưa báo tiến trình — lần sinh đầu tiên còn nạp checkpoint "
-                    "(6–7 GB) nên có thể mất 1–2 phút trước khi thấy bước.")
+            return ("ℹ️ Forge đã nhận prompt nhưng **chưa bắt đầu job** — lần sinh đầu tiên "
+                    "còn nạp checkpoint (6–7 GB) nên mất 1–2 phút. Quá 3 phút vẫn ở đây thì "
+                    "bấm **🔎 Chẩn đoán** (có thể job khác đang giữ model lock).")
         return ""
     if stalled >= STALL_SECONDS:
         return (f"⚠️ Không nhích bước trong {format_duration(stalled)}. Thường do: (1) đang "
@@ -240,10 +475,11 @@ class GenerationJob:
         self._done.wait(timeout)
         return self.done
 
-    def progress(self, get=None, timeout=3.0):
+    def progress(self, get=None, timeout=(2.0, 5.0)):
         """Tiến trình Forge + tự đếm thời gian không nhích bước (`stalled`)."""
-        info = progress_info(self.base, timeout=timeout, get=get) if self.base else {}
-        step = (info.get("step"), info.get("progress"))
+        info = progress_info(self.base, timeout=timeout, get=get) if self.base else \
+            _empty_progress("chưa có địa chỉ Forge")
+        step = (info.get("step"), info.get("progress"), info.get("available"))
         if step != self._last_step:
             self._last_step = step
             self._last_change = time.time()

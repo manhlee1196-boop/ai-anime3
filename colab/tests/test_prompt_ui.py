@@ -202,8 +202,25 @@ def main():
         assert hasattr(module, "do_generate_stream") and hasattr(module, "do_stop")
         labels = [c["props"].get("label") or c["props"].get("value") for c in
                   ui.get_config_file()["components"]]
-        assert "⛔ Huỷ job" in labels
+        assert "⛔ Huỷ job" in labels and "🔎 Chẩn đoán" in labels
         assert any(dep.get("cancels") for dep in ui.get_config_file()["dependencies"])
+
+    # Nút Chẩn đoán: nói rõ vì sao đang chờ, kể cả khi Forge không trả /progress
+    class CodedResponse(Response):
+        def __init__(self, data=None, code=200):
+            super().__init__(data if data is not None else {})
+            self.status_code = code
+
+    try:
+        app.requests.get = lambda *a, **k: (
+            CodedResponse({}, 404) if "progress" in str(a[0])
+            else CodedResponse({"sd_model_checkpoint": "m"}))
+        diag = app.do_wait_diagnostics("http://127.0.0.1:7860")
+    finally:
+        app.requests.get = old_get
+    assert "Chẩn đoán" in diag and "HTTP 404" in diag and "forge.log" in diag
+    extension.do_wait_diagnostics()
+    print("✔ Chẩn đoán chờ ảnh: đọc được cả trường hợp /progress 404")
 
     progress_state = {"on": False}
 

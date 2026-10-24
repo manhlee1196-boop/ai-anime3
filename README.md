@@ -80,8 +80,10 @@ Nút **🖼️ Sinh ảnh** cập nhật trạng thái mỗi giây lấy từ `/
 (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`), có **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`,
 connect timeout 10 giây và read timeout 15 phút (`WAI_GEN_TIMEOUT`) thay cho một timeout
 30 phút dùng chung. Forge đang bận job khác thì app báo rõ. Kẹt quá 90 giây không nhích
-bước sẽ hiện cảnh báo kèm việc cần làm (thường là tắt Hires trên T4 16 GB). Chi tiết:
-[`colab/INSTALL.md`](colab/INSTALL.md).
+bước sẽ hiện cảnh báo kèm việc cần làm (thường là tắt Hires trên T4 16 GB). Nếu dòng trạng
+thái đứng ở *“đã gửi prompt…”*, nút **🔎 Chẩn đoán** cho biết chính xác: Forge chưa bắt đầu
+job, đang chạy nặng nên không trả lời kịp, hay thiếu endpoint tiến trình — kèm loại lỗi đọc
+từ `forge.log`. Chi tiết: [`colab/INSTALL.md`](colab/INSTALL.md).
 
 ### Prompt dài mà không rơi chi tiết
 
