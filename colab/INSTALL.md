@@ -1,6 +1,6 @@
 # Bộ cài Colab một lệnh — WAI-Illustrious v17
 
-Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + tab Prompt VN**.
+Cài **Forge Neo + checkpoint WAI v17 + tagcomplete + kho prompt tiếng Việt + khối “Prompt tiếng Việt” trong tab txt2img**.
 Có chọn model, chọn thư mục lưu, xác minh SHA256 và chạy lại để tiếp tục phần còn dở.
 Mặc định model/ảnh/log đều ở `/content`. **Không có bước mount Google Drive.**
 Bản hiện tại **1.0.7**; xem [báo cáo rà soát toàn dự án](AUDIT.md).
@@ -14,8 +14,9 @@ Hoặc tải [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb), rồi Colab → Fil
 1. **Runtime → Change runtime type → GPU T4** (hoặc L4/A100).
 2. Chọn `MODEL` ở dropdown; mặc định **fp16**, `MODEL_DIR=/content/models`, **`TUNNEL="share"`** (Gradio).
 3. Chọn **Runtime → Run all**, chờ kiểm tra đạt rồi mở link public được in ra.
-4. Trong Forge, dùng **Prompt VN**: đổi tag Việt tại chỗ, thử Nháp/Chuẩn trước,
-   chọn ảnh/seed rồi mới Hoàn thiện Hires. Không tự sinh ảnh thử khi cài mặc định.
+4. Trong Forge, mở accordion **🇻🇳 Prompt tiếng Việt** ngay trong tab **txt2img**:
+   tra tag Việt, chọn phong cách, **Dựng prompt** rồi **Đưa vào txt2img** — sau đó dùng
+   chính nút **Generate** của txt2img. Không tự sinh ảnh thử khi cài mặc định.
 
 **Muốn chạy mới hoàn toàn:** tải ảnh cần giữ về trước, rồi **Runtime → Disconnect
 and delete runtime**, kết nối lại/bật GPU và mở notebook mới từ link phía trên.
@@ -69,7 +70,7 @@ tải về được kiểm tra cú pháp và thay thế nguyên tử, không ch�
 
 Bản FP16 gốc **đã là pruned**, không tạo một lựa chọn “pruned” giả khác.
 Dung lượng chính xác được lấy từ metadata API, không dùng kích thước file để thay thế SHA256.
-Các preset dùng Euler a và clip skip 2. Tab Prompt VN/app Gradio tự đổi CFG, steps và
+Các preset dùng Euler a và clip skip 2. App Gradio tự đổi CFG, steps và
 hires steps theo profile đã lưu; bản turbo không dùng mặc định CFG 6 của bản gốc.
 
 - **T4 không có tensor core FP8**. Checkpoint nhỏ hơn không đảm bảo chạy nhanh hơn,
@@ -185,10 +186,33 @@ phiên mới cần cài/tải lại. Không có thủ thuật giữ runtime luô
 
 ## 6. Xử lý sự cố
 
+### Bỏ tab “Prompt VN” — khối prompt Việt nằm trong txt2img
+
+Tab riêng **“Prompt VN”** đã bị xoá; chức năng tra tag, chọn phong cách và dựng prompt
+giờ là một **accordion trong tab txt2img** (vùng script, ngay trên nút Generate).
+Không còn nút **Sinh ảnh**/**Huỷ job**/**Chẩn đoán** trong Forge và không còn album riêng ở
+đó — dùng nút **Generate**, gallery và ảnh đã tạo sẵn có của txt2img. App Gradio độc lập
+vẫn giữ nguyên mọi thứ (sinh ảnh, quy trình Nháp/Chuẩn/Hoàn thiện, album).
+
+Vì sao: hai đường sinh ảnh song song dễ lệch tham số, chiếm GPU hai lần và làm người dùng
+không rõ ảnh nào do đâu mà ra. Một đường duy nhất (txt2img) là nguồn sự thật.
+
+```bash
+%%bash
+set -euo pipefail
+git -C /content/ai-anime3 pull --ff-only origin arena/ec9855a4-ai-anime3
+cp /content/ai-anime3/colab/{install,setup_forge}.sh /content/
+bash /content/install.sh --only extras,launch,verify --restart
+```
+
+Không tải lại model/Torch. Sau restart, **reload cứng** trang Forge (Ctrl+Shift+R) để nạp
+JS mới; tab “Prompt VN” biến mất, accordion mới nằm trong **txt2img** (bấm để mở).
+Nếu dùng `REPO_DIR` khác, thay `/content/ai-anime3` cho đúng.
+
 ### Cập nhật quy trình/đổi Việt → Anh (1.0.3)
 
 Bản mới dùng toàn cụm Việt ở con trỏ của tagcomplete và thay mục tương ứng khi
-chọn tag trong tab Prompt VN. Có nút đổi nhiều tag, hoàn tác điền txt2img, ba mức
+chọn tag trong khối Prompt tiếng Việt của txt2img. Có nút đổi nhiều tag, hoàn tác điền txt2img,
 Nháp/Chuẩn/Hoàn thiện và dùng lại seed. Không chỉnh sửa mã tagcomplete upstream.
 
 ```bash
@@ -202,22 +226,22 @@ bash /content/install.sh --only extras,launch,verify --restart
 Không tải lại checkpoint/Torch; bộ cài đọc lại biến thể/thư mục đã lưu.
 **Reload cứng trang Forge** sau restart để nạp JS mới. Nếu dùng `REPO_DIR` khác,
 thay `/content/ai-anime3` bằng đường dẫn repo của bạn.
-Các tham số mới áp dụng cho nút Sinh ảnh trong Prompt VN/app. Nút Đưa vào txt2img
+Các tham số mới áp dụng cho nút Sinh ảnh trong app Gradio. Nút Đưa vào txt2img
 chỉ chuyển prompt; sampling tại txt2img vẫn do bạn đặt. Xem [quy trình](README.md#quy-trình-tối-ưu-bản-103).
 
 
 ### Bảng ảnh đã tạo (1.0.7)
 
-**Prompt VN → Ảnh đã tạo** (phía dưới bộ dựng prompt) có:
+**Ảnh đã tạo** trong app Gradio độc lập (tab Prompt VN đã bỏ) có:
 
 - Gallery thumbnail **12/24 ảnh mỗi trang**, mới nhất trước; bảng thời gian lưu
   (UTC+7), tên file, seed, kích thước và dung lượng. Bấm thumbnail **hoặc dòng bảng**.
 - **Xem ảnh gốc / Tải ảnh gốc**: đọc file đã lưu, không nén/sửa ảnh gốc hoặc metadata.
 - **Dùng seed ảnh lịch sử**: chỉ điền seed vào ô sinh hiện tại, không thay prompt,
   sampler/steps/CFG/Hires. Không dùng seed ảnh lưới hoặc ảnh thiếu seed xác định.
-- Đọc cả ảnh txt2img/img2img/Prompt VN đã tồn tại trong thư mục output cấu hình,
-  cùng ảnh của ví dụ API notebook. Ảnh mới từ Prompt VN tự làm mới lịch sử sau callback;
-  sinh trong txt2img/img2img thì bấm **Làm mới**. Không cần sinh lại ảnh cũ.
+- Đọc cả ảnh txt2img/img2img đã tồn tại trong thư mục output cấu hình,
+  cùng ảnh của ví dụ API notebook. Ảnh mới sinh trong app tự làm mới lịch sử sau callback;
+  sinh trong txt2img/img2img của Forge thì bấm **Làm mới**. Không cần sinh lại ảnh cũ.
 
 **Lưu trên đĩa:** chỉ mục/preview trong `FORGE_DIR/outputs/.wai-history/`;
 State chỉ có id/trang/signature nhỏ, không tích luỹ toàn bộ PIL/base64. Mỗi preview
@@ -246,8 +270,8 @@ bash /content/install.sh --tunnel share --only extras,launch,verify --restart
 
 Phiên bản phải **1.0.7 hoặc mới hơn**. Chỉ cắm extension/verify/restart process do
 bộ cài quản lý, không chạy stage model/torch. Giữ lựa chọn model/thư mục/VRAM đã lưu;
-đặt rõ `share` để không quay lại Cloudflare. Mở **link Gradio mới**, vào **Prompt VN →
-Ảnh đã tạo → Làm mới**. Nếu dùng `REPO_DIR` khác, thay đường dẫn repo cho đúng.
+đặt rõ `share` để không quay lại Cloudflare. Mở **link Gradio mới**, vào app Gradio độc lập →
+**Ảnh đã tạo → Làm mới**. Nếu dùng `REPO_DIR` khác, thay đường dẫn repo cho đúng.
 
 App độc lập có tab **Ảnh đã tạo**, đọc file cục bộ. Có thể truyền
 `--forge-dir /path/to/Forge` hoặc `--history-dir /path/to/images`. Forge ở máy

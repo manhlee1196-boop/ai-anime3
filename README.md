@@ -16,12 +16,13 @@ Thư mục [`colab/`](colab/) chứa trọn bộ hệ thống sinh ảnh chạy 
 | Notebook chi tiết | [`colab/WAI_Illustrious_v17_vi.ipynb`](colab/WAI_Illustrious_v17_vi.ipynb) — chạy từng bước, kèm ví dụ API |
 | Model | WAI-illustrious-SDXL **v17.0** (SDXL 6,5 GB, VAE tích hợp sẵn), tải từ mirror HuggingFace không cần token, có kiểm SHA256 |
 | Backend | **Forge Neo** (`Haoming02/sd-webui-forge-classic` nhánh `neo`) — đúng phần mềm thẻ model khuyến nghị |
-| Bộ nhắc | Gõ tiếng Việt ngay trong ô prompt (tagcomplete đã cấu hình sẵn), hoặc dùng tab **“Prompt VN”** để tra tag, xếp thứ tự prompt chuẩn Illustrious/WAI, sinh negative và sinh ảnh |
+| Bộ nhắc | Gõ tiếng Việt ngay trong ô prompt (tagcomplete đã cấu hình sẵn), hoặc mở accordion **“🇻🇳 Prompt tiếng Việt”** ngay trong tab **txt2img** để tra tag, chọn phong cách, xếp thứ tự prompt chuẩn Illustrious/WAI và đổ vào ô prompt |
 
 Ba cách dùng kho prompt: **tagcomplete** (gõ `áo dài`, `tóc dài` ra tag tiếng Anh),
-**tab Prompt VN** (tra cứu + gom 18 nhóm + dựng prompt có cấu trúc), và
-**gọi API từ notebook** (sinh ảnh hàng loạt). App Gradio cũng chạy độc lập được ngoài
-Colab: `python3 colab/prompt_builder.py --demo`.
+**accordion Prompt tiếng Việt trong tab txt2img** (tra cứu + gom 18 nhóm + dựng prompt có
+cấu trúc rồi **Đưa vào txt2img**, dùng chính nút Generate của Forge — tab riêng
+“Prompt VN” đã bỏ), và **gọi API từ notebook** (sinh ảnh hàng loạt). App Gradio đầy đủ
+vẫn chạy độc lập được ngoài Colab: `python3 colab/prompt_builder.py --demo`.
 
 **Bộ cài một lệnh:** [`colab/install.sh`](colab/install.sh), hướng dẫn trong
 [`colab/INSTALL.md`](colab/INSTALL.md). Mặc định FP16 bản gốc; có chọn FP8/INT8/HSWQ
@@ -30,7 +31,7 @@ Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
 > **Mở lại link báo “No interface is running right now”?** Đó là trang của relay `gradio.live`, không phải Forge hỏng: link share hết hạn sau khoảng 10 phút–vài giờ, hoặc runtime Colab vừa restart nên Forge đã tạo link mới. Chạy `bash /content/install.sh --status` (báo link còn sống hay đã chết), rồi `bash /content/install.sh --only launch,verify --restart` và mở **link mới nhất**. [Chi tiết + bảng chẩn đoán](colab/INSTALL.md#no-interface-is-running-right-now-khi-mở-lại-link).
 
-> **Bộ cài 1.0.7:** thêm **Ảnh đã tạo** trong Prompt VN và app: bảng + thumbnail phân trang, xem/tải ảnh gốc, dùng lại seed. Lịch sử ở SQLite trên đĩa, không gom toàn bộ PIL/base64 vào RAM; ảnh gốc/metadata giữ nguyên. [Cập nhật chỉ phần mềm](colab/INSTALL.md#bảng-ảnh-đã-tạo-107).
+> **Bộ cài 1.0.7:** thêm **Ảnh đã tạo** trong app Gradio (trước đây cả tab Prompt VN): bảng + thumbnail phân trang, xem/tải ảnh gốc, dùng lại seed. Lịch sử ở SQLite trên đĩa, không gom toàn bộ PIL/base64 vào RAM; ảnh gốc/metadata giữ nguyên. [Cập nhật chỉ phần mềm](colab/INSTALL.md#bảng-ảnh-đã-tạo-107).
 
 > **Bộ cài 1.0.6:** cài mới mặc định **Gradio share** (`gradio.live`), Cloudflare vẫn chọn được. Người dùng báo ảnh mở nhanh hơn/chưa lặp lại lỗi HTML→JSON sau khi đổi tunnel; không sửa model/chất lượng ảnh. Phiên Gradio share đang ổn **không cần restart/cài lại**. [Hướng dẫn tunnel](colab/INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106).
 
@@ -70,7 +71,7 @@ của từng tác giả/series — **tất cả đã có nghĩa tiếng Việt**
 Mở ra là thấy **đủ 506 tag** (nhóm mặc định *Tất cả (506 tag — mọi nhóm)*, không tag nào bị ẩn);
 chọn một nhóm để lọc, gõ ô tìm (không cần dấu) để lọc tiếp, hoặc chọn 1 trong 12 công thức sẵn —
 tag của công thức được tick sẵn ở đầu danh sách còn các tag khác vẫn hiện. Tick xong bấm **➕ Thêm
-tag phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô **Styles** có 12 style
+tag phong cách**. Trong Forge, accordion **Prompt tiếng Việt** (tab txt2img) có đúng mục đó, và ô **Styles** có 12 style
 `Phong cách — …` bấm là điền cả bộ tag.
 
 Tài liệu [`STYLE_TAGS.md`](STYLE_TAGS.md) có 12 công thức prompt mẫu, lưu ý khi trộn chất liệu,
@@ -263,7 +264,7 @@ colab/                               hệ thống tạo ảnh WAI-Illustrious v1
   make_notebook.py                   script sinh file .ipynb
   make_tagcomplete_assets.py         sinh tag hệ thống + bản dịch gộp cho tagcomplete
   prompt_lib/                        thư viện lõi (index / groups / builder / system_tags)
-  extension/vi-prompt-builder/       extension Forge: tab "Prompt VN"
+  extension/vi-prompt-builder/       extension Forge: khối prompt Việt trong tab txt2img
   tests/test_prompt_lib.py           bộ kiểm tra hồi quy
   assets/  outputs/                  file sinh ra khi chạy (gitignored)
 ```

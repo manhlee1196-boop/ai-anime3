@@ -22,12 +22,12 @@ Nếu đang dùng phiên cũ và muốn môi trường hoàn toàn mới, **tả
 rồi chọn **Runtime → Disconnect and delete runtime**, kết nối lại và bật GPU.
 Notebook không tự xóa repo/model/ảnh và không cần mount Google Drive.
 
-**Forge Neo + tagcomplete + kho prompt tiếng Việt + tab Prompt VN** được cài bằng
+**Forge Neo + tagcomplete + kho prompt tiếng Việt + khối Prompt tiếng Việt trong tab txt2img** được cài bằng
 một lần chạy ô dưới. Mặc định lưu model và ảnh trong `/content`, **không mount Drive**.
 
 1. **Runtime → Change runtime type → GPU T4** (hoặc GPU NVIDIA khác).
 2. Chọn **MODEL** trong dropdown; sửa **MODEL_DIR** nếu cần, rồi chạy ô (Shift+Enter).
-3. Khi kiểm tra đạt, mở link public được in ra, dùng tab **Prompt VN**.
+3. Khi kiểm tra đạt, mở link public được in ra, mở accordion **🇻🇳 Prompt tiếng Việt** trong tab **txt2img**.
 4. Có thể bật `SMOKE_TEST=True` để buộc nạp checkpoint bằng **1 ảnh thử 256×256/1 step**;
    có sử dụng GPU, không phải benchmark/ảnh chất lượng. Không bật cùng `NO_LAUNCH`.
 
@@ -72,7 +72,7 @@ Nếu mất mạng, chỉ dùng cache đã đạt kiểm tra; **không âm thầ
 > của dịch vụ. Hệ thống mặc định mức `general`; negative prompt không bảo đảm lọc hoàn toàn nội dung.
 """
 
-CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt VN (>=1.0.7) { display-mode: "form" }
+CELL = r'''#@title 🎨 Cài mới WAI v17 + Forge Neo + Prompt Việt trong txt2img (>=1.0.7) { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 MODEL_DIR = "/content/models" #@param {type:"string"}
 TUNNEL = "share" #@param ["share", "cloudflared", "none"]
@@ -137,7 +137,7 @@ if rc:
 if NO_LAUNCH:
     print("✅ Cài xong, chưa mở Forge. Khởi động: !bash /content/install.sh --only launch,verify")
 else:
-    print("✅ Các bước đã đạt. Mở link public ở trên → dùng tab Prompt VN.")
+    print("✅ Các bước đã đạt. Mở link public ở trên → mở accordion Prompt tiếng Việt trong tab txt2img.")
     print("▶ Chuẩn: 832×1216, Hires tắt. Chọn ảnh/seed rồi dùng Hoàn thiện.")
     print("▶ Dùng nút Thay mục Việt → tag Anh; giữ tag khác/trọng số, không xóa toàn bộ prompt.")
 '''.replace("__BOOTSTRAP__", BOOTSTRAP_SOURCE).replace("__BRANCH__", BRANCH)
@@ -164,7 +164,7 @@ hãy chọn `share` trong form trước khi chạy lại. Không tự fallback/�
 Token Civitai vẫn cần được đọc từ Secrets và truyền qua environment cho lệnh tải.
 Xem `colab/INSTALL.md` để biết cách truyền secret cho một ô Bash mới.
 Khi đổi model, bộ cài chỉ dừng/khởi động lại process Forge **do chính nó quản lý**,
-không tự đóng dịch vụ khác đang chiếm cổng. CFG/steps của **Prompt VN và app Gradio**
+không tự đóng dịch vụ khác đang chiếm cổng. CFG/steps của **app Gradio**
 tự đổi theo profile model đã lưu (HSWQ mặc định CFG 1 / 10 bước).
 
 Model, ảnh, log và marker đều trong `/content`; **không có bước mount Drive**.

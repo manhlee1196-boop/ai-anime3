@@ -1,5 +1,32 @@
 # Rà soát toàn dự án — bộ cài 1.0.7
 
+## Bỏ tab “Prompt VN” — chuyển chức năng vào txt2img — 24/10/2026
+
+Yêu cầu: **“prompts việt nam đang hoạt động không hiệu quả hãy xóa và chuyển các chức
+năng qua txt2img”**. Người dùng chọn phạm vi: **chỉ xoá tab riêng trong Forge**, giữ app
+Gradio độc lập; hiển thị **accordion đầy đủ trong txt2img**; **bỏ khối sinh ảnh + album**
+ở Forge.
+
+- `scripts/vi_prompt_tab.py`: bỏ `script_callbacks.on_ui_tabs` và `build_tab()` (tab
+  `vi_prompt_tab` không còn được đăng ký). Thay bằng lớp `ViPromptInline(Script)` —
+  `show(img2img) → False`, `show(txt2img) → AlwaysVisible` — dựng `build_ui()` trong vùng
+  script của txt2img. Forge tự phát hiện lớp con `Script` trong `scripts/*.py` nên không
+  cần dòng đăng ký.
+- Bố cục mới trong accordion `vi_prompt_accordion` (mặc định gấp): ô **Tag đã chọn** luôn
+  hiện, 3 tab con **Tìm & thêm tag** / **Phong cách** / **Dựng prompt**. Không dùng cột đôi
+  vì vùng script nằm trong cột cài đặt nửa trang; cột đôi sẽ bóp bảng kết quả còn ~25%.
+- Xoá khỏi extension: `prepare_generation`, `do_generate`, `do_generate_stream`, `do_stop`,
+  `do_wait_diagnostics`, `GenerationJob`, `HistoryPanel`, `ImageHistory`, `workflow`
+  (`set_workflow`), `_forge_url`, `requests`/`shared` imports và toàn bộ điều khiển
+  size/sampler/steps/CFG/seed/Hires/upscaler/batch. Sinh ảnh dùng **Generate của txt2img**.
+- Giữ nguyên: `do_search`, `do_browse`, `on_pick`, `do_random`, `do_convert`, `do_build`,
+  toàn bộ mục phong cách (506 tag, 9 nhóm, 12 công thức, không ẩn tag), `viPromptFill` /
+  `viPromptUndo` trong `javascript/vi_prompt.js` (vẫn trỏ `#txt2img_prompt`,
+  `#txt2img_neg_prompt` nên không phải sửa JS).
+- App `prompt_builder.py` **không đổi**: vẫn có sinh ảnh, quy trình Nháp/Chuẩn/Hoàn thiện,
+  album, prompt dài. Test `test_prompt_ui.py` tách đôi: app kiểm sinh ảnh/workflow/album,
+  extension kiểm accordion + không còn tab/nút sinh ảnh.
+
 ## Bổ sung 1.0.7 — bảng ảnh đã tạo trên đĩa — 12/10/2026
 
 Yêu cầu: **“thêm bảng hình đã tạo”**. Phiên người dùng trước đó có RAM 11/12 GiB,
@@ -327,7 +354,7 @@ preset model khác không bị xóa. Model, ảnh, venv, repo và thay đổi lo
 | `test_checkpoint_flow.py` | **16 nhóm đạt**, có subtests: container hỏng, .part, alias/collision/ownership, backup, profile HSWQ, chuẩn bị launch thật, registry/preset/API/PNG, diagnostics chỉ đọc, stale buddy và nâng repo cũ |
 | Mã upstream | Chạy lại hồi quy cùng hàm guard UID, preset, scanner và selector nguyên bản từ revision Forge nêu trên; **không import toàn engine** |
 | `test_prompt_lib.py` | **16 nhóm đạt**: index, tra tiếng Việt/alias, nhóm, negative, cấu trúc prompt, profile model/payload, 16 style Forge (4 mức phân loại + 12 phong cách), độ dài prompt (token/cửa sổ 75, nén tag trùng nghĩa) |
-| `test_prompt_ui.py` | UI thật trên **Gradio 4.40.0 và 6.30.0**; API/Forge host giả lập. Đã đi hết đường giải mã ảnh của cả app và extension |
+| `test_prompt_ui.py` | UI thật trên **Gradio 4.40.0 và 6.30.0**; API/Forge host giả lập. App: hết đường giải mã ảnh + workflow/album. Extension: accordion trong txt2img, không còn `on_ui_tabs`/gallery/nút sinh ảnh |
 | `test_generate_guard.py` | **27 nhóm đạt**: connect/read timeout + `WAI_GEN_TIMEOUT` (kẹp 60–3600s), `/progress` + fallback `/internal/progress`, phân biệt *chưa bắt đầu job* / *server bận nên quá giờ* / *thiếu endpoint* / *foreign API* (`cmd-flags`), status & cảnh báo kẹt bước, job chạy thread nền, lỗi HTTP không nổ, `interrupt`, cảnh báo Hires/độ phân giải/bước, `ping` 3 đường khi endpoint chính quá giờ, chẩn đoán 3 nhánh + `cmd-flags` + `forge.log` chỉ in loại lỗi, câu lỗi timeout–mất kết nối–thiếu `--api`–OOM (không lộ body) |
 | `test_style_tags.py` | **10 nhóm đạt**: 506 tag phong cách / 9 nhóm, `style_tags.csv` khớp bản sinh lại, không trùng, đủ `*_(style)`, 12 công thức sẵn + `StyleLibrary` (nhóm, tìm không dấu, nhãn ↔ tag) |
 | `test_data_integrity.py` | **4 nhóm đạt**; duyệt toàn bộ **349.714 dòng** ở 3 CSV 4 cột và **45.557** translation; category/count/sort/alias/tên riêng/emoticon, đối chiếu nguồn đã chỉ định nếu có |

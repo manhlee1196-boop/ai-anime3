@@ -64,7 +64,7 @@ def download_installer(dest, branch, env):
     return version
 '''.replace("__MIN_VERSION__", MIN_INSTALLER_VERSION)
 
-WORKFLOW_GUIDE = """### Quy trình mới trong Prompt VN (1.0.3)
+WORKFLOW_GUIDE = """### Quy trình mới trong app Gradio (1.0.3)
 
 1. Nhập `1girl, (áo dài:1.2), tóc dài`, chọn kết quả hoặc bấm **Thay mục Việt → tag Anh**.
    Kết quả thay tại chỗ: `1girl, (ao_dai:1.2), long_hair`; giữ tag khác/trọng số,
@@ -82,14 +82,15 @@ WORKFLOW_GUIDE = """### Quy trình mới trong Prompt VN (1.0.3)
 
 Nhiều ảnh chạy tuần tự (`batch_size=1`), không tăng batch để tiết kiệm VRAM.
 Đây là preset ứng dụng, chưa phải benchmark tốc độ/chất lượng trên GPU Colab.
-**Sinh ảnh** trong Prompt VN dùng các tham số trên; **Đưa vào txt2img** chỉ chuyển
+**Sinh ảnh** trong app Gradio dùng các tham số trên; **Đưa vào txt2img** (cả app lẫn khối
+prompt trong txt2img của Forge) chỉ chuyển
 prompt, không chuyển sampling. Điền txt2img mặc định ghép/thay mục tương ứng;
 **Thay toàn bộ** phải bật rõ ràng và có **Hoàn tác** trong phiên trình duyệt.
 
 ### 🗂️ Bảng ảnh đã tạo (1.0.7)
 
-Trong **Prompt VN → Ảnh đã tạo**, bấm **Làm mới** để xem ảnh cũ từ output của
-Forge (txt2img/img2img), ảnh mới từ Prompt VN và ví dụ notebook. Có thumbnail,
+Trong app Gradio, tab **Ảnh đã tạo** → **Làm mới** để xem ảnh cũ từ output của
+Forge (txt2img/img2img) và ví dụ notebook. Có thumbnail,
 12/24 ảnh mỗi trang, bảng thời gian/seed/kích thước/dung lượng. Chọn thumbnail
 hoặc một dòng để **xem/tải ảnh gốc** và **Dùng seed ảnh lịch sử**.
 Chỉ điền seed, không tự thay prompt/sampling; ảnh lưới/ảnh không có seed không
@@ -179,7 +180,7 @@ def generate_notebook_sample():
 if RUN_API_SAMPLE:
     API_LAST_RESULT = generate_notebook_sample()
 else:
-    print("Bỏ qua sinh ảnh API. Dùng tab Prompt VN, hoặc bật RUN_API_SAMPLE khi Forge đã chạy.")
+    print("Bỏ qua sinh ảnh API. Dùng khối Prompt tiếng Việt trong txt2img, hoặc bật RUN_API_SAMPLE khi Forge đã chạy.")
 '''
 
 

@@ -27,7 +27,7 @@ def code(text):
 
 
 md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.7
-### Forge Neo + tagcomplete + Prompt VN + 349.714 tag / 45.557 bản dịch
+### Forge Neo + tagcomplete + khối prompt Việt trong txt2img + 349.714 tag / 45.557 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
 stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không tự đổi model.
@@ -37,7 +37,7 @@ stage để dễ theo dõi lỗi. Không ComfyUI, không mount Drive, không t�
 2. Chọn model ở Ô 1; mặc định **FP16 gốc**, checkpoint tại `/content/models`.
 3. **Runtime → Run all**, hoặc chạy lần lượt Ô 1 → Ô 8. Forge chạy nền, Ô 8 có thể
    kết thúc sau launch/verify; không bị chặn ở một ô chạy mãi.
-4. Mở link public và dùng tab **Prompt VN**. Ô 9/10/11 mặc định chỉ in hướng dẫn,
+4. Mở link public, mở accordion **🇻🇳 Prompt tiếng Việt** ngay trong tab **txt2img**. Ô 9/10/11 mặc định chỉ in hướng dẫn,
    không tự sinh ảnh hay mở thêm server.
 
 **Tunnel mặc định `share` (Gradio):** mở link `gradio.live` được in ra; Cloudflare
@@ -152,14 +152,14 @@ for number, stage, title, description in (
     (4, "forge", "Cài Forge Neo", "Dùng Python 3.13 riêng qua uv; giữ thư mục và cấu hình sẵn có."),
     (5, "torch", "Cài PyTorch phù hợp GPU", "Bộ cài chọn cu130/cu128/cu126 theo driver và kiểm kernel CUDA, không chỉ cuda.is_available()."),
     (6, "model", "Tải và xác minh checkpoint WAI v17", "Tải tiếp .part; xác minh SHA256 + header safetensors. Chỉ đúng biến thể/file v17, không tự đổi model khi nguồn lỗi."),
-    (7, "extras", "Cắm tagcomplete + Prompt VN mới", "Chép CSV/JS mới, cấu hình dịch 2 cột, CLIP stop 2, styles và upscaler anime. Thư viện editing/workflow phải có đủ trước khi thay extension."),
+    (7, "extras", "Cắm tagcomplete + khối prompt Việt mới", "Chép CSV/JS mới, cấu hình dịch 2 cột, CLIP stop 2, styles và upscaler anime. Thư viện editing/workflow phải có đủ trước khi thay extension."),
 ):
     md(f"## Ô {number} — {title}\n\n{description}\n")
     code(f'run_install("{stage}")')
 
 md("""## Ô 8 — Khởi chạy nền + kiểm tra checkpoint/API
 
-Chờ bộ cài in link `gradio.live` (mặc định) hoặc `trycloudflare.com` (khi chọn), mở link mới và chọn **Prompt VN**.
+Chờ bộ cài in link `gradio.live` (mặc định) hoặc `trycloudflare.com` (khi chọn), mở link mới rồi mở accordion **🇻🇳 Prompt tiếng Việt** trong tab **txt2img** (ngay trên nút Generate).
 Ô này kết thúc khi API/verify đạt; Forge/tunnel tiếp tục chạy nền trong runtime.
 Không tự sinh ảnh để chứng minh trọng số đã nạp; bước đó là tùy chọn Ô 9.
 Nếu dùng phiên cũ, bật `RESTART=True` ở Ô 1 để nạp extension/JS mới rồi reload cứng UI.
@@ -184,7 +184,7 @@ if not RUN_DIAGNOSTICS and not SMOKE_TEST:
 
 md("""## 🖼️ Ô 10 (tùy chọn) — Sinh ảnh bằng API theo quy trình mới
 
-Bật `RUN_API_SAMPLE` khi muốn dùng API thay cho tab Prompt VN. Mặc định **Nháp,
+Bật `RUN_API_SAMPLE` khi muốn dùng API thay cho khối prompt trong txt2img/app. Mặc định **Nháp,
 832×1216, Hires tắt**, steps/CFG theo model đã chọn. Nhiều ảnh chạy tuần tự.
 Sau lượt Nháp/Chuẩn, chọn seed của ảnh thật (không phải grid), nhập `SEED` và chọn
 Hoàn thiện để sinh 1 ảnh Hires. Mã dùng bộ giải mã chung cho info JSON-string và
@@ -192,10 +192,11 @@ PNG/PIL, không dùng ví dụ API cũ bật Hires ngay hoặc cố định CFG 
 """)
 code(API_SAMPLE_SOURCE)
 
-md("""## 🧩 Ô 11 (tùy chọn) — App Prompt VN độc lập
+md("""## 🧩 Ô 11 (tùy chọn) — App Gradio độc lập
 
-Không cần ô này để dùng tab Prompt VN đã cài trong Forge. Nếu muốn app riêng,
-bật `START_PROMPT_APP`; ô kiểm tra PID/cổng trước để tránh chạy server trùng.
+Không cần ô này để dùng khối Prompt tiếng Việt trong txt2img của Forge. Nếu muốn app
+riêng (đầy đủ: sinh ảnh, quy trình Nháp/Chuẩn/Hoàn thiện, album), bật `START_PROMPT_APP`;
+ô kiểm tra PID/cổng trước để tránh chạy server trùng.
 App dùng venv Forge, không cài lại Gradio/Torch. Chỉ dùng một nơi để sinh ảnh tại
 một thời điểm; queue của app riêng không chặn mọi client GPU khác.
 """)
@@ -254,7 +255,7 @@ def start_prompt_app():
 if START_PROMPT_APP:
     start_prompt_app()
 else:
-    print("Bỏ qua app riêng. Dùng tab Prompt VN trong link Forge ở Ô 8.")''')
+    print("Bỏ qua app riêng. Dùng accordion Prompt tiếng Việt trong txt2img ở link Forge (Ô 8).")''')
 
 md("""---
 ## 🚑 Xử lý sự cố / chạy lại
@@ -265,7 +266,7 @@ md("""---
 | Không lấy được bộ cài ≥1.0.7 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.7 |
 | Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
 | Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
-| Tag Việt còn sau chọn | Kiểm tab Prompt VN có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
+| Tag Việt còn sau chọn | Kiểm accordion Prompt tiếng Việt (tab txt2img) có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
 | Hết VRAM | Tắt Hires, 832×1216/1024×1024, batch 1; chờ tác vụ GPU khác, không cần tải lại checkpoint |
 | Sửa phần mềm trong phiên đang có | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
 | Ảnh chậm / `Unexpected token <` khi dùng Cloudflare | Đợi sinh xong, đổi `TUNNEL="share"`, bật `RESTART` rồi chạy Ô 8; mở link mới |

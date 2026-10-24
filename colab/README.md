@@ -28,12 +28,12 @@ colab/
     editing.py                     thay Việt → Anh, giữ cú pháp/mục khác
     workflow.py                    preset, validation, metadata seed theo ảnh
     system_tags.py                 tag hệ thống WAI-Illustrious + preset tham số
-  extension/vi-prompt-builder/   extension Forge: thêm tab "Prompt VN"
+  extension/vi-prompt-builder/   extension Forge: khối prompt Việt trong tab txt2img
     scripts/vi_prompt_tab.py
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
-  tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
+  tests/test_prompt_ui.py        smoke test app + khối txt2img, API/Forge host giả lập
   tests/test_generate_guard.py   chống treo: timeout/progress/huỷ job/chẩn đoán/log
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
@@ -55,7 +55,7 @@ không mount Drive; **Gradio share** mặc định (`gradio.live`), Cloudflare t
 
 [**Mở notebook cài mới 1.0.7 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2Fec9855a4-ai-anime3/colab/WAI_v17_1click.ipynb)
 → chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.7.
-**Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong Prompt VN rồi bấm **Làm mới**.
+**Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong app Gradio rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.
 **API đã có WAI nhưng dropdown trống:** dùng [ô cập nhật 1.0.4](INSTALL.md#api-đã-có-wai-nhưng-dropdown-trống--cmd-flags-500-104), chỉ cập nhật phần mềm và restart; không xóa runtime/tải lại weights.
@@ -90,7 +90,8 @@ Có `--smoke-test` để thử nạp trọng số bằng một ảnh trên GPU v
    Các stage dùng cùng `install.sh` mới, không trộn script cũ hay cài theo đường khác.
 4. **Ô 8** khởi chạy nền + verify, in link `gradio.live` (mặc định)/`trycloudflare.com` (khi chọn) và kết thúc;
    không chặn các ô sau ở một lệnh launch chạy mãi.
-5. Dùng **Prompt VN** để chọn tag/thử bố cục/seed. Ô 9 chẩn đoán/smoke test,
+5. Mở accordion **🇻🇳 Prompt tiếng Việt** ngay trong tab **txt2img** để chọn tag/phong cách,
+   bấm **Đưa vào txt2img** rồi **Generate**. Ô 9 chẩn đoán/smoke test,
    Ô 10 API và Ô 11 app riêng **mặc định tắt**; Run all không tự sinh ảnh/mở server phụ.
    Bật riêng khi cần. Ví dụ API dùng profile model, Hires tắt ở Nháp/Chuẩn,
    decoder JSON-string/PIL và seed đúng từng ảnh, không dùng ví dụ CFG FP16 cố định cũ.
@@ -100,7 +101,7 @@ Repo public không cần GitHub token. Nếu dùng repo private, bật `USE_GITH
 
 ## 🗂️ Bảng ảnh đã tạo (1.0.7)
 
-Mở **Prompt VN → Ảnh đã tạo → Làm mới**, hoặc tab **Ảnh đã tạo** trong app độc lập.
+Mở tab **Ảnh đã tạo** trong app Gradio độc lập (tab Prompt VN đã bỏ), bấm **Làm mới**.
 Gallery + bảng phân trang 12/24 ảnh: thời gian lưu UTC+7, tên, seed, kích thước,
 dung lượng. Chọn ảnh/dòng để xem/tải bản gốc, bấm **Dùng seed ảnh lịch sử** khi cần.
 Chỉ điền seed; không tự chuyển prompt hoặc sampling. Ảnh lưới/không có seed thì không dùng.
@@ -119,7 +120,7 @@ qua URL của Forge ở máy khác. Không theo symlink ra ngoài thư mục out
 | Cách | Ở đâu | Hợp với |
 |---|---|---|
 | **Gõ tiếng Việt ngay trong ô prompt** | tab txt2img của Forge (tagcomplete) | vừa vẽ vừa thêm tag nhanh |
-| **Tab “Prompt VN”** | tab riêng trong Forge | dựng prompt có cấu trúc, xem nghĩa tiếng Việt, sinh ảnh ngay |
+| **Accordion “Prompt tiếng Việt”** | ngay trong tab txt2img của Forge | dựng prompt có cấu trúc, xem nghĩa tiếng Việt, rồi **Đưa vào txt2img** |
 | **Gọi API từ notebook** | Ô 10 | sinh ảnh hàng loạt, tự động hoá |
 
 ### 1. tagcomplete — gõ tiếng Việt ra tag tiếng Anh
@@ -141,7 +142,13 @@ chèn tag, và nó có sẵn danh sách loại trừ cho emoticon
 (`0_0,(o)_(o),+_+,._.,<o>_<o>,<|>_<|>,=_=,>_<,3_3,6_9,>_o,@_@,^_^,o_o,u_u,x_x,|_|,…`) —
 trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
 
-### 2. Tab “Prompt VN”
+### 2. Khối “Prompt tiếng Việt” trong tab txt2img
+
+Tab riêng **“Prompt VN” đã bỏ**. Toàn bộ chức năng nằm trong một **accordion gấp lại
+được** ở vùng script của tab txt2img (ngay trên nút **Generate** của Forge), có 3 tab con:
+**🔎 Tìm & thêm tag**, **🎨 Phong cách**, **🪄 Dựng prompt**. Ô “Tag đã chọn” để ngoài
+các tab con nên thêm tag ở đâu cũng thấy ngay.
+
 - Tra tag bằng tiếng Việt, **không cần gõ dấu** (`ao dai` vẫn ra `ao_dai`);
   từ có dấu được ưu tiên khớp chính xác nên “váy” không bị lẫn với “vảy”, “vây”.
 - Khớp đủ mọi từ theo bất kỳ thứ tự nào: “nhìn người xem” vẫn ra `looking_at_viewer`
@@ -157,17 +164,6 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
   prompt. Bảng bên dưới cho biết từng tag mạnh hay yếu theo số bài đăng. Dữ liệu lấy từ
   `style_tags.csv`; chi tiết và công thức ở [`STYLE_TAGS.md`](../STYLE_TAGS.md).
   Ô **Styles** của Forge cũng có 12 style `Phong cách — …` bấm là ăn ngay.
-- **Sinh ảnh không treo**: nút Sinh ảnh cập nhật mỗi giây (`⏳ 01:12 · bước 9/25 · 36% ·
-  còn ~1m 20s`) nhờ đọc `/sdapi/v1/progress`; nút **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`;
-  connect timeout 10s, read timeout 15 phút (`WAI_GEN_TIMEOUT`); Forge đang bận thì báo rõ
-  thay vì xếp hàng im lặng. Đọc tiến trình từ `/sdapi/v1/progress`, thiếu thì fallback
-  `/internal/progress`; nút **🔎 Chẩn đoán** phân biệt *chưa bắt đầu job* – *Forge bận nên
-  quá giờ* – *thiếu endpoint/không phải API A1111* và đọc loại lỗi từ `forge.log`. Gặp kẹt: xem mục *Bấm Sinh ảnh bị treo* trong
-  [`INSTALL.md`](INSTALL.md#bấm-sinh-ảnh-bị-treo--đứng-mãi-không-trả-ảnh).
-- **Prompt dài (CLIP 75 token/cửa sổ)**: mục **📏 Prompt dài** trong app đo token, chia cửa sổ
-  và chỉ ra tag nào rơi vào vùng loãng (>150 token); nút **✂️ Nén** bỏ tag trùng nghĩa
-  (`eyes` khi đã có `blue_eyes`). Ghi chú dưới ô positive hiện `🟢/🟡/🔴 N token · M cửa sổ`.
-  Cách giữ chi tiết khi prompt rất dài: [`PROMPT_DAI.md`](../PROMPT_DAI.md).
 - Bấm một dòng kết quả: nếu đã có mục Việt tương ứng thì **thay tại chỗ**,
   nếu chưa có thì thêm tag. Ví dụ `1girl, (áo dài:1.2), long_hair` →
   `1girl, (ao_dai:1.2), long_hair`; không còn cả Việt + Anh.
@@ -182,18 +178,32 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
 - Hai lối ra: **Đưa vào txt2img** mặc định ghép/thay mục tương ứng, giữ mục khác;
   **Thay toàn bộ** phải bật rõ ràng, có **Hoàn tác** trong phiên trình duyệt.
   Nút chỉ chuyển prompt, **không chuyển tham số sampling**; chỉnh chúng tại txt2img.
-- **Sinh ảnh** ngay trong tab dùng quy trình/seed và tham số API đã chọn.
-  Chỉ một tác vụ API của app/tab chạy đồng thời; không chặn được người dùng khác
-  gọi API trực tiếp hoặc một app độc lập khác.
+- **Không sinh ảnh lần hai**: dùng nút **Generate** và gallery/ảnh đã tạo sẵn có của
+  txt2img. Khối này không gọi API, không chiếm GPU, không lệch tham số với txt2img.
 - Có công tắc ẩn/hiện tag 18+ khi tìm, duyệt và bốc ngẫu nhiên.
+- Cần cập nhật runtime đang chạy: `bash /content/install.sh --only extras,launch,verify --restart`
+  (chép lại extension rồi khởi động lại Forge; không tải lại model/Torch).
 
 ### 3. App Gradio độc lập
 ```bash
 python3 colab/prompt_builder.py --forge-url http://127.0.0.1:7860 --port 7861 --share
 python3 colab/prompt_builder.py --demo          # không cần Forge/GPU, chỉ dựng prompt
 ```
-Có thêm tab **“Dịch prompt Anh → Việt”**: dán một prompt bất kỳ để xem nghĩa tiếng Việt
-của từng tag, tra từ chính kho 45.557 bản dịch.
+App giữ **đầy đủ** bản cũ (kể cả những mục đã bỏ khỏi Forge):
+- **Sinh ảnh không treo**: nút Sinh ảnh cập nhật mỗi giây (`⏳ 01:12 · bước 9/25 · 36% ·
+  còn ~1m 20s`) nhờ đọc `/sdapi/v1/progress`; nút **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`;
+  connect timeout 10s, read timeout 15 phút (`WAI_GEN_TIMEOUT`); Forge đang bận thì báo rõ
+  thay vì xếp hàng im lặng. Đọc tiến trình từ `/sdapi/v1/progress`, thiếu thì fallback
+  `/internal/progress`; nút **🔎 Chẩn đoán** phân biệt *chưa bắt đầu job* – *Forge bận nên
+  quá giờ* – *thiếu endpoint/không phải API A1111* và đọc loại lỗi từ `forge.log`. Gặp kẹt: xem mục *Bấm Sinh ảnh bị treo* trong
+  [`INSTALL.md`](INSTALL.md#bấm-sinh-ảnh-bị-treo--đứng-mãi-không-trả-ảnh).
+- **Quy trình Nháp → Chuẩn → Hoàn thiện** và **🗂️ Ảnh đã tạo** (album + seed).
+- **Prompt dài (CLIP 75 token/cửa sổ)**: mục **📏 Prompt dài** đo token, chia cửa sổ
+  và chỉ ra tag nào rơi vào vùng loãng (>150 token); nút **✂️ Nén** bỏ tag trùng nghĩa
+  (`eyes` khi đã có `blue_eyes`). Ghi chú dưới ô positive hiện `🟢/🟡/🔴 N token · M cửa sổ`.
+  Cách giữ chi tiết khi prompt rất dài: [`PROMPT_DAI.md`](../PROMPT_DAI.md).
+- Tab **“Dịch prompt Anh → Việt”**: dán một prompt bất kỳ để xem nghĩa tiếng Việt
+  của từng tag, tra từ chính kho 45.557 bản dịch.
 
 ## Thứ tự prompt mà hệ thống tạo ra
 

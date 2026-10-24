@@ -1,8 +1,13 @@
-"""Extension Forge/A1111: thêm tab "Prompt VN" — bộ dựng prompt tiếng Việt.
+"""Extension Forge/A1111: khối "Prompt tiếng Việt" nằm NGAY TRONG tab txt2img.
 
-Dùng chính kho tag Danbooru + e621 đã dịch (prompt_lib) làm bộ nhắc:
-tra tag bằng tiếng Việt -> xếp thứ tự prompt chuẩn Illustrious/WAI -> hoặc là điền
-thẳng vào ô txt2img, hoặc là gọi API sinh ảnh ngay với tham số của thẻ model v17.
+Trước đây là một tab riêng ("Prompt VN"); tab đó đã bỏ. Toàn bộ chức năng tra tag
+tiếng Việt, chọn phong cách và dựng prompt giờ là một accordion (gấp lại được) trong
+vùng script của txt2img — ngay trên nút Generate. Bấm **Đưa vào txt2img** để đổ
+prompt vào ô Prompt/Negative của txt2img rồi dùng chính nút Generate của Forge.
+
+Không còn gọi API sinh ảnh và không còn album ảnh riêng ở đây: txt2img của Forge đã
+có nút Generate + gallery + ảnh đã tạo, dùng chúng thay vì dựng thêm một đường sinh
+ảnh thứ hai (dễ lệch tham số và chiếm GPU hai lần).
 
 Cài: chép cả thư mục này vào <forge>/extensions/  (không cần là git repo, Forge vẫn nạp
 extension cục bộ miễn là có thư mục scripts/).
@@ -10,14 +15,10 @@ extension cục bộ miễn là có thư mục scripts/).
 
 import os
 import sys
-import time
-from functools import lru_cache
-from pathlib import Path
 
 import gradio as gr
-import requests
 
-from modules import script_callbacks, shared  # noqa: E402  (Forge cung cấp)
+from modules.scripts import AlwaysVisible, Script  # noqa: E402  (Forge cung cấp)
 
 EXT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -62,25 +63,14 @@ LIB_DIR, CSV_ROOT = _locate()
 
 GRADIO_MAJOR = int(str(getattr(gr, "__version__", "4")).split(".")[0] or 4)
 COPY_BTN = {"show_copy_button": True} if GRADIO_MAJOR < 6 else {}
-BLOCKS_THEME = {"theme": gr.themes.Soft()} if GRADIO_MAJOR < 6 else {}
 
 if LIB_DIR:
     sys.path.insert(0, LIB_DIR)
-    from prompt_lib import (ACTIVE_PROFILE_ID, MODEL_PROFILES, BROWSE_GROUPS, CATEGORY_NAMES, GROUP_LABELS,  # noqa: E402
-                            NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
-                            UPSCALERS, WAI_DEFAULTS, PromptBuilder, StyleLibrary, TagIndex,
+    from prompt_lib import (ACTIVE_PROFILE_ID, BROWSE_GROUPS, CATEGORY_NAMES, GROUP_LABELS,  # noqa: E402
+                            NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, WAI_DEFAULTS,
+                            PromptBuilder, StyleLibrary, TagIndex,
                             audit_prompt, summary_line, CHUNK_TOKENS)
-
-    from prompt_lib.api import decode_generation_response
-    from prompt_lib.history import ImageHistory, forge_output_roots
-    from prompt_lib.history_ui import HistoryPanel
     from prompt_lib.editing import replace_or_append, convert_tags
-    from prompt_lib.generate import (GenerationJob, advice_for, busy_message, format_duration,
-                                     interrupt, payload_warnings, progress_info, read_timeout,
-                                     status_line, timeouts, wait_diagnosis)
-    from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
-                                     workflow_settings, workflow_note, validate_generation,
-                                     generation_metadata, generation_error, seed_at)
 
     INDEX = TagIndex(CSV_ROOT)
     BUILDER = PromptBuilder(INDEX)
@@ -118,41 +108,6 @@ def do_convert(selected):
     if unknown:
         note += " Chưa xác định: " + ", ".join(unknown) + "; giữ nguyên, hãy chọn kết quả cụ thể."
     return converted, note
-
-
-def use_image_seed(metadata, image_index):
-    seed = seed_at(metadata, image_index)
-    if seed is None:
-        return gr.skip(), "Chọn một ảnh đã sinh trước (không chọn ảnh lưới)."
-    return seed, f"🔒 Dùng lại seed {seed}; giữ kích thước gốc/prompt để so sánh."
-
-
-def on_image_pick(evt: gr.SelectData):
-    return evt.index if isinstance(evt.index, int) else evt.index[0]
-
-
-def set_workflow(label, sampler=None):
-    count = 1 if WORKFLOW_PRESETS.get(label) == "final" else gr.skip()
-    return (*workflow_settings(label, sampler=sampler), workflow_note(label), count)
-
-
-def _forge_url():
-    """URL API của chính Forge đang chạy extension này."""
-    port = getattr(shared.cmd_opts, "port", 7860) or 7860
-    return f"http://127.0.0.1:{port}"
-
-
-@lru_cache(maxsize=4)
-def _cached_history(forge_dir, roots):
-    return ImageHistory(roots, Path(forge_dir) / "outputs" / ".wai-history")
-
-
-def image_history():
-    forge_dir = Path(EXT_DIR).parent.parent.resolve()
-    roots = forge_output_roots(forge_dir, getattr(shared, "opts", None))
-    # Bao gồm ảnh của ví dụ API notebook, không giữ chúng trong State.
-    roots.append(Path(CSV_ROOT) / "colab" / "outputs")
-    return _cached_history(str(forge_dir), tuple(str(p) for p in roots))
 
 
 # ------------------------------------------------------------------ các handler
@@ -319,144 +274,6 @@ def do_build(selected, description, rating_label, quality, negative_preset,
     return out["prompt"], out["negative"], rows, note, out["vi_preview"]
 
 
-def prepare_generation(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
-                       enable_hr, hr_scale, denoise, upscaler, hr_steps=None, batch=1):
-    """Chuẩn bị payload + tự sửa tên upscaler theo backend. Trả `(payload, lỗi, ghi_chú, base)`."""
-    if not (prompt or "").strip():
-        return None, "Chưa có prompt. Bấm **Dựng prompt** trước.", "", ""
-    overrides = {
-        "steps": steps, "cfg_scale": cfg_scale, "sampler_name": sampler,
-        "seed": seed, "batch_size": 1, "n_iter": batch, "enable_hr": bool(enable_hr),
-        "hr_scale": hr_scale, "denoising_strength": denoise,
-        "hr_upscaler": upscaler,
-        "hr_second_pass_steps": (WAI_DEFAULTS["hr_second_pass_steps"]
-                                 if hr_steps is None else hr_steps),
-        "override_settings": {"clip_stop_at_last_layers": WAI_DEFAULTS["clip_skip"]},
-    }
-    if size_label in SIZE_PRESETS:
-        overrides["width"], overrides["height"] = SIZE_PRESETS[size_label]
-    overrides.update(save_images=True, send_images=True)
-    try:
-        payload = validate_generation(BUILDER.payload(prompt, negative, overrides))
-    except (TypeError, ValueError) as exc:
-        return None, f"❌ Tham số không hợp lệ: {exc}", "", ""
-    url_base = _forge_url()
-
-    # Forge Neo đặt tên upscaler theo tên file, khác A1111 -> hỏi backend rồi tự sửa
-    swapped = ""
-    try:
-        if not payload.get("enable_hr"):
-            raise ValueError("Hires tắt; không cần hỏi upscaler")
-        r = requests.get(url_base + "/sdapi/v1/upscalers", timeout=10)
-        r.raise_for_status()
-        available = [u.get("name") for u in r.json() if u.get("name")]
-    except Exception:                            # noqa: BLE001
-        available = []
-    if available:
-        before = payload.get("hr_upscaler")
-        BUILDER.fix_upscaler(payload, available)
-        if before and payload.get("hr_upscaler") != before:
-            swapped = (f"↩️ Không có upscaler `{before}`, đã đổi sang "
-                       f"`{payload.get('hr_upscaler')}`.")
-    return payload, "", swapped, url_base
-
-
-def _finish(response, payload, started, swapped="", warnings=()):
-    try:
-        images, info = decode_generation_response(response.json())
-    except Exception as exc:                      # noqa: BLE001
-        return [], (f"❌ Response ảnh của Forge không hợp lệ: "
-                    f"`{type(exc).__name__}: {exc}`"), {}
-    head = "\n\n".join(x for x in [*warnings, swapped] if x)
-    summary = (f"✅ {len(images)} ảnh trong {time.time() - started:.1f}s · seed "
-               f"`{info.get('seed')}` · {info.get('width')}×{info.get('height')} · "
-               f"CFG {info.get('cfg_scale')} · {info.get('steps')} bước")
-    return images, (head + "\n\n" if head else "") + summary, \
-        generation_metadata(info, payload, len(images))
-
-
-def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
-                enable_hr, hr_scale, denoise, upscaler, hr_steps=None, batch=1):
-    """Sinh ảnh đồng bộ (script/test). Nút trong UI dùng `do_generate_stream` có tiến trình."""
-    payload, message, swapped, url_base = prepare_generation(
-        prompt, negative, size_label, steps, cfg_scale, sampler, seed, enable_hr,
-        hr_scale, denoise, upscaler, hr_steps, batch)
-    if payload is None:
-        return [], message, {}
-    warnings = payload_warnings(payload)
-    started = time.time()
-    try:
-        # connect ngắn + read dài (WAI_GEN_TIMEOUT, mặc định 15 phút) để không treo 30 phút
-        r = requests.post(url_base + "/sdapi/v1/txt2img", json=payload, timeout=timeouts())
-        r.raise_for_status()
-    except Exception as exc:                      # noqa: BLE001
-        return [], generation_error(exc, timeout=read_timeout()), {}
-    return _finish(r, payload, started, swapped, warnings)
-
-
-GENERATE_HEAD = ("ℹ️ Đang sinh ảnh — số dưới đây tự cập nhật mỗi giây. "
-                 "Kẹt quá lâu thì bấm **⛔ Huỷ job**.")
-
-
-def do_generate_stream(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
-                       enable_hr, hr_scale, denoise, upscaler, hr_steps=None, batch=1,
-                       stop_after=None):
-    """Generator: đẩy trạng thái mỗi giây để UI không "treo" khi Forge chạy lâu."""
-    payload, message, swapped, url_base = prepare_generation(
-        prompt, negative, size_label, steps, cfg_scale, sampler, seed, enable_hr,
-        hr_scale, denoise, upscaler, hr_steps, batch)
-    if payload is None:
-        yield gr.update(), message, {}
-        return
-
-    warnings = payload_warnings(payload)
-    head = "\n\n".join(x for x in [*warnings, swapped] if x)
-    info = progress_info(url_base)
-    waited = 0
-    while info.get("busy") and waited < 20:
-        yield gr.update(), "\n\n".join(x for x in [
-            head, busy_message(info),
-            "Đang chờ chỗ trống… bấm **⛔ Huỷ job** nếu muốn dừng cả job đang chạy."] if x), {}
-        time.sleep(2)
-        waited += 2
-        info = progress_info(url_base)
-
-    job = GenerationJob(url_base, payload).start()
-    while not job.done:
-        if stop_after is not None and job.elapsed > stop_after:
-            break
-        info = job.progress()
-        text = "\n\n".join(x for x in [
-            head, GENERATE_HEAD if job.elapsed < 12 else "",
-            status_line(job.elapsed, info),
-            advice_for(job.elapsed, info, info.get("stalled", 0)),
-        ] if x)
-        yield gr.update(), text, {}
-        time.sleep(1.0)
-
-    if not job.done:
-        yield gr.update(), (head + "\n\n" if head else "") + \
-            f"⏳ Dừng theo dõi sau {format_duration(job.elapsed)}; Forge có thể vẫn đang chạy.", {}
-        return
-    if job.error is not None:
-        yield gr.update(), generation_error(job.error, timeout=read_timeout()), {}
-        return
-    images, summary, metadata = _finish(job.response, payload, job.started, swapped, warnings)
-    yield images, summary, metadata
-
-
-def do_stop():
-    """Nút Huỷ: dừng job Forge đang chạy qua `/sdapi/v1/interrupt`."""
-    _ok, message = interrupt(_forge_url())
-    return message
-
-
-def do_wait_diagnostics(elapsed=0):
-    """Nút 🔎 Chẩn đoán: vì sao còn "đang chờ Forge trả ảnh" (progress/ping/log)."""
-    return ("### 🔎 Chẩn đoán trạng thái sinh ảnh\n\n"
-            + "\n\n".join(wait_diagnosis(_forge_url(), elapsed=elapsed)))
-
-
 LOST_NOTE = (
     "❌ Không tìm thấy `prompt_lib` và các file CSV của kho prompt.\n\n"
     "Hãy đặt biến môi trường `VI_PROMPT_ROOT` trỏ tới thư mục repo "
@@ -464,44 +281,63 @@ LOST_NOTE = (
 )
 
 
-# ------------------------------------------------------------------ dựng tab
-def build_tab():
-    with gr.Blocks(**BLOCKS_THEME) as tab:
+# --------------------------------------------------- khối UI trong tab txt2img
+ACCORDION_LABEL = "🇻🇳 Prompt tiếng Việt — tra tag, phong cách, dựng prompt"
+
+
+def build_ui():
+    """Dựng khối prompt Việt vào ngữ cảnh UI hiện tại của Forge (tab txt2img).
+
+    Trả `[]`: các control ở đây chỉ để dựng prompt rồi đổ sang ô của txt2img, nên
+    `run()` của Forge không cần nhận giá trị nào từ chúng.
+    """
+    with gr.Accordion(ACCORDION_LABEL, open=False, elem_id="vi_prompt_accordion"):
         if INDEX is None:
-            gr.Markdown("## ❌ Thiếu kho prompt\n\n" + LOST_NOTE)
-            return tab
+            gr.Markdown("### ❌ Thiếu kho prompt\n\n" + LOST_NOTE)
+            return []
 
         gr.Markdown(
-            f"## 🇻🇳 Prompt tiếng Việt cho WAI-Illustrious v17\n"
-            f"Kho nhắc: **{len(INDEX):,} tag** Danbooru + e621, "
-            f"**{INDEX.stats()['có_nghĩa_tiếng_việt']:,} tag có nghĩa tiếng Việt**. "
-            "Gõ tiếng Việt → bấm vào dòng kết quả để thêm tag → **Dựng prompt** → "
-            "điền vào txt2img hoặc sinh ảnh ngay.\n\n"
-            f"Biến thể: **{ACTIVE_PROFILE_ID or 'fp16'}** · "
-            f"CFG {WAI_DEFAULTS['cfg_scale']} · {WAI_DEFAULTS['steps']} bước."
+            f"Kho nhắc: **{len(INDEX):,} tag** Danbooru + e621 · "
+            f"**{INDEX.stats()['có_nghĩa_tiếng_việt']:,} tag có nghĩa tiếng Việt** · "
+            f"biến thể **{ACTIVE_PROFILE_ID or 'fp16'}** "
+            f"(CFG {WAI_DEFAULTS['cfg_scale']}, {WAI_DEFAULTS['steps']} bước).\n\n"
+            "Gõ tiếng Việt → bấm một dòng để thêm tag → **🪄 Dựng prompt** → "
+            "**📋 Đưa vào txt2img** → bấm **Generate** của Forge ngay bên dưới. "
+            "Không còn tab riêng và không còn nút sinh ảnh thứ hai."
         )
 
+        # Tag đang chọn để ngoài tabs: bấm thêm ở tab nào cũng thấy ngay kết quả.
+        selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3,
+                              elem_id="vi_prompt_selected")
         with gr.Row():
-            with gr.Column(scale=5):
+            btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh", scale=2)
+            btn_random = gr.Button("🎲 Ngẫu nhiên", scale=1)
+            rnd_n = gr.Slider(4, 20, value=8, step=1, label="Số tag", scale=1)
+            btn_clear = gr.Button("🗑️ Xoá", scale=1)
+        picked = gr.Markdown("", elem_id="vi_prompt_picked")
+        state = gr.State([])
+
+        with gr.Tabs(elem_id="vi_prompt_tabs"):
+            with gr.Tab("🔎 Tìm & thêm tag", id="vi_prompt_find"):
                 query = gr.Textbox(label="Tìm tag (tiếng Việt, không cần gõ dấu)",
                                    placeholder="áo dài, tóc dài, đồng phục học sinh, ao dai…")
                 with gr.Row():
                     cats = gr.Dropdown(list(CATEGORY_NAMES.values()),
-                                       label="Giới hạn category", multiselect=True)
-                    limit = gr.Slider(5, 60, value=20, step=5, label="Số kết quả")
+                                       label="Giới hạn category", multiselect=True, scale=2)
+                    limit = gr.Slider(5, 60, value=20, step=5, label="Số kết quả", scale=1)
                 allow_nsfw = gr.Checkbox(label="Hiện cả tag 18+", value=False)
                 with gr.Row():
-                    btn_search = gr.Button("🔎 Tìm", variant="primary")
+                    btn_search = gr.Button("🔎 Tìm", variant="primary", scale=2)
                     group_box = gr.Dropdown([GROUP_LABELS[g] for g in BROWSE_GROUPS],
                                             label="…hoặc duyệt nhóm",
-                                            value=GROUP_LABELS[BROWSE_GROUPS[0]])
-                    btn_browse = gr.Button("📚 Duyệt")
+                                            value=GROUP_LABELS[BROWSE_GROUPS[0]], scale=2)
+                    btn_browse = gr.Button("📚 Duyệt", scale=1)
                 results = gr.Dataframe(
                     headers=["tag", "nghĩa tiếng Việt", "category", "số ảnh", "nhóm"],
                     interactive=False, label="BẤM VÀO MỘT DÒNG để chọn/thay tag")
                 note = gr.Markdown("")
 
-                gr.Markdown("#### 🎨 Chọn phong cách vẽ")
+            with gr.Tab("🎨 Phong cách", id="vi_prompt_style"):
                 with gr.Row():
                     style_group = gr.Dropdown(style_group_choices(),
                                               value=(style_group_choices() or [None])[0],
@@ -525,32 +361,23 @@ def build_tab():
                                   open=False) as style_showcase:
                     gr.Markdown(STYLES.presets_markdown() if style_ready() else "")
 
-                selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3)
-                btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh")
-                with gr.Row():
-                    btn_random = gr.Button("🎲 Ngẫu nhiên")
-                    rnd_n = gr.Slider(4, 20, value=8, step=1, label="Số tag")
-                    btn_clear = gr.Button("🗑️ Xoá")
-                picked = gr.Markdown("")
-            state = gr.State([])
-
-            with gr.Column(scale=5):
-                description = gr.Textbox(label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
-                                         placeholder="A girl in an ao dai under cherry blossoms")
+            with gr.Tab("🪄 Dựng prompt", id="vi_prompt_build"):
+                description = gr.Textbox(
+                    label="Câu mô tả tiếng Anh (tuỳ chọn; không tự dịch cả câu)",
+                    placeholder="A girl in an ao dai under cherry blossoms")
                 with gr.Row():
                     rating = gr.Dropdown(RATING_CHOICES, value=RATING_CHOICES[0],
-                                         label="Mức phân loại")
-                    quality = gr.Dropdown(list(QUALITY_PRESETS),
-                                          value="Ngắn gọn",
-                                          label="Tag chất lượng")
+                                         label="Mức phân loại", scale=2)
+                    quality = gr.Dropdown(list(QUALITY_PRESETS), value="Ngắn gọn",
+                                          label="Tag chất lượng", scale=2)
                 neg_preset = gr.Dropdown(list(NEGATIVE_PRESETS),
                                          value="WAI khuyến nghị (ngắn)",
                                          label="Negative mẫu")
                 with gr.Row():
                     artist_prefix = gr.Dropdown(["", "artist:", "@"], value="",
-                                                label="Tiền tố hoạ sĩ")
-                    extra_pos = gr.Textbox(label="Thêm positive")
-                    extra_neg = gr.Textbox(label="Thêm negative")
+                                                label="Tiền tố hoạ sĩ", scale=1)
+                    extra_pos = gr.Textbox(label="Thêm positive", scale=1)
+                    extra_neg = gr.Textbox(label="Thêm negative", scale=1)
 
                 btn_build = gr.Button("🪄 Dựng prompt", variant="primary")
                 prompt_out = gr.Textbox(label="Positive prompt", lines=4, **COPY_BTN)
@@ -561,52 +388,13 @@ def build_tab():
                 vi_preview = gr.Textbox(label="Xem trước tiếng Việt", lines=5)
 
                 # Điền thẳng vào ô txt2img bằng JS (xem javascript/vi_prompt.js)
-                btn_fill = gr.Button("📋 Đưa vào txt2img", variant="secondary")
-                replace_all = gr.Checkbox(label="Thay toàn bộ prompt đích (mặc định chỉ ghép/thay mục trùng)", value=False)
-                btn_undo = gr.Button("↩️ Hoàn tác điền txt2img")
+                with gr.Row():
+                    btn_fill = gr.Button("📋 Đưa vào txt2img", variant="secondary", scale=2)
+                    btn_undo = gr.Button("↩️ Hoàn tác điền txt2img", scale=1)
+                replace_all = gr.Checkbox(
+                    label="Thay toàn bộ prompt đích (mặc định chỉ ghép/thay mục trùng)",
+                    value=False)
                 fill_note = gr.Markdown("", elem_id="vi_prompt_fill_note")
-
-                gr.Markdown("### Nháp → Chuẩn → Hoàn thiện (API)")
-                mode = gr.Dropdown(list(WORKFLOW_PRESETS), value=DEFAULT_WORKFLOW, label="Quy trình")
-                mode_note = gr.Markdown(workflow_note(DEFAULT_WORKFLOW))
-                with gr.Row():
-                    size = gr.Dropdown(list(SIZE_PRESETS),
-                                       value="Dọc cao 832×1216",
-                                       label="Kích thước")
-                    sampler = gr.Dropdown(
-                        SAMPLERS,
-                        value=WAI_DEFAULTS["sampler_name"], label="Sampler")
-                with gr.Row():
-                    steps = gr.Slider(1, 60, value=WAI_DEFAULTS["steps"], step=1,
-                                      label="Steps (theo biến thể model)")
-                    cfg_scale = gr.Slider(0.5, 12, value=WAI_DEFAULTS["cfg_scale"], step=0.5,
-                                          label="CFG (theo biến thể model)")
-                    seed = gr.Number(value=-1, label="Seed (-1 = ngẫu nhiên)", precision=0)
-                with gr.Row():
-                    enable_hr = gr.Checkbox(label="Hires. fix (sau khi chọn ảnh/seed)", value=False)
-                    hr_scale = gr.Slider(1.0, 2.0, value=WAI_DEFAULTS["hr_scale"],
-                                         step=0.05, label="Hires scale")
-                    denoise = gr.Slider(0.1, 0.8, value=WAI_DEFAULTS["denoising_strength"],
-                                        step=0.05, label="Denoising")
-                    upscaler = gr.Dropdown(UPSCALERS, value=WAI_DEFAULTS["hr_upscaler"],
-                                           label="Upscaler")
-                with gr.Row():
-                    hr_steps = gr.Slider(0, 40, value=WAI_DEFAULTS["hr_second_pass_steps"], step=1, label="Hires steps")
-                    batch = gr.Slider(1, 4, value=1, step=1, label="Số ảnh tuần tự (batch=1)")
-                with gr.Row():
-                    btn_generate = gr.Button("🖼️ Sinh ảnh", variant="primary", scale=3)
-                    btn_stop = gr.Button("⛔ Huỷ job", scale=1)
-                    btn_diag = gr.Button("🔎 Chẩn đoán", scale=1)
-                gallery = gr.Gallery(label="Kết quả", columns=2, height=480)
-                gen_note = gr.Markdown("")
-                diag_note = gr.Markdown("")
-                generation_state = gr.State({})
-                image_index = gr.State(0)
-                btn_seed = gr.Button("🔒 Dùng seed của ảnh đã chọn")
-
-        with gr.Accordion("🗂️ Ảnh đã tạo", open=True):
-            history_panel = HistoryPanel(image_history, seed)
-        tab.wai_history_panel = history_panel
 
         btn_search.click(do_search, [query, cats, limit, allow_nsfw],
                          [results, state, note])
@@ -627,10 +415,6 @@ def build_tab():
         btn_style_add.click(do_style_add, [selected, style_checked], [selected, picked])
         btn_style_clear.click(lambda: gr.update(value=[]), None, [style_checked], queue=False)
         btn_convert.click(do_convert, [selected], [selected, picked], queue=False)
-        mode.change(set_workflow, [mode, sampler], [steps, cfg_scale, sampler, enable_hr, hr_scale,
-                                                  hr_steps, denoise, mode_note, batch], queue=False)
-        gallery.select(on_image_pick, None, [image_index], queue=False)
-        btn_seed.click(use_image_seed, [generation_state, image_index], [seed, gen_note], queue=False)
         btn_random.click(do_random, [rnd_n, allow_nsfw, selected], [selected, picked])
         btn_clear.click(lambda: ("", "Đã xoá."), None, [selected, picked])
 
@@ -643,21 +427,22 @@ def build_tab():
         btn_fill.click(fn=None, inputs=[prompt_out, negative_out, replace_all], outputs=None,
                        js="viPromptFill")
         btn_undo.click(fn=None, inputs=None, outputs=None, js="viPromptUndo")
-
-        # Generator + đọc /progress mỗi giây: Forge chạy bao lâu cũng thấy trạng thái.
-        generation_event = btn_generate.click(do_generate_stream,
-                           [prompt_out, negative_out, size, steps, cfg_scale, sampler,
-                            seed, enable_hr, hr_scale, denoise, upscaler, hr_steps, batch],
-                           [gallery, gen_note, generation_state], concurrency_limit=1,
-                           concurrency_id="wai_gpu")
-        btn_stop.click(do_stop, None, [gen_note], queue=False, cancels=[generation_event])
-        btn_diag.click(do_wait_diagnostics, None, [diag_note], queue=False)
-        history_panel.after_generation(generation_event)
-    return tab
+    return []
 
 
-def on_ui_tabs():
-    return [(build_tab(), "Prompt VN", "vi_prompt_tab")]
+class ViPromptInline(Script):
+    """Script alwayson: Forge tự dựng khối này trong vùng script của tab txt2img.
 
+    Không đăng ký tab riêng nữa (`script_callbacks.on_ui_tabs` đã bỏ). Forge tự tìm
+    lớp con của `Script` trong `scripts/*.py`, nên không cần dòng đăng ký nào.
+    """
 
-script_callbacks.on_ui_tabs(on_ui_tabs)
+    def title(self):
+        return "Prompt tiếng Việt"
+
+    def show(self, is_img2img):
+        # Chỉ txt2img: khối này đổ prompt vào ô Prompt/Negative của txt2img.
+        return False if is_img2img else AlwaysVisible
+
+    def ui(self, is_img2img):
+        return build_ui()

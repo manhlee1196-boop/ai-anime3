@@ -88,23 +88,55 @@ def main():
     assert "hswq" in app.profile_note()
     print(f"✔ App Gradio {gr.__version__}: HSWQ CFG=1 / steps=10, UI hợp lệ")
 
-    # Forge host module giả lập: không import tensor engine hoặc khởi chạy server.
+    # Forge host giả lập: chỉ modules.scripts — tab "Prompt VN" đã bỏ nên extension
+    # không còn cần script_callbacks/shared (không tự dựng tab, không gọi API).
+    class FakeScript:
+        """Tối giản giống modules.scripts.Script của Forge."""
+        alwayson = False
+        create_group = True
+        section = None
+        sorting_priority = 0
+
+    fake_scripts = types.ModuleType("modules.scripts")
+    fake_scripts.Script = FakeScript
+    fake_scripts.AlwaysVisible = object()          # sentinel, giống Forge
     modules = types.ModuleType("modules")
-    modules.shared = types.SimpleNamespace(cmd_opts=types.SimpleNamespace(port=7860))
-    modules.script_callbacks = types.SimpleNamespace(on_ui_tabs=lambda callback: None)
+    modules.scripts = fake_scripts
     sys.modules["modules"] = modules
+    sys.modules["modules.scripts"] = fake_scripts
     path = ROOT / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py"
     spec = importlib.util.spec_from_file_location("vi_prompt_tab_test", path)
     extension = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(extension)
-    extension_ui = extension.build_tab()
-    slider = cfg_slider(extension_ui)
-    assert slider["value"] == 1.0 and slider["minimum"] <= 1.0
+
+    # Tab riêng và đường sinh ảnh thứ hai đã xoá khỏi extension.
+    for gone in ("on_ui_tabs", "build_tab", "do_generate", "do_generate_stream", "do_stop",
+                 "do_wait_diagnostics", "image_history", "HistoryPanel", "WORKFLOW_PRESETS"):
+        assert not hasattr(extension, gone), gone
+
+    inline = extension.ViPromptInline()
+    assert isinstance(inline, FakeScript) and inline.title() == "Prompt tiếng Việt"
+    assert inline.show(True) is False              # không chen vào img2img
+    assert inline.show(False) is fake_scripts.AlwaysVisible
+    with gr.Blocks() as extension_ui:
+        assert inline.ui(False) == []               # không đăng ký script arg nào
+    components = extension_ui.get_config_file()["components"]
+    labels = [c["props"].get("label", "") for c in components]
+    assert extension.ACCORDION_LABEL in labels, labels[:5]
+    assert "Tag đã chọn (sửa tay được)" in labels
+    assert "Nhóm phong cách" in labels and any(l.startswith("Tick tag phong cách") for l in labels)
+    assert "Positive prompt" in labels and "Negative prompt" in labels
+    buttons = [c["props"].get("value") for c in components if c["type"] == "button"]
+    assert "📋 Đưa vào txt2img" in buttons and "🪄 Dựng prompt" in buttons
+    # Không còn gallery / nút sinh ảnh thứ hai trong txt2img
+    assert not any(b in ("🖼️ Sinh ảnh", "⛔ Huỷ job", "🔎 Chẩn đoán") for b in buttons), buttons
+    assert not any(c["type"] == "gallery" for c in components)
     built = extension.do_build("1girl, ao_dai, long_hair", "", extension.RATING_CHOICES[0],
                                "WAI khuyến nghị (đầy đủ)", "Chuẩn cộng đồng (đầy đủ)", "", "", "")
     assert isinstance(built[2], list) and all(isinstance(row, list) and len(row) == 2 for row in built[2])
-    for module, ui in ((app, app_ui), (extension, extension_ui)):
-        # cả app và tab Forge đều hiện đủ tag, không ẩn danh sách
+
+    for module in (app, extension):
+        # cả app và khối txt2img đều hiện đủ tag, không ẩn danh sách
         full, _rows, _note, _show = module.do_style_group(module.STYLES.all_label(), "")
         assert len(full["choices"]) == 506 and full["visible"] is True
         preset, _prows, _pnote = module.do_style_preset("Tranh màu nước",
@@ -113,19 +145,23 @@ def main():
         assert preset["choices"][:4] == preset["value"]
         assert module._merge("1girl, (áo dài:1.2), long_hair", ["ao_dai"]) == "1girl, (ao_dai:1.2), long_hair"
         assert module.do_convert("1girl, áo dài, tóc dài")[0] == "1girl, ao_dai, long_hair"
-        components = ui.get_config_file()["components"]
-        assert any(c["props"].get("label") == "Quy trình" for c in components)
-        assert any(c["props"].get("label", "").startswith("Bảng ảnh đã tạo") for c in components)
-        assert ui.wai_history_panel.ids.value == []
-        assert any(dep.get("trigger_only_on_success") for dep in ui.get_config_file()["dependencies"])
-        assert all(not c["props"].get("value") for c in components
-                   if c["type"] == "checkbox" and c["props"].get("label", "").startswith("Hires"))
-        assert len(module.set_workflow("Hoàn thiện — Hires 1.5×")) == 9
-        assert module.set_workflow("Hoàn thiện — Hires 1.5×", "DPM++ 2M Karras")[2] == "DPM++ 2M Karras"
-        assert module.set_workflow("Hoàn thiện — Hires 1.5×")[-1] == 1
         assert module.do_convert("1girl, 1girl, áo dài, ao_dai, (tóc dài:1.2)")[0] == "1girl, 1girl, ao_dai, (long_hair:1.2)"
-        assert module.set_workflow("Hoàn thiện — Hires 1.5×")[0:2] == (10, 1.0)
-    print("✔ Tab/app: đổi Việt tại chỗ, workflow/HSWQ, Hires mặc định tắt")
+
+    # Workflow/HSWQ/album giờ chỉ còn ở app độc lập (Forge dùng Generate của txt2img).
+    app_components = app_ui.get_config_file()["components"]
+    app_labels = [c["props"].get("label", "") for c in app_components]
+    assert "Quy trình" in app_labels
+    assert any(label.startswith("Bảng ảnh đã tạo") for label in app_labels)
+    assert app_ui.wai_history_panel.ids.value == []
+    assert any(dep.get("trigger_only_on_success") for dep in app_ui.get_config_file()["dependencies"])
+    assert all(not c["props"].get("value") for c in app_components
+               if c["type"] == "checkbox" and c["props"].get("label", "").startswith("Hires"))
+    assert len(app.set_workflow("Hoàn thiện — Hires 1.5×")) == 9
+    assert app.set_workflow("Hoàn thiện — Hires 1.5×", "DPM++ 2M Karras")[2] == "DPM++ 2M Karras"
+    assert app.set_workflow("Hoàn thiện — Hires 1.5×")[-1] == 1
+    assert app.set_workflow("Hoàn thiện — Hires 1.5×")[0:2] == (10, 1.0)
+    print("✔ Khối txt2img: accordion đầy đủ, không tab riêng, không sinh ảnh lần hai")
+    print("✔ App: đổi Việt tại chỗ, workflow/HSWQ, Hires mặc định tắt")
 
     buffer = io.BytesIO()
     Image.new("RGB", (8, 8), "white").save(buffer, format="PNG")
@@ -151,20 +187,10 @@ def main():
         return Response({"images": [png], "info": __import__("json").dumps(
             {"seed": 1, "width": 8, "height": 8, "cfg_scale": 1.0, "steps": 10})})
 
-    old_get, old_post = extension.requests.get, extension.requests.post
-    try:
-        extension.requests.get, extension.requests.post = get, post
-        images, note, meta = extension.do_generate(built[0], built[1], "Vuông 1024×1024",
-                                              10, 1.0, "Euler a", 1, True, 1.5, 0.4,
-                                              "RealESRGAN_x4plus_anime_6B")
-    finally:
-        extension.requests.get, extension.requests.post = old_get, old_post
-    assert len(images) == 1 and isinstance(images[0], Image.Image)
-    assert "seed `1`" in note and "CFG 1.0" in note
-    assert captured[0]["hr_second_pass_steps"] == 10
-    print("✔ API giả lập: đọc info JSON-string, PNG → PIL, hires steps theo HSWQ")
+    old_get, old_post = app.requests.get, app.requests.post
 
-    # App độc lập cũng phải đi hết đường sinh ảnh, không chỉ dựng được UI.
+    # App độc lập phải đi hết đường sinh ảnh, không chỉ dựng được UI.
+    # (Extension không còn đường sinh ảnh riêng: dùng Generate của txt2img.)
     try:
         app.requests.get, app.requests.post = get, post
         images, note, meta = app.do_generate("masterpiece, landscape", "lowres", "Vuông 1024×1024",
@@ -196,14 +222,13 @@ def main():
         app.requests.get, app.requests.post = old_get, old_post
     print("✔ App sinh ảnh: JSON-string/PIL, tách sampler/scheduler, báo checkpoint trống và response hỏng")
 
-    # Chống treo: nút Sinh ảnh phải là generator cập nhật trạng thái, có nút Huỷ gọi /interrupt.
+    # Chống treo: app độc lập vẫn phải có nút sinh ảnh dạng generator + nút Huỷ.
     import time as _time
-    for module, ui in ((app, app_ui), (extension, extension_ui)):
-        assert hasattr(module, "do_generate_stream") and hasattr(module, "do_stop")
-        labels = [c["props"].get("label") or c["props"].get("value") for c in
-                  ui.get_config_file()["components"]]
-        assert "⛔ Huỷ job" in labels and "🔎 Chẩn đoán" in labels
-        assert any(dep.get("cancels") for dep in ui.get_config_file()["dependencies"])
+    assert hasattr(app, "do_generate_stream") and hasattr(app, "do_stop")
+    app_buttons = [c["props"].get("label") or c["props"].get("value") for c in
+                   app_components]
+    assert "⛔ Huỷ job" in app_buttons and "🔎 Chẩn đoán" in app_buttons
+    assert any(dep.get("cancels") for dep in app_ui.get_config_file()["dependencies"])
 
     # Nút Chẩn đoán: nói rõ vì sao đang chờ, kể cả khi Forge không trả /progress
     class CodedResponse(Response):
@@ -219,8 +244,7 @@ def main():
     finally:
         app.requests.get = old_get
     assert "Chẩn đoán" in diag and "HTTP 404" in diag and "forge.log" in diag
-    extension.do_wait_diagnostics()
-    print("✔ Chẩn đoán chờ ảnh: đọc được cả trường hợp /progress 404")
+    print("✔ Chẩn đoán chờ ảnh (app): đọc được cả trường hợp /progress 404")
 
     progress_state = {"on": False}
 
@@ -246,16 +270,8 @@ def main():
             "masterpiece, landscape", "lowres", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1,
             False, 1.5, 10, 0.4, "RealESRGAN_x4plus_anime_6B", "http://127.0.0.1:7860"))
 
-        # Tab Forge: cùng cơ chế theo dõi, không treo
-        extension.requests.get, extension.requests.post = fake_get, slow_post
-        ext_frames = list(extension.do_generate_stream(
-            "masterpiece", "lowres", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, False, 1.5,
-            0.4, "RealESRGAN_x4plus_anime_6B"))
     finally:
         app.requests.get, app.requests.post = old_get, old_post
-        extension.requests.get, extension.requests.post = old_get, old_post
-    assert len(ext_frames) >= 2 and len(ext_frames[-1][0]) == 1
-    assert "⏳" in "\n".join(str(f[1]) for f in ext_frames[:-1])
     assert len(frames) >= 3, frames
     assert all(isinstance(frame, tuple) and len(frame) == 3 for frame in frames)
     mid = "\n".join(str(frame[1]) for frame in frames[:-1])
