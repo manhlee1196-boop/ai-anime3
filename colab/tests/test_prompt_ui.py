@@ -38,13 +38,35 @@ def main():
     app.STYLES = app.StyleLibrary(ROOT)
     app_ui = app.build_ui()
     # mục chọn phong cách: có dropdown nhóm + checkbox group + nút thêm
-    labels = [c["props"].get("label", "") for c in app_ui.get_config_file()["components"]]
+    components = app_ui.get_config_file()["components"]
+    labels = [c["props"].get("label", "") for c in components]
     assert "Nhóm phong cách" in labels and "Công thức sẵn (chọn là tick sẵn)" in labels
     assert any("Tick tag phong cách" in label for label in labels)
-    choices, rows, note = app.do_style_group("Ánh sáng", "")
-    assert len(choices["choices"]) >= 10 and rows and "ánh sáng" in note.lower()
-    checked, rows, note = app.do_style_preset("Pixel art game cũ")
+    # mở app là thấy đủ 506 tag trong danh sách tick (nhóm mặc định "Tất cả")
+    tick = next(c["props"] for c in components
+                if c["props"].get("label", "").startswith("Tick tag phong cách"))
+    assert len(tick["choices"]) == 506 and tick["visible"] is not False
+    all_label = app.STYLES.all_label()
+    assert app.STYLES.is_all(all_label) and len(app.STYLES.choices()) == 506
+    group_box = next(c["props"] for c in components
+                     if c["props"].get("label") == "Nhóm phong cách")
+    assert group_box["value"] == all_label and len(group_box["choices"]) == 10
+    checked, rows, note, showcase = app.do_style_group(all_label, "")
+    assert len(checked["choices"]) == 506 and checked["visible"] is True
+    assert len(rows) == 506 and "Tất cả" in note and showcase["visible"] is True
+    # lọc theo nhóm: vẫn hiện, không ẩn; tag đang tick được giữ nếu còn trong phạm vi
+    light = app.STYLES.choices("Ánh sáng")
+    checked, rows, note, _ = app.do_style_group("Ánh sáng", "", [light[0]])
+    assert len(checked["choices"]) == len(light) and checked["visible"] is True
+    assert checked["value"] == [light[0]] and "ánh sáng" in note.lower()
+    checked, rows, note, showcase = app.do_style_group(all_label, "màu nước")
+    assert 0 < len(checked["choices"]) < 20 and showcase["visible"] is False
+    assert [app.STYLES.tag_of(c) for c in checked["choices"]][:1] == ["watercolor_(medium)"]
+    # công thức: 4 tag tick sẵn ở đầu nhưng các tag khác vẫn còn trong danh sách
+    checked, rows, note = app.do_style_preset("Pixel art game cũ", all_label)
     assert len(checked["value"]) == 4 and "pixel_art" in checked["choices"][0]
+    assert len(checked["choices"]) == 506 and checked["visible"] is True
+    assert checked["choices"][:4] == checked["value"] and len(rows) == 4
     merged, queued = app.do_style_add("1girl", checked["value"])
     assert merged.startswith("1girl") and all(t in merged for t in
                                               ("pixel_art", "pixel_animation", "limited_palette"))
@@ -70,6 +92,13 @@ def main():
                                "WAI khuyến nghị (đầy đủ)", "Chuẩn cộng đồng (đầy đủ)", "", "", "")
     assert isinstance(built[2], list) and all(isinstance(row, list) and len(row) == 2 for row in built[2])
     for module, ui in ((app, app_ui), (extension, extension_ui)):
+        # cả app và tab Forge đều hiện đủ tag, không ẩn danh sách
+        full, _rows, _note, _show = module.do_style_group(module.STYLES.all_label(), "")
+        assert len(full["choices"]) == 506 and full["visible"] is True
+        preset, _prows, _pnote = module.do_style_preset("Tranh màu nước",
+                                                        module.STYLES.all_label())
+        assert len(preset["choices"]) == 506 and len(preset["value"]) == 4
+        assert preset["choices"][:4] == preset["value"]
         assert module._merge("1girl, (áo dài:1.2), long_hair", ["ao_dai"]) == "1girl, (ao_dai:1.2), long_hair"
         assert module.do_convert("1girl, áo dài, tóc dài")[0] == "1girl, ao_dai, long_hair"
         components = ui.get_config_file()["components"]

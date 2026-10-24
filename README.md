@@ -64,9 +64,11 @@ chất liệu truyền thống, chất liệu số, kỹ thuật hoàn thiện (
 ánh sáng, trường phái mỹ thuật, phong cách thể loại, thời kỳ/thiết kế, và 229 tag `*_(style)`
 của từng tác giả/series — **tất cả đã có nghĩa tiếng Việt** kèm số bài đăng để biết tag nào đủ mạnh.
 
-**Chọn thẻ phong cách ngay trong app:** tab **🧩 Dựng prompt** → mục **“2. Chọn phong cách vẽ”**
-(chọn nhóm, chọn 1 trong 12 công thức sẵn, hoặc gõ tìm không cần dấu) → tick tag → **➕ Thêm tag
-phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô **Styles** có 12 style
+**Chọn thẻ phong cách ngay trong app:** tab **🧩 Dựng prompt** → mục **“2. Chọn phong cách vẽ”**.
+Mở ra là thấy **đủ 506 tag** (nhóm mặc định *Tất cả (506 tag — mọi nhóm)*, không tag nào bị ẩn);
+chọn một nhóm để lọc, gõ ô tìm (không cần dấu) để lọc tiếp, hoặc chọn 1 trong 12 công thức sẵn —
+tag của công thức được tick sẵn ở đầu danh sách còn các tag khác vẫn hiện. Tick xong bấm **➕ Thêm
+tag phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô **Styles** có 12 style
 `Phong cách — …` bấm là điền cả bộ tag.
 
 Tài liệu [`STYLE_TAGS.md`](STYLE_TAGS.md) có 12 công thức prompt mẫu, lưu ý khi trộn chất liệu,

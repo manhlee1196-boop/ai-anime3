@@ -99,6 +99,34 @@ class StyleTags(unittest.TestCase):
             for tag, _vi, category, count, _group, _src in list(csv.reader(f))[1:]:
                 self.assertEqual((int(category), int(count)), self.tags[tag], tag)
 
+    def test_10_all_tags_visible_by_default(self):
+        """Không tag nào bị ẩn: nhóm mặc định "Tất cả" trả đủ 506 tag, tìm không cắt."""
+        lib = StyleLibrary(ROOT)
+        total = len(lib)
+        self.assertEqual(total, 506)
+        label = lib.all_label()
+        self.assertTrue(lib.is_all(None) and lib.is_all(label) and lib.is_all("Tất cả"))
+        self.assertFalse(lib.is_all("Ánh sáng"))
+        self.assertEqual(lib.group_choices()[0], label)
+        self.assertEqual(len(lib.choices()), total)
+        self.assertEqual(len(lib.choices(label)), total)
+        self.assertEqual(lib.group_count(label), total)
+        # gõ tìm: trả mọi tag khớp, không cắt còn 80 như trước
+        self.assertGreater(len(lib.choices(None, "a")), 80)
+        self.assertEqual([i.tag for i in lib.search("màu nước", limit=0)][:1],
+                         ["watercolor_(medium)"])
+        # chọn công thức: tag công thức đứng đầu và vẫn còn đủ phần còn lại
+        preset = lib.preset("Pixel art game cũ")
+        labels = [lib.info(t).label() for t in preset]
+        merged = lib.choices_with(labels)
+        self.assertEqual(merged[:len(labels)], labels)
+        self.assertEqual(len(merged), total)
+        self.assertEqual(len(set(merged)), total)
+        # in được tag của 12 công thức để người dùng đọc trước khi áp
+        md = lib.presets_markdown()
+        self.assertIn("watercolor_(medium)", md)
+        self.assertEqual(len(lib.preset_lines()), 12)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

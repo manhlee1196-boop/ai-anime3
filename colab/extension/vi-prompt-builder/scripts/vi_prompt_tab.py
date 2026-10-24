@@ -187,42 +187,73 @@ def style_ready():
 
 
 def style_group_choices():
-    return STYLES.groups() if style_ready() else []
+    # "Tất cả (506 tag — mọi nhóm)" đứng đầu: mặc định danh sách tick hiện đủ tag.
+    return STYLES.group_choices() if style_ready() else []
 
 
 def style_preset_choices():
     return [NO_PRESET] + (STYLES.preset_names() if style_ready() else [])
 
 
-def do_style_group(group, query):
-    """Đổi nhóm / gõ tìm → nạp lại danh sách tag phong cách để tick."""
+STYLE_MISSING = ("Chưa có `style_tags.csv` trong thư mục repo. Chạy "
+                 "`python3 tools/find_style_tags.py` rồi mở lại Forge.")
+
+
+def style_scope_label(group):
+    """Nhãn phạm vi để in trong ghi chú: "Tất cả" hoặc tên nhóm đang chọn."""
+    if not style_ready() or STYLES.is_all(group):
+        return "Tất cả"
+    return str(group)
+
+
+def style_initial_note():
+    """Ghi chú mở màn: đang hiện đủ tag, không tag nào bị ẩn."""
     if not style_ready():
-        return gr.update(choices=[], value=[]), [], (
-            "Chưa có `style_tags.csv` trong thư mục repo. Chạy "
-            "`python3 tools/find_style_tags.py` rồi mở lại Forge.")
+        return STYLE_MISSING
+    groups = len(STYLES.groups())
+    return (f"Đang hiện **{len(STYLES)}** tag phong cách của **tất cả {groups} nhóm** — "
+            "không tag nào bị ẩn. Chọn **Nhóm phong cách** để lọc, gõ ô tìm để lọc nhanh, "
+            "hoặc chọn một **công thức sẵn**.\n\n"
+            "_Tick tag muốn dùng rồi bấm **Thêm tag phong cách**; chỉ nên chọn "
+            "1 chất liệu + 1 kỹ thuật (+ 1 ánh sáng)._")
+
+
+def do_style_group(group, query, checked=None):
+    """Đổi nhóm / gõ tìm → nạp lại danh sách tag phong cách để tick.
+
+    Luôn trả `visible=True`; tag đang tick mà còn trong phạm vi mới thì được giữ.
+    """
+    if not style_ready():
+        return (gr.update(choices=[], value=[], visible=True), [], STYLE_MISSING,
+                gr.update(visible=True))
     choices = STYLES.choices(group, query or "")
+    keep = [label for label in (checked or []) if label in set(choices)]
     rows = STYLES.rows(STYLES.tags_of(choices))
-    note = (f"Nhóm **{group}** — " + STYLES.summary(group)
-            if not (query or "").strip()
-            else f"Tìm “{query}” trong **{group}**: {len(choices)} tag.")
+    scope = style_scope_label(group)
+    if (query or "").strip():
+        note = f"Tìm “{query}” trong **{scope}**: {len(choices)} tag."
+    else:
+        note = f"Nhóm **{scope}** — " + STYLES.summary(group)
     note += ("\n\n_Tick tag muốn dùng rồi bấm **Thêm tag phong cách**; chỉ nên chọn "
              "1 chất liệu + 1 kỹ thuật (+ 1 ánh sáng)._")
-    return gr.update(choices=choices, value=[]), rows, note
+    showcase = gr.update(visible=not (query or "").strip())
+    return gr.update(choices=choices, value=keep, visible=True), rows, note, showcase
 
 
-def do_style_preset(name):
-    """Chọn công thức sẵn → tick sẵn đúng bộ tag của công thức."""
+def do_style_preset(name, group=None):
+    """Chọn công thức sẵn → tick sẵn đúng bộ tag; tag khác vẫn hiện, không bị ẩn."""
     if not style_ready():
-        return gr.update(), [], ("Chưa có `style_tags.csv` trong thư mục repo. Chạy "
-                                 "`python3 tools/find_style_tags.py`.")
+        return gr.update(visible=True), [], STYLE_MISSING
     if name not in STYLES.preset_names():
-        return gr.update(), [], "Chọn một công thức ở danh sách bên trên."
+        return gr.update(visible=True), [], "Chọn một công thức ở danh sách bên trên."
     tags = STYLES.preset(name)
     labels = [STYLES.info(t).label() for t in tags]
     note = (f"🎨 **{name}** — {STYLES.preset_note(name)}.\n\n"
             f"Đã tick sẵn {len(tags)} tag: " + ", ".join(f"`{t}`" for t in tags)
-            + "\n\nBấm **Thêm tag phong cách** để đưa vào prompt.")
-    return gr.update(choices=labels, value=labels), STYLES.rows(tags), note
+            + f"\n\nDanh sách vẫn hiện đủ {STYLES.group_count(group)} tag "
+              "(tag của công thức nằm trên cùng). Bấm **Thêm tag phong cách** để đưa vào prompt.")
+    return (gr.update(choices=STYLES.choices_with(labels, group), value=labels, visible=True),
+            STYLES.rows(tags), note)
 
 
 def do_style_add(selected, checked):
@@ -387,15 +418,18 @@ def build_tab():
                 style_query = gr.Textbox(label="Tìm trong kho phong cách (không cần dấu)",
                                          placeholder="màu nước, cel, ukiyo-e, ánh sáng viền…")
                 style_checked = gr.CheckboxGroup(
-                    choices=[], value=[],
-                    label="Tick tag phong cách — 1 chất liệu + 1 kỹ thuật là đủ")
+                    choices=(STYLES.choices() if style_ready() else []), value=[],
+                    label="Tick tag phong cách — đang hiện đủ tag, đổi nhóm để lọc")
                 with gr.Row():
                     btn_style_add = gr.Button("➕ Thêm tag phong cách", variant="secondary",
                                               scale=3)
                     btn_style_clear = gr.Button("☐ Bỏ tick", scale=1)
-                style_note = gr.Markdown("")
+                style_note = gr.Markdown(style_initial_note())
                 style_table = gr.Dataframe(headers=STYLE_HEADERS, interactive=False,
                                            label="Độ mạnh của từng tag (theo số bài đăng)")
+                with gr.Accordion("📋 12 công thức sẵn — xem tag của từng công thức",
+                                  open=False) as style_showcase:
+                    gr.Markdown(STYLES.presets_markdown() if style_ready() else "")
 
                 selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3)
                 btn_convert = gr.Button("🔤 Thay mục Việt → tag Anh")
@@ -483,11 +517,14 @@ def build_tab():
         btn_browse.click(do_browse, [group_box, limit, allow_nsfw],
                          [results, state, note])
         results.select(on_pick, [state, selected], [selected, picked])
-        style_group.change(do_style_group, [style_group, style_query],
-                           [style_checked, style_table, style_note], queue=False)
-        style_query.submit(do_style_group, [style_group, style_query],
-                           [style_checked, style_table, style_note], queue=False)
-        style_preset.change(do_style_preset, [style_preset],
+        style_outputs = [style_checked, style_table, style_note, style_showcase]
+        style_group.change(do_style_group, [style_group, style_query, style_checked],
+                           style_outputs, queue=False)
+        style_query.change(do_style_group, [style_group, style_query, style_checked],
+                           style_outputs, queue=False)
+        style_query.submit(do_style_group, [style_group, style_query, style_checked],
+                           style_outputs, queue=False)
+        style_preset.change(do_style_preset, [style_preset, style_group],
                             [style_checked, style_table, style_note], queue=False)
         btn_style_add.click(do_style_add, [selected, style_checked], [selected, picked])
         btn_style_clear.click(lambda: gr.update(value=[]), None, [style_checked], queue=False)

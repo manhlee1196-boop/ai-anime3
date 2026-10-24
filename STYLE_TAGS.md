@@ -12,9 +12,10 @@ Kết quả **kiểm tra trực tiếp** hai file dữ liệu của repo:
 > Danh sách đầy đủ ở [`style_tags.csv`](style_tags.csv); bảng dưới in toàn bộ 8 nhóm đầu và
 > 40 tag đầu của nhóm phong cách tác giả.
 >
-> **Chọn trong app:** tab **🧩 Dựng prompt** → mục **“2. Chọn phong cách vẽ”** (nhóm / công thức
-> sẵn / ô tìm) → tick tag → **➕ Thêm tag phong cách**. Trong Forge: tab **Prompt VN** có đúng mục
-> đó, và ô **Styles** có 12 style “Phong cách — …” bấm là ăn ngay.
+> **Chọn trong app:** tab **🧩 Dựng prompt** → mục **“2. Chọn phong cách vẽ”** — mở ra là thấy
+> **đủ 506 tag** (nhóm mặc định *Tất cả (506 tag — mọi nhóm)*), chọn nhóm hoặc gõ ô tìm để lọc,
+> rồi tick tag → **➕ Thêm tag phong cách**. Trong Forge: tab **Prompt VN** có đúng mục đó, và ô
+> **Styles** có 12 style “Phong cách — …” bấm là ăn ngay.
 
 Mỗi dòng trong `style_tags.csv` có 6 cột:
 
@@ -71,10 +72,15 @@ Ba câu chốt:
 
 | Chỗ bấm | Cách dùng |
 |---|---|
-| App Gradio → tab **🧩 Dựng prompt** → **2. Chọn phong cách vẽ** | chọn **Nhóm** (9 nhóm) hoặc **Công thức sẵn**; gõ ô tìm (`màu nước`, `nuoc`, `ukiyo`) để lọc; tick tag rồi bấm **➕ Thêm tag phong cách** |
+| App Gradio → tab **🧩 Dựng prompt** → **2. Chọn phong cách vẽ** | mở ra là **đủ 506 tag** (nhóm **Tất cả (506 tag — mọi nhóm)**) — **không tag nào bị ẩn**; chọn **Nhóm** để lọc, gõ ô tìm (`màu nước`, `nuoc`, `ukiyo`) để lọc tiếp; tick tag rồi bấm **➕ Thêm tag phong cách** |
+| App/Forge → **Công thức sẵn** | 12 công thức; chọn xong 4 tag của công thức **được tick sẵn ở đầu danh sách**, phần còn lại vẫn hiện để bạn đổi. Mục **📋 12 công thức sẵn** (bấm để mở) in sẵn tag của từng công thức để đọc trước khi áp |
 | Forge → tab **Prompt VN** | cùng mục, thêm nút **➕ Thêm tag phong cách** ngay trên ô “Tag đã chọn” |
 | Forge → ô **Styles** (góc dưới ô prompt) | 12 style `Phong cách — Tranh màu nước`, `Phong cách — Pixel art game cũ`… bấm là điền cả bộ tag |
 | Bảng “Độ mạnh của từng tag” | mỗi tag kèm số bài đăng và mức **rất mạnh / rõ / yếu / rất yếu** để biết tag nào thực sự ăn |
+
+**Vì sao trước đây thấy “thiếu tag”:** danh sách tick chỉ nạp tag của **nhóm đang chọn** và ô
+tìm bị cắt còn 80 kết quả, nên nhìn như bị ẩn. Nay nhóm mặc định là *Tất cả* (đủ 506), ô tìm trả
+về **mọi** tag khớp, và khi đổi nhóm/gõ tìm thì **tag đang tick vẫn được giữ** nếu còn trong phạm vi.
 
 Bảng xếp hạng độ mạnh: ≥ 10.000 ảnh = rất mạnh · 1.000–9.999 = rõ · 300–999 = yếu ·
 < 300 = rất yếu (xem cột `post_count` trong `style_tags.csv`).

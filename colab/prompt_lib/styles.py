@@ -3,16 +3,19 @@
 Đọc `style_tags.csv` ở thư mục gốc repo (do `tools/find_style_tags.py` sinh ra):
 506 tag phong cách chia 9 nhóm, mỗi dòng có `tag, vi, category, post_count, nhom, nguon_vi`.
 
-Ba cách chọn trong UI:
-  1. **Theo nhóm** — chọn "Chất liệu truyền thống", "Kỹ thuật hoàn thiện"… rồi tick tag.
-  2. **Theo công thức sẵn** — 12 combo đã cân sẵn chất liệu + kỹ thuật + ánh sáng.
-  3. **Tìm chữ** — gõ "màu nước", "nuoc", "cell"… không cần đúng dấu.
+Ba cách chọn trong UI, **không tag nào bị ẩn**:
+  1. **Tất cả** (mặc định) — danh sách tick hiện đủ 506 tag của cả 9 nhóm.
+  2. **Theo nhóm** — chọn "Chất liệu truyền thống", "Kỹ thuật hoàn thiện"… để lọc lại.
+  3. **Theo công thức sẵn** — 12 combo đã cân sẵn chất liệu + kỹ thuật + ánh sáng; tag của
+     công thức được tick sẵn ở đầu danh sách, các tag khác vẫn nằm ngay dưới.
+  Gõ ô tìm ("màu nước", "nuoc", "cell"…) để lọc tiếp, không cần đúng dấu.
 
 Module thuần stdlib để test được trong CI, không cần Gradio:
 
     from prompt_lib.styles import StyleLibrary
     lib = StyleLibrary()                 # tự tìm style_tags.csv trong repo
     lib.groups()                         # ['Chất liệu truyền thống', ...]
+    lib.choices()                        # đủ 506 nhãn, xếp theo số ảnh
     lib.choices("Kỹ thuật hoàn thiện")   # ['cel_shading  ·  đổ bóng kiểu cel', ...]
     lib.tags_of(choices)                 # ['cel_shading', 'flat_colors', ...]
     lib.preset("Tranh màu nước")         # ['watercolor_(medium)', ...]
@@ -79,6 +82,12 @@ PRESETS = {
 }
 
 SEP = "  ·  "
+
+# Nhãn "Tất cả" cho dropdown nhóm. Mặc định danh sách tick hiện **đủ** tag trong kho;
+# chọn một nhóm cụ thể thì mới lọc lại. Trước đây nhóm đang chọn che mất các tag khác
+# nên người dùng thấy "thẻ bị ẩn" khi chọn phong cách.
+ALL_PREFIX = "Tất cả ("
+ALL_GROUPS = "Tất cả"
 
 
 def unaccent(text):
@@ -187,19 +196,62 @@ class StyleLibrary:
         extra = sorted(g for g in self._by_group if g not in GROUP_ORDER)
         return known + extra
 
+    def all_label(self):
+        """Nhãn nhóm "Tất cả …" — chọn cái này là hiện đủ mọi tag, không ẩn nhóm nào."""
+        return f"{ALL_PREFIX}{len(self) or 0} tag — mọi nhóm)"
+
+    def group_choices(self):
+        """Danh sách cho dropdown nhóm: "Tất cả" đứng đầu, rồi 9 nhóm."""
+        return [self.all_label()] + self.groups()
+
+    def is_all(self, group):
+        """`group` có phải phạm vi "Tất cả" (hoặc None) không."""
+        text = str(group or "").strip()
+        return not text or text == ALL_GROUPS or text.startswith(ALL_PREFIX)
+
+    def group_count(self, group):
+        """Số tag của một phạm vi: "Tất cả" = toàn kho, nhóm = số tag nhóm đó."""
+        if self.is_all(group):
+            return len(self)
+        return len(self._by_group.get(group, []))
+
     def group_sizes(self):
         return {g: len(self._by_group[g]) for g in self.groups()}
 
     def entries(self, group=None, limit=None):
-        items = self._by_group.get(group, []) if group else list(self.items.values())
-        items = sorted(items, key=lambda s: (-s.post_count, s.tag))
+        """Tag của một phạm vi — None hoặc nhãn "Tất cả" là toàn bộ kho, không cắt."""
+        if self.is_all(group):
+            items = list(self.items.values())
+        else:
+            items = list(self._by_group.get(group, []))
+        items.sort(key=lambda s: (-s.post_count, s.tag))
         return items[:limit] if limit else items
 
     def choices(self, group=None, query="", limit=None):
-        """Nhãn hiển thị cho CheckboxGroup/dropdown (giữ thứ tự phổ biến)."""
-        items = self.search(query, group=group) if (query or "").strip() \
-            else self.entries(group)
-        return [item.label() for item in (items[:limit] if limit else items)]
+        """Nhãn hiển thị cho CheckboxGroup/dropdown (giữ thứ tự phổ biến).
+
+        `group` = None hoặc nhãn "Tất cả …" → gộp mọi nhóm, nên không tag nào bị ẩn;
+        truyền tên một nhóm (vd. "Ánh sáng") mới lọc theo nhóm đó.
+        """
+        items = self.search(query, group=group, limit=limit or 0) \
+            if (query or "").strip() else self.entries(group, limit)
+        return [item.label() for item in items]
+
+    def choices_with(self, labels, group=None):
+        """Nhãn trong `labels` đứng đầu, phần còn lại của phạm vi theo sau.
+
+        Dùng khi chọn công thức sẵn: 4 tag của công thức hiện lên đầu (đã tick sẵn)
+        nhưng toàn bộ tag khác vẫn còn trong danh sách, không bị che.
+        """
+        head, seen = [], set()
+        for label in labels or []:
+            tag = self.tag_of(label)
+            if tag and tag not in seen:
+                seen.add(tag)
+                head.append(self.items[tag].label())
+        rest = [label for label in self.choices(group)
+                if self.tag_of(label) not in seen]
+        return head + rest
 
     def tag_of(self, label):
         """Nhãn -> tag; nhận cả khi người dùng dán thẳng tag tiếng Anh."""
@@ -218,11 +270,14 @@ class StyleLibrary:
         return out
 
     def search(self, query, group=None, limit=80):
-        """Tìm trong tag phong cách: theo tag Anh hoặc nghĩa Việt, không cần dấu."""
+        """Tìm trong tag phong cách: theo tag Anh hoặc nghĩa Việt, không cần dấu.
+
+        `limit=0` (hoặc None) = không cắt, trả về mọi tag khớp.
+        """
         q = norm(query)
         pool = self.entries(group)
         if not q:
-            return pool[:limit]
+            return pool[:limit] if limit else pool
         scored = []
         for item in pool:
             ntag, nvi = norm(item.tag), norm(item.vi)
@@ -238,7 +293,8 @@ class StyleLibrary:
                 continue
             scored.append((score, item))
         scored.sort(key=lambda pair: (-pair[0], -pair[1].post_count))
-        return [item for _score, item in scored[:limit]]
+        top = scored[:limit] if limit else scored
+        return [item for _score, item in top]
 
     def info(self, tag):
         return self.items.get(tag)
@@ -254,6 +310,21 @@ class StyleLibrary:
 
     def preset_note(self, name):
         return PRESETS.get(name, ([], ""))[1]
+
+    def preset_lines(self):
+        """12 công thức dưới dạng (tên, [tag], ghi chú) — để in công khai trong UI."""
+        out = []
+        for name, (tags, note) in PRESETS.items():
+            out.append((name, [t for t in tags if t in self.items], note))
+        return out
+
+    def presets_markdown(self):
+        """Khối Markdown liệt kê sẵn 12 công thức + tag, in ngay dưới ô chọn."""
+        blocks = []
+        for name, tags, note in self.preset_lines():
+            tag_line = ", ".join(f"`{t}`" for t in tags) or "_thiếu tag_"
+            blocks.append(f"**{name}** — {note}\n{tag_line}")
+        return "\n\n".join(blocks)
 
     def rows(self, tags=None):
         """Bảng để hiện trong Dataframe: tag, nghĩa, số ảnh, độ mạnh, nhóm."""
