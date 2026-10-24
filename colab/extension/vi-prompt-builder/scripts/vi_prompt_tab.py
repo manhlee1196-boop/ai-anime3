@@ -67,7 +67,8 @@ if LIB_DIR:
     sys.path.insert(0, LIB_DIR)
     from prompt_lib import (ACTIVE_PROFILE_ID, MODEL_PROFILES, BROWSE_GROUPS, CATEGORY_NAMES, GROUP_LABELS,  # noqa: E402
                             NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
-                            UPSCALERS, WAI_DEFAULTS, PromptBuilder, StyleLibrary, TagIndex)
+                            UPSCALERS, WAI_DEFAULTS, PromptBuilder, StyleLibrary, TagIndex,
+                            audit_prompt, summary_line, CHUNK_TOKENS)
 
     from prompt_lib.api import decode_generation_response
     from prompt_lib.history import ImageHistory, forge_output_roots
@@ -304,6 +305,13 @@ def do_build(selected, description, rating_label, quality, negative_preset,
     if out["unresolved"]:
         note += ("\n\n⚠️ Không tra được, giữ nguyên như bạn gõ: "
                  + ", ".join(f"`{t}`" for t in out["unresolved"]))
+    # CLIP chỉ đọc 75 token/cửa sổ: báo ngay để người dùng biết prompt đã dài quá chưa.
+    rep = audit_prompt(out["prompt"], group_of=INDEX.group_of if INDEX is not None else None)
+    icon = "🟢" if rep["tokens"] <= CHUNK_TOKENS else ("🟡" if rep["within_budget"] else "🔴")
+    note += f"\n\n{icon} **{summary_line(rep)}** — {rep['level']}."
+    if rep["late_count"]:
+        note += (f" ⚠️ {rep['late_count']} tag nằm sau token {CHUNK_TOKENS * 2} sẽ bị loãng: "
+                 "đưa chi tiết quan trọng lên đầu hoặc bật `BREAK`.")
     return out["prompt"], out["negative"], rows, note, out["vi_preview"]
 
 

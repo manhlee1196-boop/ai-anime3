@@ -85,6 +85,9 @@ về **mọi** tag khớp, và khi đổi nhóm/gõ tìm thì **tag đang tick v
 Bảng xếp hạng độ mạnh: ≥ 10.000 ảnh = rất mạnh · 1.000–9.999 = rõ · 300–999 = yếu ·
 < 300 = rất yếu (xem cột `post_count` trong `style_tags.csv`).
 
+> Prompt càng dài càng dễ rơi chi tiết (CLIP chỉ đọc 75 token mỗi cửa sổ). Cách đo và xử lý:
+> [`PROMPT_DAI.md`](PROMPT_DAI.md) — app có nút **📏 Đo độ dài prompt** và **✂️ Nén**.
+
 ### Lưu ý riêng của tag
 
 - **`X_(medium)` vs `X_(artwork)`**: hậu tố `_(medium)` = "vẽ *bằng* chất liệu đó" (mạnh hơn khi

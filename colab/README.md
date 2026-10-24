@@ -30,7 +30,7 @@ colab/
   extension/vi-prompt-builder/   extension Forge: thêm tab "Prompt VN"
     scripts/vi_prompt_tab.py
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
-  tests/test_prompt_lib.py       bộ kiểm tra hồi quy (15 nhóm kiểm tra)
+  tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
@@ -155,6 +155,10 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
   prompt. Bảng bên dưới cho biết từng tag mạnh hay yếu theo số bài đăng. Dữ liệu lấy từ
   `style_tags.csv`; chi tiết và công thức ở [`STYLE_TAGS.md`](../STYLE_TAGS.md).
   Ô **Styles** của Forge cũng có 12 style `Phong cách — …` bấm là ăn ngay.
+- **Prompt dài (CLIP 75 token/cửa sổ)**: mục **📏 Prompt dài** trong app đo token, chia cửa sổ
+  và chỉ ra tag nào rơi vào vùng loãng (>150 token); nút **✂️ Nén** bỏ tag trùng nghĩa
+  (`eyes` khi đã có `blue_eyes`). Ghi chú dưới ô positive hiện `🟢/🟡/🔴 N token · M cửa sổ`.
+  Cách giữ chi tiết khi prompt rất dài: [`PROMPT_DAI.md`](../PROMPT_DAI.md).
 - Bấm một dòng kết quả: nếu đã có mục Việt tương ứng thì **thay tại chỗ**,
   nếu chưa có thì thêm tag. Ví dụ `1girl, (áo dài:1.2), long_hair` →
   `1girl, (ao_dai:1.2), long_hair`; không còn cả Việt + Anh.
@@ -266,7 +270,7 @@ và `make_tagcomplete_assets.py` xuất chúng thành extra file để vẫn đ�
 
 ## Kiểm tra
 ```bash
-python3 colab/tests/test_prompt_lib.py     # 15 nhóm kiểm tra, in ✓/✗ từng dòng
+python3 colab/tests/test_prompt_lib.py     # 16 nhóm kiểm tra, in ✓/✗ từng dòng
 python3 colab/tests/test_install_sh.py      # 98 kiểm tra bộ cài, fixture/offline
 python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
 python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV

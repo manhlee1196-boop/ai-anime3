@@ -13,9 +13,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "colab"))
 
-from prompt_lib import (GROUP_LABELS, MODEL_PROFILES, WAI_DEFAULTS, PromptBuilder,  # noqa: E402
-                        TagIndex, apply_model_profile, find_repo_root, get_index,
-                        norm, parse_pieces, unaccent)
+from prompt_lib import (CHUNK_TOKENS, GROUP_LABELS, MODEL_PROFILES, WAI_DEFAULTS,  # noqa: E402
+                        PromptBuilder, TagIndex, apply_model_profile, audit_prompt,
+                        compact_prompt, estimate_tokens, find_repo_root, get_index,
+                        norm, parse_pieces, summary_line, unaccent)
 
 FAILS = []
 
@@ -198,6 +199,41 @@ def main():
           any(r.group == "sexual" for r in wide), True)
     check("bật allow_nsfw thì có tag e621 (cat 7/12)",
           any(r.category in (7, 12) for r in wide), True)
+
+    print("\n13b) Prompt dài — đếm token, chia cửa sổ, nén tag trùng nghĩa")
+    short = "masterpiece, best quality, 1girl, blue_eyes, long_hair"
+    rep_short = audit_prompt(short)
+    check("prompt ngắn nằm gọn 1 cửa sổ", (rep_short["windows"], rep_short["within_budget"]), (1, True))
+    check("đếm đúng số tag", rep_short["tag_count"], 5)
+    check("dấu phẩy cũng tính token", estimate_tokens(short) > estimate_tokens(
+        "masterpiece best quality 1girl blue_eyes long_hair"), True)
+    long_prompt = ", ".join(["masterpiece", "best quality", "1girl", "solo"] +
+                            [f"tag_{i}" for i in range(60)])
+    rep_long = audit_prompt(long_prompt)
+    check("prompt 60+ tag vượt ngân sách", rep_long["within_budget"], False)
+    check("mỗi cửa sổ ≤ 75 token", all(w["tokens"] <= CHUNK_TOKENS
+                                        for w in __import__("prompt_lib.limits",
+                                                            fromlist=["window_map"]).window_map(long_prompt)),
+          True)
+    check("cảnh báo tag rơi vùng loãng", rep_long["late_count"] > 0, True)
+    check_in("dòng tóm tắt có số cửa sổ", "cửa sổ", summary_line(rep_long))
+    check("nén bỏ 'eyes' khi đã có 'blue_eyes'",
+          compact_prompt("1girl, blue_eyes, eyes, long_hair")[0], "1girl, blue_eyes, long_hair")
+    check("nén bỏ tag lặp y hệt",
+          compact_prompt("1girl, smile, smile")[0], "1girl, smile")
+    check("nén không đụng tag riêng biệt",
+          compact_prompt("1girl, holding_sword, classroom")[0], "1girl, holding_sword, classroom")
+    check("nén giữ nguyên BREAK", compact_prompt("1girl, BREAK, smile")[0], "1girl, BREAK, smile")
+    check("nén giữ thứ tự", compact_prompt("smile, 1girl, blue_eyes, eyes")[0],
+          "smile, 1girl, blue_eyes")
+    compacted, removed = compact_prompt("1girl, blue_eyes, eyes")
+    check("báo đúng tag đã bỏ", removed, ["eyes"])
+    check("nén không làm tăng token", estimate_tokens(compacted) < estimate_tokens("1girl, blue_eyes, eyes"), True)
+    # group_of chặn xoá nhầm giữa hai nhóm khác nhau
+    diff_group = audit_prompt("holding_sword, sword", group_of=lambda t: {"holding_sword": "action",
+                                                                         "sword": "object"}.get(t, "other"))
+    check("khác nhóm thì không coi là trùng nghĩa", diff_group["redundant"], [])
+    check("prompt rỗng không gây lỗi", audit_prompt("")["tokens"], 0)
 
     print("\n14) styles.csv cho Forge")
     csv_text = builder.styles_csv()

@@ -27,6 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "colab"))
 import checkpoint_tools as cp  # noqa: E402
+from notebook_support import BRANCH  # noqa: E402  (nhánh mặc định của install.sh)
 import diagnostics  # noqa: E402
 
 
@@ -367,11 +368,13 @@ class CheckpointFlow(unittest.TestCase):
             (repo / name).write_text("fixture\n")
         (repo / "colab/setup_forge.sh").write_text("SETUP_API_VERSION=1\n")
         (repo / "colab/prompt_lib/index.py").write_text("# fixture\n")
+        # Nhánh giả lập phải trùng nhánh mặc định của install.sh, nếu không stage_repo
+        # sẽ từ chối cập nhật (đúng hành vi thật khi repo đang ở nhánh khác).
         commands = r"""
 source "$1"
 git() {
   case "$*" in
-    *"branch --show-current"*) printf 'arena/88f01d31-ai-anime3\n' ;;
+    *"branch --show-current"*) printf '%s\n' "$FAKE_BRANCH" ;;
     *"remote get-url origin"*) printf 'https://github.com/manhlee1196-boop/ai-anime3\n' ;;
     *"status --porcelain"*) return 0 ;;
     *) return 1 ;;
@@ -388,7 +391,8 @@ repo_git() {
 }
 stage_repo
 """
-        env = {**os.environ, "REPO_DIR": str(repo), "PROJECT_SOURCE": str(ROOT), "WAI_LOG": str(self.root / "log")}
+        env = {**os.environ, "REPO_DIR": str(repo), "PROJECT_SOURCE": str(ROOT),
+               "WAI_LOG": str(self.root / "log"), "FAKE_BRANCH": BRANCH}
         r = subprocess.run(["bash", "-c", commands, "test", str(ROOT / "colab/install.sh")],
                            env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

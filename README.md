@@ -74,6 +74,18 @@ tag phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô 
 Tài liệu [`STYLE_TAGS.md`](STYLE_TAGS.md) có 12 công thức prompt mẫu, lưu ý khi trộn chất liệu,
 bảng độ mạnh của từng tag, và ghi lại các bản dịch đã sửa (`lego`, `spine_(medium)`, 41 tag thiếu…).
 
+### Prompt dài mà không rơi chi tiết
+
+CLIP chỉ đọc **75 token mỗi cửa sổ**; token càng xa đầu prompt càng ít trọng số, nên nhồi
+200 token sẽ làm chi tiết ở nửa sau gần như mất tác dụng. App có sẵn công cụ đo và nén:
+**📏 Đo độ dài prompt** (đếm token, chia cửa sổ, chỉ ra tag nào rơi vào vùng loãng) và
+**✂️ Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`). Ghi chú ngay dưới ô
+positive hiện `🟢/🟡/🔴 N token · M cửa sổ · K tag` mỗi lần dựng prompt.
+
+Ngân sách: ≤ 75 token = chắc · 76–150 = còn tốt · > 150 = bắt đầu loãng. Cách xử lý đầy đủ
+(BREAK theo nhóm, prompt scheduling `[tag:0.4]`, hai lượt txt2img → img2img) ở
+[`PROMPT_DAI.md`](PROMPT_DAI.md).
+
 ```bash
 python3 tools/find_style_tags.py             # ghi lại style_tags.csv
 python3 tools/find_style_tags.py --markdown  # in bảng Markdown như STYLE_TAGS.md
@@ -214,6 +226,7 @@ danbooru_e621_vi.csv                 bản tiếng Việt (4 cột)
 danbooru_e621_vi_translation.csv     bản dịch 2 cột cho tính năng Translation
 style_tags.csv                     506 tag phong cách vẽ (9 nhóm, kèm nghĩa VI)
 STYLE_TAGS.md                       tài liệu tra cứu + công thức prompt phong cách
+PROMPT_DAI.md                       cách giữ chi tiết khi prompt dài (CLIP 75 token)
 tools/
   build_vi.py                        script sinh 4 file trên
   find_style_tags.py                 lọc tag phong cách vẽ -> style_tags.csv

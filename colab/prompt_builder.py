@@ -28,10 +28,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 
-from prompt_lib import (ACTIVE_PROFILE_ID, GROUP_LABELS, BROWSE_GROUPS, CATEGORY_NAMES,  # noqa: E402
-                        MODEL_PROFILES, NEGATIVE_PRESETS,
+from prompt_lib import (ACTIVE_PROFILE_ID, CHUNK_TOKENS, GROUP_LABELS, BROWSE_GROUPS,  # noqa: E402
+                        CATEGORY_NAMES, MODEL_PROFILES, NEGATIVE_PRESETS,
                         QUALITY_PRESETS, RATINGS, SIZE_PRESETS, UPSCALERS, WAI_DEFAULTS,
-                        PromptBuilder, StyleLibrary, TagIndex, pick_upscaler)
+                        PromptBuilder, StyleLibrary, TagIndex, audit_prompt, compact_prompt,
+                        pick_upscaler, summary_line)
 from prompt_lib.api import decode_generation_response
 from prompt_lib.history import ImageHistory, forge_output_roots
 from prompt_lib.history_ui import HistoryPanel
@@ -302,6 +303,61 @@ def do_random(n, seed, allow_nsfw, selected):
     return _merge(selected, tags), note
 
 
+# ------------------------------------------------------------- prompt dài (CLIP 75 token)
+def length_report(prompt):
+    """Báo cáo độ dài; `group_of` giúp chỉ xếp cặp trùng nghĩa khi cùng nhóm."""
+    group_of = INDEX.group_of if INDEX is not None else None
+    return audit_prompt(prompt, group_of=group_of)
+
+
+def length_markdown(rep):
+    """Khối Markdown giải thích độ dài + lời khuyên cho người dùng."""
+    head = (f"### 📏 {summary_line(rep)}\n"
+            f"Mức: **{rep['level']}** · ngân sách khuyến nghị **≤ {rep['budget']} token** "
+            f"(mỗi cửa sổ CLIP đọc {CHUNK_TOKENS} token)")
+    return head + "\n\n" + "\n\n".join(f"- {line}" for line in rep["advice"])
+
+
+def do_length(prompt):
+    """Nút 'Đo độ dài prompt' → bảng cửa sổ + lời khuyên."""
+    if not (prompt or "").strip():
+        return "Chưa có prompt. Bấm **🪄 Dựng prompt** trước.", []
+    rep = length_report(prompt)
+    return length_markdown(rep), rep["window_rows"]
+
+
+def do_compact(prompt):
+    """Nút 'Nén' → bỏ tag trùng nghĩa/trùng lặp, giữ nguyên thứ tự và chi tiết riêng."""
+    if not (prompt or "").strip():
+        return prompt, ("Chưa có prompt. Bấm **🪄 Dựng prompt** trước."), []
+    group_of = INDEX.group_of if INDEX is not None else None
+    new_prompt, removed = compact_prompt(prompt, group_of=group_of)
+    rep = length_report(new_prompt)
+    note = length_markdown(rep)
+    if removed:
+        note = (f"✂️ Đã bỏ **{len(removed)}** tag trùng nghĩa/trùng lặp: "
+                + ", ".join(f"`{t}`" for t in removed) + "\n\n" + note)
+    else:
+        note = "Không thấy tag trùng nghĩa nào để bỏ.\n\n" + note
+    return new_prompt, note, rep["window_rows"]
+
+
+LONG_PROMPT_TIPS = """**Vì sao prompt dài bị rơi chi tiết:** CLIP chỉ đọc **75 token** mỗi cửa sổ;
+token càng xa đầu prompt càng ít trọng số. Chi tiết nằm ở cửa sổ 3 trở đi gần như chỉ còn
+tác dụng gợi ý, còn cửa sổ 1 quyết định bố cục.
+
+- **Ngân sách:** ≤ 75 token = chắc · 76–150 = còn tốt · > 150 = bắt đầu loãng.
+- **Thứ tự:** chi tiết bắt buộc (chủ thể, hành động, trang phục chính) lên đầu; hoạ sĩ, meta,
+  phong cách xuống cuối — app đã tự xếp theo thứ tự Illustrious.
+- **Bật “Chèn BREAK giữa các nhóm”** để mỗi nhóm vào một cửa sổ riêng, tag không bị cắt đôi.
+- **Bỏ tag trùng nghĩa** (`eyes` khi đã có `blue_eyes`) và tag < 300 ảnh — chúng ăn token
+  mà gần như không tác dụng.
+- **Quá 150 token thật:** chia 2 lượt — lượt 1 dựng bố cục, lượt 2 img2img denoise 0.35–0.45
+  thêm chi tiết. Chi tiết dài nên thêm ở lượt 2, không nhồi vào prompt đầu.
+- Chi tiết đầy đủ + ví dụ: `PROMPT_DAI.md` ở thư mục gốc repo.
+"""
+
+
 def do_build(selected, description, rating_label, quality, negative_preset,
              extra_pos, extra_neg, artist_prefix, use_break):
     rating_id = RATING_BY_LABEL.get(rating_label, "general")
@@ -317,6 +373,15 @@ def do_build(selected, description, rating_label, quality, negative_preset,
                      + ", ".join(f"`{t}`" for t in out["unresolved"]))
     notes.append(f"✅ Prompt có **{out['count']}** tag, xếp theo "
                  f"{len(out['groups'])} nhóm đúng thứ tự Illustrious/WAI.")
+
+    # Độ dài: CLIP chỉ đọc 75 token mỗi cửa sổ nên prompt dài dễ rơi chi tiết.
+    rep = length_report(out["prompt"])
+    icon = "🟢" if rep["tokens"] <= CHUNK_TOKENS else ("🟡" if rep["within_budget"] else "🔴")
+    notes.append(f"{icon} {summary_line(rep)} — "
+                 + (rep["advice"][0] if rep["advice"] else ""))
+    if rep["late_count"]:
+        notes.append(f"⚠️ {rep['late_count']} tag nằm sau token {CHUNK_TOKENS * 2} "
+                     "(bị loãng) — mở mục **📏 Prompt dài** để xem cửa sổ nào chứa gì.")
     return out["prompt"], out["negative"], out["vi_preview"], rows, "\n\n".join(notes)
 
 
@@ -609,6 +674,17 @@ def build_ui():
                         group_table = gr.Dataframe(headers=["Nhóm", "Tag"],
                                                    interactive=False,
                                                    label="Prompt được xếp nhóm thế nào")
+                        with gr.Accordion("📏 Prompt dài — đo độ dài & nén để không rơi chi tiết",
+                                          open=False):
+                            gr.Markdown(LONG_PROMPT_TIPS)
+                            with gr.Row():
+                                btn_length = gr.Button("📏 Đo độ dài prompt", scale=1)
+                                btn_compact = gr.Button("✂️ Nén: bỏ tag trùng nghĩa", scale=1)
+                            length_note = gr.Markdown("")
+                            chunk_table = gr.Dataframe(
+                                headers=["Cửa sổ CLIP", "Token", "Tag trong cửa sổ"],
+                                interactive=False,
+                                label=f"Mỗi cửa sổ CLIP đọc {CHUNK_TOKENS} token — chi tiết ở cửa sổ 3+ bị loãng")
                         vi_preview = gr.Textbox(label="Xem trước bằng tiếng Việt", lines=6)
                         btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary")
                         gallery = gr.Gallery(label="Kết quả", columns=2, height=520)
@@ -680,6 +756,10 @@ def build_ui():
 
         build_inputs = [selected, description, rating, quality, neg_preset,
                         extra_pos, extra_neg, artist_prefix, use_break]
+        btn_length.click(do_length, inputs=[prompt_out],
+                         outputs=[length_note, chunk_table], queue=False)
+        btn_compact.click(do_compact, inputs=[prompt_out],
+                          outputs=[prompt_out, length_note, chunk_table], queue=False)
         btn_build.click(do_build, inputs=build_inputs,
                         outputs=[prompt_out, negative_out, vi_preview, group_table,
                                  build_note])
@@ -701,6 +781,18 @@ def build_ui():
 
 
 GUIDE_MD = """
+## Prompt dài: giữ chi tiết trong ngân sách 75 token
+
+CLIP đọc **75 token** mỗi cửa sổ; tag càng xa đầu prompt càng ít trọng số. Vì vậy:
+
+- **≤ 75 token** (≈ 12–20 tag): model đọc đủ — an toàn nhất.
+- **76–150 token**: còn tốt, nhưng chi tiết bắt buộc phải nằm ở nửa đầu.
+- **> 150 token**: cửa sổ 3 trở đi gần như vô tác dụng — bấm **✂️ Nén** hoặc chia 2 lượt
+  (txt2img dựng bố cục → img2img denoise 0.35–0.45 thêm chi tiết).
+- Bật **Chèn BREAK giữa các nhóm** để mỗi nhóm vào một cửa sổ riêng.
+- Mục **📏 Prompt dài** trong tab *Dựng prompt* có bảng cửa sổ + nút đo/nén; chi tiết đầy đủ
+  ở tệp `PROMPT_DAI.md`.
+
 ## Tham số khuyến nghị của WAI-illustrious-SDXL v17.0
 
 Giữ tham số nền theo biến thể model. Quy trình mới ưu tiên chọn bố cục/seed trước,

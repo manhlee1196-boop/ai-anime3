@@ -67,6 +67,18 @@ def main():
     assert len(checked["value"]) == 4 and "pixel_art" in checked["choices"][0]
     assert len(checked["choices"]) == 506 and checked["visible"] is True
     assert checked["choices"][:4] == checked["value"] and len(rows) == 4
+    # prompt dài: có mục đo/nén, và cảnh báo độ dài nằm ngay dưới ô positive
+    assert any("Prompt dài" in label for label in labels)
+    long_prompt = app.do_build("1girl, blue_eyes, eyes, long_hair, smile", "", app.RATING_CHOICES[0],
+                               "Ngắn gọn", "WAI khuyến nghị (ngắn)", "", "", "", False)[4]
+    assert "token" in long_prompt and "cửa sổ" in long_prompt
+    length_note, window_rows = app.do_length("1girl, blue_eyes, long_hair")
+    assert "cửa sổ" in length_note and len(window_rows) == 1
+    compacted, compact_note, compact_rows = app.do_compact("1girl, blue_eyes, eyes, long_hair")
+    assert "eyes" not in [p.strip() for p in compacted.split(",")]
+    assert "blue_eyes" in compacted and "Đã bỏ" in compact_note
+    assert app.do_length("")[1] == [] and app.do_compact("")[0] == ""
+
     merged, queued = app.do_style_add("1girl", checked["value"])
     assert merged.startswith("1girl") and all(t in merged for t in
                                               ("pixel_art", "pixel_animation", "limited_palette"))
