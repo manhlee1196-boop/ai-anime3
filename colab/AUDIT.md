@@ -17,16 +17,17 @@ frontend `templates/frontend/assets/index-*.js`:
 Bổ sung:
 
 - `diagnostics.py --check-queue URL`: đọc `/config` (chỉ `protocol`, `connect_heartbeat`,
-  có `state`?), rồi đo đúng transport mà app khai — SSE `/queue/data` (mã HTTP + có nhận
-  byte đầu + độ trễ) hoặc WebSocket `/queue/join` (101) khi app khai `ws`. Không chạy function
-  nào, không sinh ảnh, không in nội dung/header/config. Kết luận: `on_dinh`, `chi_sse`,
-  `stream_treo`, `queue_loi`, `tunnel_chan`, `khong_ket_noi`, `khong_ro`.
+  có `state`?) rồi gọi `GET /queue/status`. **Không** mở `/queue/data`: cả Gradio 4.40 và
+  4.44 ném `HTTPException 404 "Session not found"` trong luồng SSE khi session lạ, đẩy
+  traceback vào `forge.log` — đã tái hiện và loại bỏ. Không chạy function nào, không sinh
+  ảnh, không in nội dung/header/config. Kết luận: `on_dinh`, `queue_loi`, `khong_ket_noi`,
+  `khong_ro`; kèm `queue_size`, `protocol`, `connect_heartbeat`.
 - `install.sh --status`: khi link public còn sống, đo thêm transport và cảnh báo khi
-  `stream_treo`/`queue_loi`/`tunnel_chan`/`khong_ket_noi` — đúng lúc người dùng chỉ thấy
-  trang 200 nên tưởng mọi thứ ổn.
-- `test_ui_diagnostics.py` **13/13**: thêm nhóm kiểm `protocol: sse_v3` → chỉ đo SSE,
-  `/queue/data` 502 → `queue_loi`, server SSE im lặng → `stream_treo`, server khai `ws`
-  trả 101 → `on_dinh`, trả 403 → `tunnel_chan`.
+  `queue_loi`/`khong_ket_noi` — đúng lúc người dùng chỉ thấy trang 200 nên tưởng mọi thứ ổn.
+- `test_ui_diagnostics.py` **13/13**: thêm nhóm kiểm `sse_v3` + `connect_heartbeat`,
+  `/queue/status` 200 kèm `queue_size`, 502 → `queue_loi`, host chết → `khong_ket_noi`,
+  proxy trả HTML → `khong_phai_json`, và **assert không có request `/queue/data`** để
+  không bao giờ làm rác `forge.log`.
 - `INSTALL.md`: mục **“Connection errored out.” khi Colab vẫn đang chạy** + bảng `ket_luan`
   → việc cần làm; nhấn mạnh chỉ cần tải lại trang/đổi tunnel, **không** cài lại hay tải lại model.
 

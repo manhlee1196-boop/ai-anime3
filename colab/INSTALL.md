@@ -676,15 +676,19 @@ bash /content/install.sh --status
 
 | `ket_luan` của link public | Nghĩa | Việc cần làm |
 |---|---|---|
-| `on_dinh` | QUEUE mở được | Lỗi ở phía trình duyệt: VPN/adblock/DNS, tab ngủ, hoặc session cũ → tải lại, thử ẩn danh |
-| `queue_loi` | `/queue/data` trả HTTP lỗi | Tunnel/Proxy chặn, hoặc Forge vừa restart: `--only launch --restart` rồi mở link mới |
-| `stream_treo` | Mở được nhưng không có dữ liệu | Tunnel đang buffer kết nối dài → đổi `--tunnel cloudflared` ↔ `share` |
-| `tunnel_chan` | Cả WS lẫn SSE hỏng | Tunnel chặn kết nối dài — restart/đổi tunnel |
-| `khong_ket_noi` | Không tới được host | Mạng/DNS/tunnel, không phải Forge |
+| `on_dinh` | `GET /queue/status` trả 200, có `queue_size` | Server+tunnel ổn → lỗi ở phía trình duyệt/kết nối dài: tải lại cứng, đóng bớt tab, tắt VPN/adblock, thử ẩn danh |
+| `queue_loi` | `/queue/status` trả HTTP lỗi (502/404/403…) | Tunnel chặn hoặc Forge vừa restart: `--only launch --restart` rồi mở link mới |
+| `khong_ket_noi` | Không mở được kết nối (DNS/timeout/TLS) | Mạng/VPN/tunnel, không phải Forge |
+
+Đầu dò chỉ gọi `GET /queue/status` (không cần session) nên **không** chạy function nào, không
+sinh ảnh và **không** ghi traceback `Session not found` vào `forge.log` — khác với việc mở
+`/queue/data` bằng session lạ (cả Gradio 4.40 và 4.44 đều ném 404 trong luồng).
 
 Nếu **local `on_dinh` mà public lỗi** thì chắc chắn là tunnel: `bash /content/install.sh
 --only launch --restart` để lấy link mới, hoặc đổi hẳn tunnel. Nếu **local cũng lỗi** thì mới
 là chuyện của Forge: `bash /content/install.sh --status` rồi `--only launch,verify --restart`.
+Nếu **cả hai `on_dinh` mà UI vẫn báo lỗi** thì không phải server: đó là kết nối SSE dài của
+trình duyệt bị cắt (tab ngủ, đổi Wi-Fi/4G, VPN, tiện ích chặn) — tải lại trang là đủ.
 
 Các tình huống hay gặp, xếp theo tần suất:
 

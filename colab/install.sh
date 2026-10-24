@@ -883,9 +883,9 @@ try:
 except Exception:
     print("")' 2>/dev/null)"
     case "$verdict" in
-      ""|on_dinh|chi_sse) : ;;
-      stream_treo|queue_loi|tunnel_chan)
-        warn "Transport queue: $verdict — UI có thể báo «Connection errored out.» dù Forge vẫn chạy."
+      ""|on_dinh) : ;;
+      queue_loi)
+        warn "Transport queue: queue_loi — UI có thể báo «Connection errored out.» dù Forge vẫn chạy."
         info "Chi tiết: $PY_BIN $REPO_DIR/colab/diagnostics.py --check-queue $url"
         info "Tải lại trang trước; vẫn lỗi thì: bash $REPO_DIR/colab/install.sh --only launch --restart" ;;
       khong_ket_noi)
