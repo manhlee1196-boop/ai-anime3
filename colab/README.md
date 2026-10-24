@@ -33,6 +33,7 @@ colab/
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test cả hai UI, API/Forge host giả lập
+  tests/test_generate_guard.py   chống treo: timeout/progress/huỷ job/cảnh báo VRAM
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
@@ -155,6 +156,11 @@ trùng khớp với `EMOTICON_KEEP` mà repo này dùng khi bỏ dấu `_`.
   prompt. Bảng bên dưới cho biết từng tag mạnh hay yếu theo số bài đăng. Dữ liệu lấy từ
   `style_tags.csv`; chi tiết và công thức ở [`STYLE_TAGS.md`](../STYLE_TAGS.md).
   Ô **Styles** của Forge cũng có 12 style `Phong cách — …` bấm là ăn ngay.
+- **Sinh ảnh không treo**: nút Sinh ảnh cập nhật mỗi giây (`⏳ 01:12 · bước 9/25 · 36% ·
+  còn ~1m 20s`) nhờ đọc `/sdapi/v1/progress`; nút **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`;
+  connect timeout 10s, read timeout 15 phút (`WAI_GEN_TIMEOUT`); Forge đang bận thì báo rõ
+  thay vì xếp hàng im lặng. Gặp kẹt: xem mục *Bấm Sinh ảnh bị treo* trong
+  [`INSTALL.md`](INSTALL.md#bấm-sinh-ảnh-bị-treo--đứng-mãi-không-trả-ảnh).
 - **Prompt dài (CLIP 75 token/cửa sổ)**: mục **📏 Prompt dài** trong app đo token, chia cửa sổ
   và chỉ ra tag nào rơi vào vùng loãng (>150 token); nút **✂️ Nén** bỏ tag trùng nghĩa
   (`eyes` khi đã có `blue_eyes`). Ghi chú dưới ô positive hiện `🟢/🟡/🔴 N token · M cửa sổ`.
@@ -275,6 +281,7 @@ python3 colab/tests/test_install_sh.py      # 98 kiểm tra bộ cài, fixture/o
 python3 colab/tests/test_checkpoint_flow.py # 16 nhóm checkpoint/preset/API
 python3 colab/tests/test_data_integrity.py  # 4 nhóm toàn vẹn toàn bộ CSV
 python3 colab/tests/test_prompt_ui.py       # cần Gradio/requests/Pillow; không cần GPU
+python3 colab/tests/test_generate_guard.py  # chống treo: timeout, progress, huỷ job
 python3 colab/tests/test_prompt_workflow.py # 10 nhóm CPU, không cần Gradio
 python3 colab/tests/test_notebooks.py       # 13 nhóm CPU; cần requests/Pillow (venv Forge/demo)
 node colab/tests/test_vi_prompt_js.cjs      # DOM stub/bridge/token, không cần browser

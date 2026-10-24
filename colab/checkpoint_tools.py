@@ -335,7 +335,8 @@ def smoke_test(base: str, path: str | Path, sha: str, output: str | Path) -> dic
                "sampler_name": "Euler a", "enable_hr": False,
                "save_images": False, "send_images": True,
                "override_settings": {"clip_stop_at_last_layers": 2, "samples_format": "png"}}
-    response = api_json(base, "/sdapi/v1/txt2img", payload, timeout=1800)
+    # 1 bước 256×256: nếu quá 10 phút thì checkpoint kẹt (nạp/VRAM), không chờ 30 phút nữa.
+    response = api_json(base, "/sdapi/v1/txt2img", payload, timeout=600)
     if not isinstance(response, dict) or not isinstance(response.get("images"), list) or not response["images"]:
         raise CheckpointError("Sinh thử không trả ảnh; chưa chứng minh checkpoint nạp được.")
     try:

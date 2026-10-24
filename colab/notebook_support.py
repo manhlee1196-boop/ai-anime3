@@ -121,6 +121,7 @@ def generate_notebook_sample():
     from prompt_lib import PromptBuilder, TagIndex, WAI_DEFAULTS
     from prompt_lib.api import decode_generation_response
     from prompt_lib.editing import convert_tags
+    from prompt_lib.generate import read_timeout, timeouts
     from prompt_lib.workflow import (WORKFLOW_PRESETS, workflow_settings, validate_generation,
                                      generation_metadata, generation_error, seed_at)
 
@@ -152,11 +153,12 @@ def generate_notebook_sample():
             response = requests.get(url + "/sdapi/v1/upscalers", timeout=15)
             response.raise_for_status()
             builder.fix_upscaler(payload, [item["name"] for item in response.json() if item.get("name")])
-        response = requests.post(url + "/sdapi/v1/txt2img", json=payload, timeout=1800)
+        # connect ngắn + read dài (WAI_GEN_TIMEOUT, mặc định 15 phút) để không treo 30 phút
+        response = requests.post(url + "/sdapi/v1/txt2img", json=payload, timeout=timeouts())
         response.raise_for_status()
         images, info = decode_generation_response(response.json())  # info JSON-string + PNG → PIL
     except Exception as exc:
-        raise RuntimeError(generation_error(exc)) from None
+        raise RuntimeError(generation_error(exc, timeout=read_timeout())) from None
     metadata = generation_metadata(info, payload, len(images))
     output = repo / "colab" / "outputs"
     output.mkdir(parents=True, exist_ok=True)

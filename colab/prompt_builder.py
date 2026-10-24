@@ -37,6 +37,9 @@ from prompt_lib.api import decode_generation_response
 from prompt_lib.history import ImageHistory, forge_output_roots
 from prompt_lib.history_ui import HistoryPanel
 from prompt_lib.editing import replace_or_append, convert_tags
+from prompt_lib.generate import (GenerationJob, advice_for, busy_message, format_duration,
+                                 interrupt, payload_warnings, progress_info, read_timeout,
+                                 status_line, timeouts)
 from prompt_lib.workflow import (DEFAULT_WORKFLOW, WORKFLOW_PRESETS, SAMPLERS,
                                  workflow_settings, workflow_note, validate_generation,
                                  generation_metadata, generation_error, seed_at)
@@ -385,13 +388,18 @@ def do_build(selected, description, rating_label, quality, negative_preset,
     return out["prompt"], out["negative"], out["vi_preview"], rows, "\n\n".join(notes)
 
 
-def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
-                batch, enable_hr, hr_scale, hr_steps, denoise, upscaler, url):
+def prepare_generation(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
+                       batch, enable_hr, hr_scale, hr_steps, denoise, upscaler, url):
+    """Chuẩn bị payload + kiểm tra trước khi gửi Forge.
+
+    Trả `(payload, lỗi, ghi_chú_upscaler, base_url)`. `payload=None` nghĩa là dừng lại và
+    hiện `lỗi` cho người dùng (demo/chưa chọn model/tham số sai).
+    """
     if not (prompt or "").strip():
-        return [], "Chưa có prompt. Bấm **Dựng prompt** trước.", {}
+        return None, "Chưa có prompt. Bấm **Dựng prompt** trước.", "", ""
     if CFG["demo"]:
-        return [], ("🧪 **Chế độ demo** (không có GPU/Forge): app chỉ dựng prompt. "
-                    "Chạy notebook Colab để sinh ảnh thật."), {}
+        return None, ("🧪 **Chế độ demo** (không có GPU/Forge): app chỉ dựng prompt. "
+                      "Chạy notebook Colab để sinh ảnh thật."), "", ""
     overrides = {
         "steps": steps, "cfg_scale": cfg_scale, "sampler_name": sampler,
         "seed": seed, "batch_size": 1, "n_iter": batch,
@@ -405,39 +413,136 @@ def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
     try:
         payload = validate_generation(BUILDER.payload(prompt, negative, overrides))
     except (TypeError, ValueError) as exc:
-        return [], f"❌ Tham số không hợp lệ: {exc}", {}
-
-    ok, status = forge_alive(url)
-    if not ok:
-        return [], status, {}
+        return None, f"❌ Tham số không hợp lệ: {exc}", "", ""
+    base = (url or CFG["forge_url"]).rstrip("/")
 
     # backend có thể không có đúng tên upscaler ta chọn -> tự đổi sang bản gần nhất
     swapped = ""
-    available = fetch_upscalers(url) if payload.get("enable_hr") else []
+    available = fetch_upscalers(base) if payload.get("enable_hr") else []
     if available:
         before = payload.get("hr_upscaler")
         BUILDER.fix_upscaler(payload, available)
         after = payload.get("hr_upscaler")
         if before and after and before != after:
             swapped = (f"↩️ Backend không có upscaler `{before}`, "
-                       f"đã tự đổi sang `{after}`.\n\n")
+                       f"đã tự đổi sang `{after}`.")
+    return payload, "", swapped, base
 
-    endpoint = (url or CFG["forge_url"]).rstrip("/") + "/sdapi/v1/txt2img"
-    started = time.time()
+
+def _finish_generation(response, payload, started, swapped="", warnings=()):
+    """Giải mã response + dựng ghi chú kết quả (dùng chung cho sync và stream)."""
     try:
-        r = requests.post(endpoint, json=payload, timeout=1800)
-        r.raise_for_status()
+        images, info = decode_generation_response(response.json())
     except Exception as exc:                      # noqa: BLE001
-        return [], generation_error(exc), {}
-    try:
-        images, info = decode_generation_response(r.json())
-    except Exception as exc:                      # noqa: BLE001
-        return [], f"❌ Response ảnh của Forge không hợp lệ: `{type(exc).__name__}: {exc}`", {}
+        return [], (f"❌ Response ảnh của Forge không hợp lệ: "
+                    f"`{type(exc).__name__}: {exc}`"), {}
     elapsed = time.time() - started
-    summary = swapped + (f"✅ {len(images)} ảnh trong **{elapsed:.1f}s** · seed `{info.get('seed')}` "
+    head = "\n\n".join(x for x in [*warnings, swapped] if x)
+    summary = (f"✅ {len(images)} ảnh trong **{elapsed:.1f}s** · seed `{info.get('seed')}` "
                f"· sampler `{info.get('sampler_name')}` · {info.get('width')}×{info.get('height')} "
                f"· CFG {info.get('cfg_scale')} · {info.get('steps')} bước")
-    return images, summary, generation_metadata(info, payload, len(images))
+    return images, (head + "\n\n" if head else "") + summary, \
+        generation_metadata(info, payload, len(images))
+
+
+def do_generate(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
+                batch, enable_hr, hr_scale, hr_steps, denoise, upscaler, url):
+    """Sinh ảnh đồng bộ (dùng cho script/test). UI dùng `do_generate_stream` có tiến trình."""
+    payload, message, swapped, base = prepare_generation(
+        prompt, negative, size_label, steps, cfg_scale, sampler, seed, batch,
+        enable_hr, hr_scale, hr_steps, denoise, upscaler, url)
+    if payload is None:
+        return [], message, {}
+
+    ok, status = forge_alive(base)
+    if not ok:
+        return [], status, {}
+
+    warnings = payload_warnings(payload)
+    endpoint = base + "/sdapi/v1/txt2img"
+    started = time.time()
+    try:
+        # connect ngắn (biết ngay Forge có sống) + read dài (WAI_GEN_TIMEOUT, mặc định 15 phút)
+        r = requests.post(endpoint, json=payload, timeout=timeouts())
+        r.raise_for_status()
+    except Exception as exc:                      # noqa: BLE001
+        return [], generation_error(exc, timeout=read_timeout()), {}
+    return _finish_generation(r, payload, started, swapped, warnings)
+
+
+GENERATE_HEAD = ("ℹ️ Đang sinh ảnh. Thời gian thường gặp trên T4: **Nháp ~30–60s**, "
+                 "**Chuẩn ~60–90s**, **Hires 1.5× ~3–6 phút** (lần đầu cộng 1–2 phút nạp model). "
+                 "Số bên dưới tự cập nhật mỗi giây; kẹt quá lâu thì bấm **⛔ Huỷ job**.")
+
+
+def do_generate_stream(prompt, negative, size_label, steps, cfg_scale, sampler, seed,
+                       batch, enable_hr, hr_scale, hr_steps, denoise, upscaler, url,
+                       stop_after=None):
+    """Generator cho nút *Sinh ảnh*: mỗi giây đẩy trạng thái, nên UI không bị "treo".
+
+    `stop_after` chỉ dùng cho test: dừng sau N giây và trả về ảnh giả? Không — test dùng
+    `stop_after` để giới hạn vòng lặp, không ảnh hưởng production (mặc định None).
+    """
+    payload, message, swapped, base = prepare_generation(
+        prompt, negative, size_label, steps, cfg_scale, sampler, seed, batch,
+        enable_hr, hr_scale, hr_steps, denoise, upscaler, url)
+    if payload is None:
+        yield gr.update(), message, {}
+        return
+
+    ok, status = forge_alive(base)
+    if not ok:
+        yield gr.update(), status, {}
+        return
+
+    warnings = payload_warnings(payload)
+    head = "\n\n".join(x for x in [*warnings, swapped] if x)
+
+    # Forge đang bận job khác: báo rõ thay vì xếp hàng im lặng. Chờ tối đa 20 giây rồi
+    # vẫn gửi (job của mình sẽ nằm trong hàng đợi của Forge), để không "treo" vô ích.
+    info = progress_info(base)
+    waited = 0
+    while info.get("busy") and waited < 20:
+        yield gr.update(), "\n\n".join(x for x in [
+            head, busy_message(info),
+            "Đang chờ chỗ trống… bấm **⛔ Huỷ job** nếu muốn dừng cả job đang chạy."] if x), {}
+        time.sleep(2)
+        waited += 2
+        info = progress_info(base)
+
+    job = GenerationJob(base, payload).start()
+    started = job.started
+    while not job.done:
+        if stop_after is not None and job.elapsed > stop_after:
+            break
+        info = job.progress()
+        text = "\n\n".join(x for x in [
+            head, GENERATE_HEAD if job.elapsed < 15 else "",
+            status_line(job.elapsed, info),
+            advice_for(job.elapsed, info, info.get("stalled", 0)),
+        ] if x)
+        yield gr.update(), text, {}
+        time.sleep(1.0)
+
+    if not job.done:
+        yield gr.update(), (head + "\n\n" if head else "") + \
+            f"⏳ Dừng theo dõi sau {format_duration(job.elapsed)}; Forge vẫn có thể đang chạy. " \
+            "Bấm **🔌 Kiểm tra kết nối** để xem trạng thái.", {}
+        return
+
+    if job.error is not None:
+        yield gr.update(), generation_error(job.error, timeout=read_timeout()), {}
+        return
+
+    images, summary, metadata = _finish_generation(job.response, payload, started,
+                                                   swapped, warnings)
+    yield images, summary, metadata
+
+
+def do_stop(url):
+    """Nút Huỷ: gửi `/sdapi/v1/interrupt` để Forge dừng job đang kẹt."""
+    ok, message = interrupt(url or CFG["forge_url"])
+    return message
 
 
 def do_refresh_upscalers(url):
@@ -686,7 +791,10 @@ def build_ui():
                                 interactive=False,
                                 label=f"Mỗi cửa sổ CLIP đọc {CHUNK_TOKENS} token — chi tiết ở cửa sổ 3+ bị loãng")
                         vi_preview = gr.Textbox(label="Xem trước bằng tiếng Việt", lines=6)
-                        btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary")
+                        with gr.Row():
+                            btn_generate = gr.Button("🖼️ Sinh ảnh bằng Forge", variant="primary",
+                                                     scale=3)
+                            btn_stop = gr.Button("⛔ Huỷ job", scale=1)
                         gallery = gr.Gallery(label="Kết quả", columns=2, height=520)
                         gen_note = gr.Markdown("")
                         generation_state = gr.State({})
@@ -767,12 +875,16 @@ def build_ui():
         btn_upscalers.click(do_refresh_upscalers, inputs=[url_box],
                             outputs=[upscaler, upscaler_note])
 
-        generation_event = btn_generate.click(do_generate,
-                           inputs=[prompt_out, negative_out, size, steps, cfg_scale,
-                                   sampler, seed, batch, enable_hr, hr_scale, hr_steps,
-                                   denoise, upscaler, url_box],
-                           outputs=[gallery, gen_note, generation_state],
-                           concurrency_limit=1, concurrency_id="wai_gpu")
+        # Generator + đọc /progress mỗi giây: Forge chạy bao lâu cũng thấy trạng thái,
+        # không còn màn hình "treo"; ⛔ Huỷ gửi /interrupt và dừng luôn vòng theo dõi.
+        generation_event = btn_generate.click(
+            do_generate_stream,
+            inputs=[prompt_out, negative_out, size, steps, cfg_scale, sampler, seed, batch,
+                    enable_hr, hr_scale, hr_steps, denoise, upscaler, url_box],
+            outputs=[gallery, gen_note, generation_state],
+            concurrency_limit=1, concurrency_id="wai_gpu")
+        btn_stop.click(do_stop, inputs=[url_box], outputs=[gen_note], queue=False,
+                       cancels=[generation_event])
         history_panel.after_generation(generation_event)
 
         btn_explain.click(do_explain, inputs=[in_prompt],

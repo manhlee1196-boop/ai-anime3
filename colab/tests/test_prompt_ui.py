@@ -196,6 +196,73 @@ def main():
         app.requests.get, app.requests.post = old_get, old_post
     print("✔ App sinh ảnh: JSON-string/PIL, tách sampler/scheduler, báo checkpoint trống và response hỏng")
 
+    # Chống treo: nút Sinh ảnh phải là generator cập nhật trạng thái, có nút Huỷ gọi /interrupt.
+    import time as _time
+    for module, ui in ((app, app_ui), (extension, extension_ui)):
+        assert hasattr(module, "do_generate_stream") and hasattr(module, "do_stop")
+        labels = [c["props"].get("label") or c["props"].get("value") for c in
+                  ui.get_config_file()["components"]]
+        assert "⛔ Huỷ job" in labels
+        assert any(dep.get("cancels") for dep in ui.get_config_file()["dependencies"])
+
+    progress_state = {"on": False}
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/progress"):
+            if progress_state["on"]:
+                return Response({"progress": 0.4, "eta_relative": 30,
+                                 "state": {"job_count": 1, "sampling_step": 10,
+                                           "sampling_steps": 25}})
+            return Response({"progress": 0.0, "eta_relative": 0, "state": {"job_count": 0}})
+        return get(url, **kwargs)
+
+    def slow_post(url, json=None, **kwargs):
+        assert kwargs.get("timeout") and kwargs["timeout"][0] < kwargs["timeout"][1]
+        progress_state["on"] = True
+        _time.sleep(2.2)
+        progress_state["on"] = False
+        return post(url, json=json, **kwargs)
+
+    try:
+        app.requests.get, app.requests.post = fake_get, slow_post
+        frames = list(app.do_generate_stream(
+            "masterpiece, landscape", "lowres", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1,
+            False, 1.5, 10, 0.4, "RealESRGAN_x4plus_anime_6B", "http://127.0.0.1:7860"))
+
+        # Tab Forge: cùng cơ chế theo dõi, không treo
+        extension.requests.get, extension.requests.post = fake_get, slow_post
+        ext_frames = list(extension.do_generate_stream(
+            "masterpiece", "lowres", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, False, 1.5,
+            0.4, "RealESRGAN_x4plus_anime_6B"))
+    finally:
+        app.requests.get, app.requests.post = old_get, old_post
+        extension.requests.get, extension.requests.post = old_get, old_post
+    assert len(ext_frames) >= 2 and len(ext_frames[-1][0]) == 1
+    assert "⏳" in "\n".join(str(f[1]) for f in ext_frames[:-1])
+    assert len(frames) >= 3, frames
+    assert all(isinstance(frame, tuple) and len(frame) == 3 for frame in frames)
+    mid = "\n".join(str(frame[1]) for frame in frames[:-1])
+    assert "⏳" in mid and "bước 10/25" in mid and "40%" in mid
+    assert len(frames[-1][0]) == 1 and frames[-1][2]["seeds"] == [1]
+    print(f"✔ Stream sinh ảnh: {len(frames)} cập nhật trạng thái, ảnh + seed ở khung cuối")
+
+    # Timeout: báo rõ "không trả lời sau …" thay vì treo im lặng
+    def timeout_post(*args, **kwargs):
+        import requests as _rq
+        raise _rq.exceptions.ReadTimeout("read timed out")
+
+    try:
+        app.requests.get, app.requests.post = fake_get, timeout_post
+        frames = list(app.do_generate_stream(
+            "1girl", "", "Vuông 1024×1024", 10, 1.0, "Euler a", 1, 1, False, 1.5, 10, 0.4,
+            "None", "http://127.0.0.1:7860"))
+    finally:
+        app.requests.get, app.requests.post = old_get, old_post
+    note = str(frames[-1][1])
+    assert "không trả lời" in note and "WAI_GEN_TIMEOUT" in note
+    assert not isinstance(frames[-1][0], list)          # không ghi đè gallery bằng lỗi
+    print("✔ Timeout đọc ảnh: có câu hướng dẫn, không treo")
+
     # App độc lập đọc profile lưu trên đĩa, nhưng environment vẫn được ưu tiên.
     with tempfile.TemporaryDirectory(prefix="wai-profile-test-") as tmp:
         profile = Path(tmp) / "profile.json"

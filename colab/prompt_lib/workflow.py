@@ -94,7 +94,11 @@ def seed_at(metadata, image_index=0):
     return seeds[index]
 
 
-def generation_error(exc):
+def generation_error(exc, timeout=None):
+    """Câu lỗi tiếng Việt kèm việc cần làm; không bao giờ in body/config/log thô.
+
+    `timeout` là số giây đã chờ (để báo "Forge không trả lời sau 15m" thay vì câu chung).
+    """
     message = str(exc).lower()
     response = getattr(exc, "response", None)
     if response is not None:
@@ -105,4 +109,9 @@ def generation_error(exc):
             pass
     if "out of memory" in message or "cuda oom" in message:
         return "❌ Hết VRAM. Tắt Hires, dùng 1024×1024/832×1216, batch_size=1 và chờ tác vụ khác kết thúc; không cần tải lại checkpoint."
-    return f"❌ Sinh ảnh thất bại ({type(exc).__name__}). Kiểm tra Forge/API và diagnostics; prompt và tham số của bạn vẫn được giữ."
+    try:
+        # Timeout / mất kết nối / 404 --api / 500: nói rõ nguyên nhân và việc cần làm.
+        from .generate import describe_error
+        return describe_error(exc, timeout=timeout)
+    except Exception:                             # noqa: BLE001 - thiếu requests thì vẫn phải trả câu lỗi
+        return f"❌ Sinh ảnh thất bại ({type(exc).__name__}). Kiểm tra Forge/API và diagnostics; prompt và tham số của bạn vẫn được giữ."

@@ -255,6 +255,44 @@ khác không có filesystem chung thì cần ảnh cục bộ; album không âm 
 qua URL hoặc đọc tuỳ ý toàn bộ `/content`/thư mục nhà. Không theo symlink ra ngoài output.
 
 
+### Bấm Sinh ảnh bị “treo” / đứng mãi không trả ảnh
+
+Từ bản này nút **🖼️ Sinh ảnh** chạy ở chế độ theo dõi: mỗi giây cập nhật
+`⏳ 01:12 · bước 9/25 · (36%) · còn ~1m 20s` lấy từ `/sdapi/v1/progress`, và có nút
+**⛔ Huỷ job** gọi `/sdapi/v1/interrupt`. Vòng xoay không còn là dấu hiệu duy nhất.
+
+**Thứ tự kiểm tra khi vẫn thấy treo:**
+
+1. **Chờ đúng mức:** T4 thường **Nháp 30–60s**, **Chuẩn 60–90s**, **Hires 1.5× 3–6 phút**.
+   Lần sinh đầu tiên cộng thêm 1–2 phút để nạp checkpoint 6–7 GB — trong lúc đó Forge chưa
+   báo bước nào, chưa phải lỗi.
+2. **Không nhích bước quá 90 giây:** app hiện cảnh báo. Bấm **⛔ Huỷ job**, rồi tắt **Hires**,
+   để 832×1216, `batch=1` và thử lại. Hires 1.5× trên 832×1216 là 2,3 MP — T4 rất dễ swap VRAM.
+3. **Timeout:** giới hạn chờ mặc định **15 phút** (trước đây 30 phút cho cả connect). Đổi bằng
+   biến môi trường trước khi chạy app:
+   ```bash
+   WAI_GEN_TIMEOUT=1800 python3 colab/prompt_builder.py --forge-url http://127.0.0.1:7860
+   ```
+4. **Forge đang bận job khác:** app báo `⏳ Forge đang bận…` và chờ tối đa 20 giây, không
+   im lặng xếp hàng. Bấm **⛔ Huỷ job** nếu job cũ đã kẹt.
+5. **Kiểm tra Forge còn sống:** `!bash /content/install.sh --diagnostics` hoặc mở
+   `http://127.0.0.1:7860/sdapi/v1/progress` — trả JSON là API ổn; lỗi 404 nghĩa là Forge
+   chưa bật `--api`.
+6. **Vẫn kẹt:** xem 20 dòng cuối `/content/forge.log` (không dán token/URL riêng tư). Nếu
+   thấy `CUDA out of memory` thì giảm độ phân giải/tắt Hires; đừng cài lại Torch.
+
+Câu lỗi của app đã nói rõ loại hỏng: `Forge không trả lời sau 15m` (timeout), `Không nối
+được tới Forge` (tắt/khác cổng), `Forge không có /sdapi/v1/txt2img` (thiếu `--api`),
+`Hết VRAM` (OOM). Prompt và tham số luôn được giữ, không mất khi lỗi.
+
+Nếu Forge kẹt tới mức không nhận cả lệnh huỷ, dừng và chạy lại process Forge (giữ model/ảnh):
+
+```bash
+%%bash
+set -euo pipefail
+bash /content/install.sh --only launch,verify --restart
+```
+
 ### Ảnh hiển thị chậm / Unexpected token < (1.0.6)
 
 Khi Forge đã sinh xong nhưng gallery/mở ảnh chậm và giao diện báo

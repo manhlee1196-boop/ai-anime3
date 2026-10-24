@@ -74,6 +74,15 @@ tag phong cách**. Trong Forge, tab **Prompt VN** có đúng mục đó, và ô 
 Tài liệu [`STYLE_TAGS.md`](STYLE_TAGS.md) có 12 công thức prompt mẫu, lưu ý khi trộn chất liệu,
 bảng độ mạnh của từng tag, và ghi lại các bản dịch đã sửa (`lego`, `spine_(medium)`, 41 tag thiếu…).
 
+### Sinh ảnh không bị “treo”
+
+Nút **🖼️ Sinh ảnh** cập nhật trạng thái mỗi giây lấy từ `/sdapi/v1/progress`
+(`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`), có **⛔ Huỷ job** gọi `/sdapi/v1/interrupt`,
+connect timeout 10 giây và read timeout 15 phút (`WAI_GEN_TIMEOUT`) thay cho một timeout
+30 phút dùng chung. Forge đang bận job khác thì app báo rõ. Kẹt quá 90 giây không nhích
+bước sẽ hiện cảnh báo kèm việc cần làm (thường là tắt Hires trên T4 16 GB). Chi tiết:
+[`colab/INSTALL.md`](colab/INSTALL.md).
+
 ### Prompt dài mà không rơi chi tiết
 
 CLIP chỉ đọc **75 token mỗi cửa sổ**; token càng xa đầu prompt càng ít trọng số, nên nhồi
