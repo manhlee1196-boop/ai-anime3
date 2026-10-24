@@ -1,5 +1,40 @@
 # Rà soát toàn dự án — bộ cài 1.0.7
 
+## Đo CPU khi không sinh ảnh — 24/10/2026
+
+Yêu cầu: **“tìm kiếm nguyên nhân khiến cpu luôn tăng ngay cả khi không tạo ảnh”**.
+Rà soát mã nguồn trước khi kết luận — repo **không** có vòng lặp nền:
+
+- Python: không `while True`, không `threading.Timer`, không `gr.Timer`, không
+  `atexit`/scheduler. `GenerationJob` chỉ tạo `Thread` trong `do_generate_stream` và kết
+  thúc khi request xong; `ImageHistory` chỉ chạy khi bấm **Làm mới**/sau generation.
+- JS `vi_prompt.js`: chỉ `addEventListener` theo sự kiện, không `setInterval`,
+  không `requestAnimationFrame`, không `MutationObserver`.
+- Tagcomplete upstream (`javascript/*.js`): cũng không `setInterval`; chỉ `setTimeout`
+  ngắn sau thao tác giao diện và một `MutationObserver` cho model hash.
+- Vì vậy CPU khi rảnh là của process/thread **khác** (client Gradio, tunnel, kernel
+  reclaim khi hết RAM, jupyter/colab agent) → thêm công cụ đo thay vì đoán.
+
+Bổ sung:
+
+- `diagnostics.py --cpu [--cpu-seconds N]`: đọc `/proc/<pid>/stat` + `/proc/<pid>/task/*/stat`
+  (mọi process trong cây — `forge.pid` có thể là shell bọc python) + `/proc/net/tcp` +
+  `/proc/meminfo` + `/proc/vmstat` (không ptrace, không cmdline/environ), trả `tong_cpu`,
+  `processes`, `threads`, `client_ui`, `ram_con_lai_mb`, `thu_hoi_trang_giay`, `ket_luan`
+  (`thap`/`thieu_ram`/`tunnel`/`nhieu_client`/`thread_python_cao`/`cao_khac`) và `goi_y`.
+  PID lấy từ `<runtime>/forge.pid`; thiếu PID → exit 2 kèm lời nhắc chạy `--status`.
+- `test_ui_diagnostics.py` **12/12**: `/proc`, `/proc/meminfo`, `/proc/vmstat` và
+  `/proc/net/tcp` giả (không sleep thật) kiểm phần trăm CPU theo tick, lọc đúng cây
+  process, xếp hạng thread, phát hiện tunnel, số client UI, nhánh `thieu_ram`
+  (MemAvailable 400 MB + 10.000 trang thu hồi/giây), PID cũ → lỗi, CLI thiếu
+  `forge.pid` → exit 2.
+- `INSTALL.md`: mục **CPU cao khi không sinh ảnh** với bảng `ket_luan` → việc cần làm và
+  3 phép so sánh (đóng tab / dừng Forge / kiểm RAM + `kswapd0`).
+
+Số đo tham chiếu: nạp `TagIndex` 349.778 tag = **1,69 s CPU** một lần mỗi lần Forge khởi
+động; cấu hình UI Gradio gửi cho trình duyệt **122 KB**; `danbooru_e621.csv` **8,6 MB**
+(tagcomplete parse ở trình duyệt mỗi lần mở trang).
+
 ## Bỏ tab “Prompt VN” — chuyển chức năng vào txt2img — 24/10/2026
 
 Yêu cầu: **“prompts việt nam đang hoạt động không hiệu quả hãy xóa và chuyển các chức

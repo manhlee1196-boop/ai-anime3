@@ -211,6 +211,91 @@ ValueError: private prompt and token MUST_NOT_APPEAR
         # Khi local chết thì không được khuyên mở 127.0.0.1 như thể nó sống.
         self.assertNotIn("Forge vẫn chạy", "\n".join(diag.ui_verdict(broken, dead, 7860)))
 
+    def test_12_cpu_report_finds_the_process_that_burns_cpu(self):
+        # /proc giả: đọc theo tick, không sleep thật, không cần Forge/GPU.
+        import subprocess
+
+        def stat_line(pid, name, ppid, utime):
+            rest = ["S", str(ppid)] + ["0"] * 9 + [str(utime), "0"]
+            return f"{pid} ({name}) " + " ".join(rest) + "\n"
+
+        proc = self.root / "proc"
+        cases = {
+            "4242": ("python", 1, 100, 160),      # 60 tick / 2s / 100Hz = 30%
+            "4243": ("frpc", 4242, 0, 100),       # 100 tick / 2s = 50%
+            "5000": ("bash", 1, 0, 0),            # ngoài cây: phải bị loại
+        }
+        for pid, (name, ppid, first, second) in cases.items():
+            (proc / pid).mkdir(parents=True)
+            (proc / pid / "stat").write_text(stat_line(pid, name, ppid, first))
+        for tid, name, first in (("4244", "python", 0), ("4245", "wai-generate", 0)):
+            (proc / "4242" / "task" / tid).mkdir(parents=True)
+            (proc / "4242" / "task" / tid / "stat").write_text(stat_line("4242", name, 1, first))
+
+        def finish_sample(_seconds):
+            for pid, (_name, _ppid, _first, second) in cases.items():
+                (proc / pid / "stat").write_text(stat_line(pid, cases[pid][0], cases[pid][1], second))
+            (proc / "4242" / "task" / "4244" / "stat").write_text(stat_line("4242", "python", 1, 40))
+
+        meminfo = self.root / "meminfo"
+        meminfo.write_text("MemTotal:       12582912 kB\nMemAvailable:    6291456 kB\n")
+        vmstat = self.root / "vmstat"
+        vmstat.write_text("pgscan_direct 0\npgsteal_direct 0\npgscan_kswapd 0\npgsteal_kswapd 0\n")
+        tcp = self.root / "tcp"
+        tcp.write_text("  sl  local_address rem_address   st\n" + "".join(
+            f"   {i}: 0100007F:1EB4 0100007F:9C40 01 0:0 0:0 1 0 0\n" for i in range(4)))
+        report = diag.cpu_report(4242, port=7860, seconds=2.0, proc_root=str(proc),
+                                 sleep=finish_sample, tcp_files=(str(tcp),),
+                                 meminfo=str(meminfo), vmstat=str(vmstat))
+        self.assertEqual(report["tong_cpu"], 80.0)
+        self.assertEqual(report["processes"][0]["ten"], "frpc")
+        self.assertEqual(report["processes"][0]["cpu"], 50.0)
+        self.assertNotIn(5000, [row["pid"] for row in report["processes"]])
+        self.assertEqual(report["client_ui"], 4)
+        self.assertEqual(report["threads"][0], {"ten": "python#4244", "cpu": 20.0})
+        self.assertEqual(report["ket_luan"], "tunnel")
+
+        missing = diag.cpu_report(999999, proc_root=str(proc), seconds=0.01, sleep=lambda _s: None)
+        self.assertIn("loi", missing)                      # PID cũ/không tồn tại
+
+        # Không có tunnel nhưng nhiều tab UI mở -> chỉ đúng thủ phạm khác.
+        only_python = self.root / "proc2"
+        (only_python / "4242").mkdir(parents=True)
+        (only_python / "4242" / "stat").write_text(stat_line("4242", "python", 1, 100))
+        report = diag.cpu_report(4242, port=7860, seconds=2.0, proc_root=str(only_python),
+                                 sleep=lambda _s: (only_python / "4242" / "stat").write_text(
+                                     stat_line("4242", "python", 1, 160)),
+                                 tcp_files=(str(tcp),),
+                                 meminfo=str(meminfo), vmstat=str(vmstat))
+        self.assertEqual(report["tong_cpu"], 30.0)
+        self.assertEqual(report["ket_luan"], "nhieu_client")
+        self.assertIn("4 kết nối UI", report["goi_y"])
+
+        # RAM cạn: kernel thu hồi liên tục -> CPU tăng dần dù không sinh ảnh.
+        tight = self.root / "meminfo-tight"
+        tight.write_text("MemTotal:       12582912 kB\nMemAvailable:     409600 kB\n")
+        churn = self.root / "vmstat-churn"
+        churn.write_text("pgscan_direct 0\npgsteal_direct 0\n")
+
+        def burn_reclaim(_seconds):
+            (only_python / "4242" / "stat").write_text(stat_line("4242", "python", 1, 260))
+            churn.write_text("pgscan_direct 12000\npgsteal_direct 8000\n")
+
+        report = diag.cpu_report(4242, port=7860, seconds=2.0, proc_root=str(only_python),
+                                 sleep=burn_reclaim, tcp_files=(str(tcp),),
+                                 meminfo=str(tight), vmstat=str(churn))
+        self.assertEqual(report["ket_luan"], "thieu_ram")
+        self.assertEqual(report["ram_con_lai_mb"], 400)
+        self.assertEqual(report["thu_hoi_trang_giay"], 10000)
+        self.assertIn("RAM cạn", report["goi_y"])
+
+        # CLI: thiếu forge.pid phải nói rõ, không traceback.
+        result = subprocess.run([sys.executable, str(ROOT / "colab/diagnostics.py"), "--cpu",
+                                 "--runtime-dir", str(self.root / "empty")],
+                                text=True, capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("forge.pid", json.loads(result.stdout)["loi"])
+
     def test_11_collect_records_page_kind_and_verdict(self):
         with patch.object(diag, "_run", return_value=""), \
                 patch.object(diag, "api_json", return_value={"models": []}), \

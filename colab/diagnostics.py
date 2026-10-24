@@ -15,6 +15,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
@@ -340,6 +341,212 @@ def optional_assets(base):
     return results
 
 
+# ------------------------------------------------------- CPU khi không sinh ảnh
+# Trong repo không có vòng lặp nền: không `while True`, không `setInterval`, không
+# `gr.Timer`, không thread thường trú (`GenerationJob` chỉ sống trong lúc sinh ảnh).
+# Vì vậy CPU cao khi rảnh đến từ process/thread khác — phải đo mới biết. Các hàm dưới
+# chỉ ĐỌC `/proc` và `/proc/net/tcp`, không ptrace, không cần quyền root, không in
+# cmdline/environ (có thể chứa token).
+TUNNEL_MARKERS = ("frpc", "cloudflared")
+
+
+def _stat_ticks(stat_path):
+    """Đọc `(ppid, tên, utime+stime)` từ một file stat của /proc; None nếu không đọc được."""
+    try:
+        raw = Path(stat_path).read_text(errors="replace")
+    except OSError:
+        return None
+    head, sep, tail = raw.rpartition(")")   # tên process có thể chứa khoảng trắng/ngoặc
+    if not sep:
+        return None
+    name = head[head.find("(") + 1:]
+    fields = tail.split()
+    try:
+        # Sau comm: state(0) ppid(1) … utime(11) stime(12)
+        return {"ppid": int(fields[1]), "name": name,
+                "ticks": int(fields[11]) + int(fields[12])}
+    except (IndexError, ValueError):
+        return None
+
+
+def _cpu_tree(proc_root="/proc", root_pid=None):
+    """Chụp tick CPU của process trong cây `root_pid` và các thread của chính nó."""
+    processes, threads = {}, {}
+    try:
+        pids = [entry.name for entry in Path(proc_root).iterdir() if entry.name.isdigit()]
+    except OSError:
+        return {"processes": processes, "threads": threads}
+    for pid in pids:
+        info = _stat_ticks(Path(proc_root) / pid / "stat")
+        if info:
+            info["pid"] = int(pid)
+            processes[int(pid)] = info
+    keep = set()
+    if root_pid in processes:
+        keep.add(root_pid)
+        growing = True
+        while growing:
+            growing = False
+            for pid, info in processes.items():
+                if pid not in keep and info["ppid"] in keep:
+                    keep.add(pid)
+                    growing = True
+        # Lấy thread của MỌI process trong cây: forge.pid có thể là shell bọc python.
+        for pid in keep:
+            try:
+                for task in (Path(proc_root) / str(pid) / "task").iterdir():
+                    if not task.name.isdigit():
+                        continue
+                    info = _stat_ticks(task / "stat")
+                    if info:
+                        threads[info["name"] + f"#{task.name}"] = info["ticks"]
+            except OSError:
+                continue
+    processes = {pid: info for pid, info in processes.items() if pid in keep}
+    return {"processes": processes, "threads": threads}
+
+
+def ui_clients(port, tcp_files=None):
+    """Số kết nối ESTABLISHED vào cổng UI: mỗi tab Gradio đang mở là một client poll."""
+    total = 0
+    wanted = f":{int(port):04X}"
+    for name in (tcp_files or ("/proc/net/tcp", "/proc/net/tcp6")):
+        try:
+            lines = Path(name).read_text(errors="replace").splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) > 3 and fields[1].endswith(wanted) and fields[3] == "01":
+                total += 1
+    return total
+
+
+def _mem_available(meminfo="/proc/meminfo"):
+    """(MB còn lại, MB tổng) từ /proc/meminfo; (None, None) nếu không đọc được."""
+    try:
+        rows = Path(meminfo).read_text(errors="replace").splitlines()
+    except OSError:
+        return None, None
+    values = {}
+    for row in rows:
+        key, _sep, rest = row.partition(":")
+        if rest.strip().endswith("kB"):
+            try:
+                values[key] = int(rest.split()[0])
+            except (IndexError, ValueError):
+                continue
+    total, available = values.get("MemTotal"), values.get("MemAvailable")
+    if total is None or available is None:
+        return None, None
+    return round(available / 1024), round(total / 1024)
+
+
+def _reclaim_pages(vmstat="/proc/vmstat"):
+    """Tổng số trang kernel đã quét/thu hồi (pgscan_*/pgsteal_*). Tăng đều = đang thiếu RAM."""
+    total = 0
+    try:
+        rows = Path(vmstat).read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    for row in rows:
+        key, _sep, value = row.partition(" ")
+        if key.startswith(("pgscan_", "pgsteal_")):
+            try:
+                total += int(value)
+            except ValueError:
+                continue
+    return total
+
+
+def cpu_report(root_pid, port=None, seconds=5.0, proc_root="/proc", sleep=None, tcp_files=None,
+               meminfo="/proc/meminfo", vmstat="/proc/vmstat"):
+    """Đo CPU cây process Forge trong `seconds` giây và nói ngay nghi phạm nào.
+
+    `processes`/`threads` chỉ có tên process/thread (không cmdline), an toàn để dán log.
+    """
+    sleep = sleep or time.sleep
+    root_pid = int(root_pid)
+    first = _cpu_tree(proc_root, root_pid)
+    first_reclaim = _reclaim_pages(vmstat)
+    if not first["processes"]:
+        return {"loi": f"không đọc được /proc cho PID {root_pid}",
+                "goi_y": "Forge chưa chạy hoặc PID trong forge.pid đã cũ; chạy "
+                         "`bash /content/install.sh --status` trước."}
+    sleep(seconds)
+    second = _cpu_tree(proc_root, root_pid)
+    second_reclaim = _reclaim_pages(vmstat)
+    available_mb, total_mb = _mem_available(meminfo)
+    reclaim = None
+    if first_reclaim is not None and second_reclaim is not None:
+        reclaim = round(max(0, second_reclaim - first_reclaim) / max(seconds, 0.001))
+    try:
+        hz = os.sysconf("SC_CLK_TCK") or 100
+    except (ValueError, OSError):
+        hz = 100
+
+    def percent(old, new):
+        return round(max(0, new - old) / hz / seconds * 100, 1)
+
+    processes = []
+    for pid, info in first["processes"].items():
+        after = second["processes"].get(pid)
+        processes.append({"ten": info["name"], "pid": pid,
+                          "cpu": percent(info["ticks"], after["ticks"] if after else info["ticks"])})
+    processes.sort(key=lambda row: row["cpu"], reverse=True)
+    threads = [{"ten": name, "cpu": percent(ticks, second["threads"].get(name, ticks))}
+               for name, ticks in first["threads"].items()]
+    threads.sort(key=lambda row: row["cpu"], reverse=True)
+    total = round(sum(row["cpu"] for row in processes), 1)
+    clients = ui_clients(port, tcp_files=tcp_files) if port else 0
+
+    tunnel = max([row["cpu"] for row in processes
+                  if any(marker in row["ten"] for marker in TUNNEL_MARKERS)] or [0.0])
+    top_thread = threads[0] if threads else {"ten": "", "cpu": 0.0}
+    low_ram = available_mb is not None and total_mb and available_mb < total_mb * 0.05
+    heavy_reclaim = reclaim is not None and reclaim >= 2000
+    if total < 5:
+        verdict = "thap"
+        advice = ("CPU cây Forge rất thấp khi không sinh ảnh — không phải Forge quay vòng. "
+                  "Nếu Colab vẫn báo cao, nghi phạm nằm ngoài Forge: jupyter/colab agent, "
+                  "`nvidia-smi`, hoặc process khác. Xem: ps -eo pid,pcpu,etime,args --sort=-pcpu | head")
+    elif low_ram or heavy_reclaim:
+        verdict = "thieu_ram"
+        detail = []
+        if available_mb is not None:
+            detail.append(f"còn {available_mb} MB / {total_mb} MB")
+        if reclaim is not None:
+            detail.append(f"kernel thu hồi {reclaim:,} trang/giây")
+        advice = (("RAM cạn (" + ", ".join(detail) + "): kernel quét/thu hồi bộ nhớ liên tục nên "
+                   "CPU tăng dần dù không sinh ảnh. ") if detail else "") + \
+                  ("Đóng bớt tab Forge, bấm **Làm mới** ở album rồi đóng bảng ảnh, tránh mở "
+                   "nhiều app Gradio cùng lúc; chụp lại ảnh cần giữ rồi restart runtime để "
+                   "giải phóng RAM. Không tải lại model.")
+    elif tunnel >= 15:
+        verdict = "tunnel"
+        advice = ("Tunnel (frpc/cloudflared) đang tốn CPU. Restart tunnel hoặc đổi "
+                  "`--tunnel share` ↔ `cloudflared`; link share cũ cũng cần bỏ.")
+    elif clients >= 4:
+        verdict = "nhieu_client"
+        advice = (f"Có {clients} kết nối UI đang mở; mỗi tab Gradio liên tục poll "
+                  "/queue/status + websocket và giữ toàn bộ component trong RAM. "
+                  "Đóng bớt tab/điện thoại rồi đo lại.")
+    elif top_thread["cpu"] >= 25:
+        verdict = "thread_python_cao"
+        advice = (f"Thread `{top_thread['ten']}` chiếm {top_thread['cpu']}% — cần stack để biết "
+                  f"hàm nào: pip install py-spy && py-spy dump --pid {root_pid} "
+                  "(hoặc `py-spy top --pid`), rồi chỉ dán phần Python frame.")
+    else:
+        verdict = "cao_khac"
+        advice = ("CPU rải đều ở nhiều thread/process — nhiều khả năng do tải dựng UI "
+                  "(506 tag phong cách + bảng 506 dòng) hoặc nhịp poll của Gradio; "
+                  "xem thêm `ps -eLf --sort=-pcpu | head` và Chrome Task Manager (Shift+Esc).")
+    return {"thoi_giay": seconds, "pid_goc": root_pid, "tong_cpu": total,
+            "client_ui": clients, "ram_con_lai_mb": available_mb, "ram_tong_mb": total_mb,
+            "thu_hoi_trang_giay": reclaim, "processes": processes[:8], "threads": threads[:5],
+            "ket_luan": verdict, "goi_y": advice}
+
+
 def collect(repo_dir, forge_dir, model_dir, model_file, state_dir, port, runtime_dir=None, public_url=""):
 
     public_url = validate_public_url(public_url)  # trước mọi I/O/network nếu CLI URL không hợp lệ
@@ -451,10 +658,27 @@ def main():
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--runtime-dir", default="/content", help="Thư mục chứa forge.log; chỉ lấy stack đã lọc")
     parser.add_argument("--public-url", default="", help="Tùy chọn: so sánh status tunnel với local; không in body/auth/prompt")
+    parser.add_argument("--cpu", action="store_true",
+                        help="Đo CPU cây process Forge khi đang rảnh (chỉ đọc /proc, không ptrace)")
+    parser.add_argument("--cpu-seconds", type=float, default=5.0,
+                        help="Số giây lấy mẫu cho --cpu (mặc định 5)")
     parser.add_argument("--check-url", default="",
                         help="Chỉ phân loại trang của một URL (gradio sống / relay hết hạn / lỗi), in JSON; "
                              "mã thoát 0=Gradio sống, 3=relay báo 'No interface', 4=lỗi/khác")
     args = parser.parse_args()
+    if args.cpu:
+        try:
+            pid = (Path(args.runtime_dir) / "forge.pid").read_text().strip()
+            if not pid.isdecimal():
+                raise ValueError
+        except (OSError, ValueError):
+            print(json.dumps({"loi": f"không thấy PID Forge trong {args.runtime_dir}/forge.pid",
+                              "goi_y": "Chạy `bash /content/install.sh --status` để biết Forge có chạy."},
+                             ensure_ascii=False))
+            return 2
+        print(json.dumps(cpu_report(pid, port=args.port, seconds=max(1.0, args.cpu_seconds)),
+                         ensure_ascii=False, indent=2))
+        return 0
     if args.check_url:
         try:
             target = validate_public_url(args.check_url)

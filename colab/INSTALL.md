@@ -651,6 +651,52 @@ link công khai; dừng runtime khi dùng xong. Negative prompt không đảm b�
 nội dung không phù hợp. Tuân thủ giấy phép model/pháp luật/điều khoản Colab, tuyệt đối
 không tạo nội dung tình dục hóa trẻ vị thành niên.
 
+### CPU cao khi không sinh ảnh
+
+Trong repo **không có vòng lặp nền**: không `while True`, không `setInterval`, không
+`gr.Timer`, không thread thường trú (`GenerationJob` chỉ sống trong lúc sinh ảnh; JS
+`vi_prompt.js` và tagcomplete đều chạy theo sự kiện). Vì vậy CPU cao lúc rảnh **không**
+đến từ một vòng quay của bộ dựng prompt — phải đo để biết ai đang ăn CPU.
+
+```bash
+# 1) Đo cây process Forge: process/thread nào ăn CPU, có bao nhiêu tab UI đang mở
+python3 /content/colab/diagnostics.py --cpu            # mặc định lấy mẫu 5 giây
+python3 /content/colab/diagnostics.py --cpu --cpu-seconds 10
+```
+
+Kết quả là JSON chỉ-đọc (không cmdline/token): `tong_cpu`, `processes`, `threads`,
+`client_ui`, `ram_con_lai_mb`/`ram_tong_mb`, `thu_hoi_trang_giay`, `ket_luan`
+(`thap` · `thieu_ram` · `tunnel` · `nhieu_client` · `thread_python_cao` · `cao_khac`)
+và `goi_y`. Đọc đúng dòng `ket_luan` rồi làm theo bảng:
+
+| `ket_luan` | Nghĩa | Việc cần làm |
+|---|---|---|
+| `thap` | Cây Forge < 5% khi rảnh | Không phải Forge. Xem process ngoài cây: `ps -eo pid,pcpu,etime,args --sort=-pcpu \| head` |
+| `thieu_ram` | RAM còn < 5% hoặc kernel thu hồi ≥ 2000 trang/giây | Xem mục 3 bên dưới — đây là kiểu CPU **tăng dần theo thời gian** |
+| `tunnel` | `frpc`/`cloudflared` ăn CPU | Restart tunnel hoặc đổi `--tunnel share` ↔ `cloudflared`; bỏ link cũ |
+| `nhieu_client` | Nhiều tab/điện thoại đang mở UI | Mỗi tab poll `/queue/status` + websocket và giữ toàn bộ component trong RAM. Đóng bớt rồi đo lại |
+| `thread_python_cao` | Một thread Python quay | `pip install py-spy && py-spy dump --pid $(cat /content/forge.pid)` rồi chỉ dán phần Python frame |
+| `cao_khac` | CPU rải đều | Tải dựng UI/Gradio; xem thêm Chrome Task Manager (Shift+Esc) ở tab Forge |
+
+**Ba phép so sánh để quy trách nhiệm (làm lần lượt):**
+
+1. **Đóng hết tab Forge → đo lại.** CPU tụt mạnh = do client (Gradio poll, JS parse 8,6 MB
+   `danbooru_e621.csv`, hoặc trình duyệt render 506 tag phong cách). Server rảnh mà máy bạn nóng
+   là chuyện của trình duyệt, không phải Colab.
+2. **Dừng Forge → đo bằng `top`.** `bash /content/setup_forge.sh stop` rồi `top -b -n1 | head`.
+   Vẫn cao = process ngoài Forge (jupyter/colab agent, `nvidia-smi`, hoặc `kswapd0`).
+3. **RAM cạn (bạn từng báo 11/12 GiB, MemAvailable 994 MiB).** Khi RAM gần đầy, kernel
+   quét/thu hồi bộ nhớ liên tục và CPU **tăng dần theo thời gian** dù không sinh ảnh —
+   `--cpu` sẽ báo `thieu_ram` kèm `thu_hoi_trang_giay`. Kiểm chéo: `top` có
+   `kswapd0`/`kcompactd` cao, hoặc `grep -E 'pgscan|pgsteal' /proc/vmstat` tăng đều.
+   Cách xử lý: đóng bớt tab Forge, bấm **Làm mới** ở album rồi đóng bảng ảnh, tránh mở
+   nhiều app Gradio cùng lúc; chụp lại ảnh cần giữ rồi restart runtime để giải phóng RAM
+   (không cần tải lại model).
+
+Số đo tham khảo trên máy này (để bạn so): nạp kho tag một lần khi Forge khởi động
+**1,7 giây CPU** (349.778 tag / 8,6 MB); mỗi lần mở trang, trình duyệt tải cấu hình UI
+**122 KB** và tagcomplete tự parse file tag.
+
 ## 7. Kiểm tra của dự án
 
 Từ thư mục gốc repo:
