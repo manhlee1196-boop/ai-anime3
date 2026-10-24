@@ -871,9 +871,26 @@ stage_status() {
 # Link gradio.live có thể chết trong khi API local vẫn tốt: relay trả HTTP 200 kèm trang
 # "No interface is running right now". Chỉ in cảnh báo + cách xử lý, không in nội dung trang.
 check_public_link() {
-  local url="$1" rc
+  local url="$1" rc verdict
   [[ -f "$REPO_DIR/colab/diagnostics.py" ]] || return 0
   if "$PY_BIN" "$REPO_DIR/colab/diagnostics.py" --check-url "$url" >/dev/null 2>&1; then
+    # Trang sống chưa đủ: client Gradio cần kết nối queue (SSE) để không báo
+    # "Connection errored out.". Đo nhanh, chỉ in khi có vấn đề.
+    verdict="$("$PY_BIN" "$REPO_DIR/colab/diagnostics.py" --check-queue "$url" 2>/dev/null \
+      | "$PY_BIN" -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("ket_luan", ""))
+except Exception:
+    print("")' 2>/dev/null)"
+    case "$verdict" in
+      ""|on_dinh|chi_sse) : ;;
+      stream_treo|queue_loi|tunnel_chan)
+        warn "Transport queue: $verdict — UI có thể báo «Connection errored out.» dù Forge vẫn chạy."
+        info "Chi tiết: $PY_BIN $REPO_DIR/colab/diagnostics.py --check-queue $url"
+        info "Tải lại trang trước; vẫn lỗi thì: bash $REPO_DIR/colab/install.sh --only launch --restart" ;;
+      khong_ket_noi)
+        warn "Không mở được queue của link public (mạng/tunnel). Link local vẫn dùng được." ;;
+    esac
     return 0
   else
     rc=$?

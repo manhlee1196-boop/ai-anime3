@@ -5,6 +5,7 @@ python3 colab/tests/test_ui_diagnostics.py
 import json
 import sys
 import tempfile
+import time
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -295,6 +296,101 @@ ValueError: private prompt and token MUST_NOT_APPEAR
                                 text=True, capture_output=True, timeout=60)
         self.assertEqual(result.returncode, 2)
         self.assertIn("forge.pid", json.loads(result.stdout)["loi"])
+
+    def test_13_transport_probe_follows_the_protocol_the_app_declares(self):
+        # "Connection errored out." là lỗi transport của client Gradio. Server 4.x khai
+        # protocol=sse_v3 -> chỉ SSE là đường thật; đừng dọa người dùng bằng WS 403.
+        import socketserver
+
+        class Handler(BaseHTTPRequestHandler):
+            routes = {}
+
+            def do_GET(self):
+                path = self.path.split("?")[0]
+                code, body, ctype = self.routes.get(path, (404, b"{}", "application/json"))
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+        cfg_sse = b'{"protocol":"sse_v3","connect_heartbeat":true,"components":[{"type":"state"}]}'
+
+        Handler.routes = {"/config": (200, cfg_sse, "application/json"),
+                          "/queue/data": (200, b'data: {"msg":"process_completed"}\n\n', "text/event-stream")}
+        result = diag.transport_probe(base, timeout=3)
+        self.assertEqual(result["protocol"], "sse_v3")
+        self.assertTrue(result["connect_heartbeat"])
+        self.assertEqual(result["ket_luan"], "on_dinh")
+        self.assertIn("bo_qua", result["websocket"])          # không thử WS khi app dùng SSE
+        self.assertIn("gr.State", result["goi_y"])
+
+        # Tunnel chặn /queue/data -> đúng tình huống người dùng thấy lỗi.
+        Handler.routes["/queue/data"] = (502, b"bad gateway", "text/html")
+        result = diag.transport_probe(base, timeout=3)
+        self.assertEqual(result["ket_luan"], "queue_loi")
+        self.assertIn("tải lại trang", result["goi_y"])
+
+        # Máy chủ SSE không chuyển byte nào: treo, không phải 502.
+        class Silent(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path.startswith("/config"):
+                    body = cfg_sse
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    self.wfile.flush()
+                    time.sleep(3)
+
+            def log_message(self, *args):
+                pass
+
+        silent = ThreadingHTTPServer(("127.0.0.1", 0), Silent)
+        threading.Thread(target=silent.serve_forever, daemon=True).start()
+        self.addCleanup(silent.server_close)
+        self.addCleanup(silent.shutdown)
+        result = diag.transport_probe(f"http://127.0.0.1:{silent.server_port}", timeout=0.6)
+        self.assertEqual(result["ket_luan"], "stream_treo")
+
+        # App khai ws: 101 = thông; nếu WS hỏng mà SSE chạy thì là chi_sse.
+        class WsServer(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        class WsHandler(socketserver.BaseRequestHandler):
+            reply = b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
+
+            def handle(self):
+                self.request.recv(4096)
+                self.request.sendall(self.reply)
+
+        ws = WsServer(("127.0.0.1", 0), WsHandler)
+        threading.Thread(target=ws.serve_forever, daemon=True).start()
+        self.addCleanup(ws.server_close)
+        self.addCleanup(ws.shutdown)
+        # /config trả protocol ws từ server HTTP ở trên, WS ở cổng riêng -> dùng URL ws.
+        Handler.routes["/config"] = (200, b'{"protocol":"ws","connect_heartbeat":false}', "application/json")
+        result = diag.transport_probe(f"http://127.0.0.1:{ws.server_address[1]}", timeout=2)
+        self.assertEqual(result["websocket"]["http"], 101)
+        self.assertEqual(result["ket_luan"], "on_dinh")
+
+        WsHandler.reply = b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+        result = diag.transport_probe(f"http://127.0.0.1:{ws.server_address[1]}", timeout=2)
+        self.assertEqual(result["ket_luan"], "tunnel_chan")
 
     def test_11_collect_records_page_kind_and_verdict(self):
         with patch.object(diag, "_run", return_value=""), \

@@ -1,5 +1,35 @@
 # Rà soát toàn dự án — bộ cài 1.0.7
 
+## “Connection errored out.” — đo transport queue — 24/10/2026
+
+Yêu cầu: **“lỗi error Connection errored out. trong khi colab vẫn đang chạy bình thường”**.
+Đã xác định nguồn câu lỗi bằng cách giải nén `gradio==4.40.0` (bản Forge dùng) và đọc bundle
+frontend `templates/frontend/assets/index-*.js`:
+
+- `Connection errored out. ` là hằng của `@gradio/client`; xuất hiện khi
+  `/queue/data` (SSE) trả HTTP khác 200, hoặc luồng SSE bị cắt, và ở chế độ `ws` khi
+  WebSocket `/queue/join` đóng **không sạch** (`wasClean === false`).
+- Server Gradio 4 tự khai `protocol: "sse_v3"` (không có route WebSocket) → đường thật là
+  SSE. App có `gr.State`/unload thì `connect_heartbeat: true`: **mỗi tab giữ một kết nối
+  SSE thường trực** — đúng loại kết nối bị tunnel/proxy cắt khi rảnh.
+- Vì vậy "Colab vẫn Running" và "link trả HTTP 200" đều không mâu thuẫn với lỗi này.
+
+Bổ sung:
+
+- `diagnostics.py --check-queue URL`: đọc `/config` (chỉ `protocol`, `connect_heartbeat`,
+  có `state`?), rồi đo đúng transport mà app khai — SSE `/queue/data` (mã HTTP + có nhận
+  byte đầu + độ trễ) hoặc WebSocket `/queue/join` (101) khi app khai `ws`. Không chạy function
+  nào, không sinh ảnh, không in nội dung/header/config. Kết luận: `on_dinh`, `chi_sse`,
+  `stream_treo`, `queue_loi`, `tunnel_chan`, `khong_ket_noi`, `khong_ro`.
+- `install.sh --status`: khi link public còn sống, đo thêm transport và cảnh báo khi
+  `stream_treo`/`queue_loi`/`tunnel_chan`/`khong_ket_noi` — đúng lúc người dùng chỉ thấy
+  trang 200 nên tưởng mọi thứ ổn.
+- `test_ui_diagnostics.py` **13/13**: thêm nhóm kiểm `protocol: sse_v3` → chỉ đo SSE,
+  `/queue/data` 502 → `queue_loi`, server SSE im lặng → `stream_treo`, server khai `ws`
+  trả 101 → `on_dinh`, trả 403 → `tunnel_chan`.
+- `INSTALL.md`: mục **“Connection errored out.” khi Colab vẫn đang chạy** + bảng `ket_luan`
+  → việc cần làm; nhấn mạnh chỉ cần tải lại trang/đổi tunnel, **không** cài lại hay tải lại model.
+
 ## Đo CPU khi không sinh ảnh — 24/10/2026
 
 Yêu cầu: **“tìm kiếm nguyên nhân khiến cpu luôn tăng ngay cả khi không tạo ảnh”**.

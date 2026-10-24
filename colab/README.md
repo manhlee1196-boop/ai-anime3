@@ -13,7 +13,8 @@ colab/
   notebook_support.py           bootstrap/version guard và nội dung ô dùng chung
   checkpoint_tools.py           xác minh container/hash, alias, preset XL, API, sinh thử
   diagnostics.py                chẩn đoán checkpoint/venv/GPU/API/config UI chỉ đọc;
-                                `--check-url` phân loại trang, `--cpu` đo CPU khi rảnh
+                                `--check-url` phân loại trang, `--check-queue` đo transport
+                                (SSE/queue — lỗi “Connection errored out.”), `--cpu` đo CPU khi rảnh
   forge_compat.py               vá schema cmd-flags và choices/value Checkpoint (có guard/backup)
   AUDIT.md                      báo cáo album 1.0.7 + tunnel 1.0.6 + headless 1.0.5 + compat 1.0.4 + quy trình 1.0.3 + checkpoint 1.0.2
   WAI_Illustrious_v17_vi.ipynb    notebook chi tiết, chạy từng bước
@@ -39,7 +40,7 @@ colab/
   tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
   tests/test_headless_backend.py  4 nhóm Agg/Matplotlib/Dataframe/callback Gradio (CPU)
-  tests/test_ui_diagnostics.py    12 nhóm HTTP/log/env + trang relay + đo CPU theo process/thread
+  tests/test_ui_diagnostics.py    13 nhóm HTTP/log/env + trang relay + transport queue + CPU
   tests/test_forge_compat.py      10 nhóm compat trên Neo/FastAPI/Gradio (CPU)
   tests/test_checkpoint_flow.py  16 nhóm checkpoint/preset/alias/API
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)

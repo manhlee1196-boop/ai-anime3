@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import json
 import os
 import re
@@ -341,6 +342,181 @@ def optional_assets(base):
     return results
 
 
+# --------------------------------------------------- transport Gradio (queue)
+# "Connection errored out." là câu của @gradio/client (bundle 4.40.0), không phải Forge:
+#   - `/queue/data` (SSE) trả HTTP khác 200, hoặc luồng SSE bị cắt  -> message này
+#   - với app khai `protocol: "ws"`: WebSocket `/queue/join` đóng KHÔNG sạch -> message này
+# Gradio 4 tự khai `protocol: "sse_v3"`, nên transport thật là **một kết nối SSE dài**;
+# khi app có `gr.State`/unload, server bật `connect_heartbeat` → mỗi tab giữ kết nối đó
+# mãi. Tunnel/proxy cắt kết nối rảnh = lỗi trên, dù process Forge vẫn khoẻ.
+# Các hàm dưới chỉ mở kết nối, ghi mã/latency rồi đóng — không chạy function nào, không
+# sinh ảnh, không in nội dung/header/config.
+TRANSPORT_HINTS = {
+    "on_dinh": "Kết nối queue mở được — transport bình thường.",
+    "chi_sse": ("WebSocket bị chặn nhưng SSE còn chạy: Gradio lùi về SSE nên UI vẫn dùng "
+                "được, chỉ dễ rớt khi mạng đổi. Dấu hiệu proxy/tunnel chặn WS."),
+    "stream_treo": ("Mở được `/queue/data` nhưng không nhận được byte nào trong thời gian chờ: "
+                    "tunnel/proxy đang giữ kết nối mà không chuyển dữ liệu (buffering)."),
+    "queue_loi": ("`/queue/data` trả HTTP lỗi: tunnel/proxy chặn, hoặc Forge đã restart và "
+                  "session cũ không còn — tải lại trang, vẫn lỗi thì restart để lấy link mới."),
+    "tunnel_chan": ("Cả WebSocket lẫn SSE đều không mở được: tunnel/proxy đang cắt kết nối "
+                    "dài — đổi tunnel hoặc restart để lấy link mới."),
+    "khong_ket_noi": "Không kết nối được tới host — mạng/DNS/tunnel, không phải Forge.",
+    "khong_ro": "Không kết luận được, xem mã lỗi ở trên.",
+}
+
+
+def _split_base(base):
+    parts = urlsplit(base if "://" in base else "http://" + str(base))
+    scheme = (parts.scheme or "http").lower()
+    host = parts.hostname
+    if not host:
+        raise ValueError("URL không có host")
+    return scheme, host, parts.port or (443 if scheme == "https" else 80), (parts.path or "").rstrip("/")
+
+
+def _net_kind(exc):
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, socket.gaierror):
+        return "dns"
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return "tls_certificate"
+    if isinstance(reason, ssl.SSLError):
+        return "tls"
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(reason, ConnectionRefusedError):
+        return "connection_refused"
+    if isinstance(reason, ConnectionResetError):
+        return "connection_reset"
+    return "network_unknown"
+
+
+def ui_protocol(base, timeout=8):
+    """Đọc 2 khoá transport từ `/config` (không in toàn bộ config)."""
+    try:
+        data = api_json(base, "/config", timeout=timeout)
+    except CheckpointError as exc:
+        return {"loi": str(exc)}
+    if not isinstance(data, dict):
+        return {"loi": "config không phải JSON object"}
+    return {"protocol": data.get("protocol") or "?",
+            "connect_heartbeat": bool(data.get("connect_heartbeat")),
+            "co_state": any(c.get("type") == "state" for c in data.get("components") or [])}
+
+
+def websocket_probe(base, timeout=8):
+    """Thử nâng cấp WebSocket tới `<base>/queue/join`; `{"http": 101}` là thông."""
+    try:
+        scheme, host, port, prefix = _split_base(base)
+    except ValueError as exc:
+        return {"http": 0, "loai": "url", "chi_tiet": str(exc)[:60]}
+    key = base64.b64encode(os.urandom(16)).decode()
+    request = "\r\n".join([
+        f"GET {prefix}/queue/join?session_hash={os.urandom(16).hex()} HTTP/1.1",
+        f"Host: {host}", "Upgrade: websocket", "Connection: Upgrade",
+        f"Sec-WebSocket-Key: {key}", "Sec-WebSocket-Version: 13",
+        f"Origin: {scheme}://{host}", "", ""]).encode()
+    started = time.monotonic()
+    raw = None
+    try:
+        raw = socket.create_connection((host, port), timeout=timeout)
+        if scheme == "https":
+            raw = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+        raw.sendall(request)
+        head = raw.recv(128).split(b"\r\n", 1)[0].decode(errors="replace")
+    except (OSError, ValueError) as exc:
+        return {"http": 0, "loai": _net_kind(exc), "chi_tiet": type(exc).__name__}
+    finally:
+        if raw is not None:
+            try:
+                raw.close()
+            except OSError:
+                pass
+    parts = head.split()
+    try:
+        code = int(parts[1])
+    except (IndexError, ValueError):
+        return {"http": 0, "loai": "phan_hoi_la", "chi_tiet": head[:40]}
+    return {"http": code, "ms": int((time.monotonic() - started) * 1000)}
+
+
+def sse_probe(base, timeout=8):
+    """Mở `/queue/data` như trình duyệt, ghi có nhận byte đầu hay không (không in nội dung)."""
+    url = base.rstrip("/") + "/queue/data?session_hash=" + os.urandom(16).hex()
+    opener = urllib.request.build_opener(_NoRedirect)
+    request = urllib.request.Request(url, headers={"Accept": "text/event-stream",
+                                                   "User-Agent": "wai-readonly-transport-probe"})
+    started = time.monotonic()
+    response = None
+    try:
+        response = opener.open(request, timeout=timeout)
+        status = response.status
+        try:
+            first = response.readline()
+        except (TimeoutError, socket.timeout):
+            return {"http": status, "su_kien_dau": False, "loai": "timeout_doc",
+                    "ms": int((time.monotonic() - started) * 1000)}
+        return {"http": status, "su_kien_dau": bool(first),
+                "ms": int((time.monotonic() - started) * 1000)}
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        exc.close()
+        return {"http": code, "su_kien_dau": False}
+    except (OSError, ValueError) as exc:
+        return {"http": 0, "su_kien_dau": False, "loai": _net_kind(exc),
+                "chi_tiet": type(exc).__name__}
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except OSError:
+                pass
+
+
+def transport_probe(base, timeout=8):
+    """Đo transport mà app thực sự dùng (SSE với Gradio 4, WS nếu config khai ws)."""
+    info = ui_protocol(base, timeout=timeout)
+    protocol = str(info.get("protocol") or "?")
+    result = {"protocol": protocol, "connect_heartbeat": info.get("connect_heartbeat"), "sse": None}
+    if protocol.startswith("sse"):
+        result["websocket"] = {"bo_qua": "app khai protocol sse — không dùng WebSocket"}
+        result["sse"] = sse_probe(base, timeout=timeout)
+        sse = result["sse"]
+        if sse.get("su_kien_dau"):
+            kind = "on_dinh"
+        elif sse.get("http") and sse["http"] != 200:
+            kind = "queue_loi"
+        elif sse.get("http") == 200:
+            kind = "stream_treo"
+        elif sse.get("loai") in ("dns", "timeout", "connection_refused", "tls",
+                                 "tls_certificate", "connection_reset", "network_unknown"):
+            kind = "khong_ket_noi"
+        else:
+            kind = "khong_ro"
+    else:
+        result["websocket"] = websocket_probe(base, timeout=timeout)
+        result["sse"] = sse_probe(base, timeout=timeout)
+        ws, sse = result["websocket"], result["sse"]
+        if ws.get("http") == 101:
+            kind = "on_dinh"
+        elif sse.get("su_kien_dau"):
+            kind = "chi_sse"
+        elif ws.get("http") or sse.get("http"):
+            kind = "tunnel_chan"
+        elif ws.get("loai") in ("dns", "timeout", "connection_refused", "tls",
+                                "tls_certificate", "connection_reset", "network_unknown"):
+            kind = "khong_ket_noi"
+        else:
+            kind = "khong_ro"
+    result["ket_luan"] = kind
+    result["goi_y"] = TRANSPORT_HINTS[kind]
+    if result.get("connect_heartbeat"):
+        result["goi_y"] += (" App có `gr.State` nên mỗi tab giữ một kết nối SSE thường trực; "
+                            "đóng bớt tab và tránh để tab ngủ.")
+    return result
+
+
 # ------------------------------------------------------- CPU khi không sinh ảnh
 # Trong repo không có vòng lặp nền: không `while True`, không `setInterval`, không
 # `gr.Timer`, không thread thường trú (`GenerationJob` chỉ sống trong lúc sinh ảnh).
@@ -658,6 +834,10 @@ def main():
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--runtime-dir", default="/content", help="Thư mục chứa forge.log; chỉ lấy stack đã lọc")
     parser.add_argument("--public-url", default="", help="Tùy chọn: so sánh status tunnel với local; không in body/auth/prompt")
+    parser.add_argument("--check-queue", default="", metavar="URL",
+                        help="Đo transport Gradio của một URL (SSE /queue/data, hoặc WebSocket "
+                             "/queue/join nếu app khai protocol ws); dùng khi UI báo "
+                             "'Connection errored out.'")
     parser.add_argument("--cpu", action="store_true",
                         help="Đo CPU cây process Forge khi đang rảnh (chỉ đọc /proc, không ptrace)")
     parser.add_argument("--cpu-seconds", type=float, default=5.0,
@@ -666,6 +846,13 @@ def main():
                         help="Chỉ phân loại trang của một URL (gradio sống / relay hết hạn / lỗi), in JSON; "
                              "mã thoát 0=Gradio sống, 3=relay báo 'No interface', 4=lỗi/khác")
     args = parser.parse_args()
+    if args.check_queue:
+        try:
+            target = validate_public_url(args.check_queue)
+        except ValueError:
+            target = args.check_queue.rstrip("/")     # link local 127.0.0.1 dùng thẳng
+        print(json.dumps(transport_probe(target), ensure_ascii=False, indent=2))
+        return 0
     if args.cpu:
         try:
             pid = (Path(args.runtime_dir) / "forge.pid").read_text().strip()

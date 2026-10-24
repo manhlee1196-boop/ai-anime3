@@ -29,6 +29,8 @@ vẫn chạy độc lập được ngoài Colab: `python3 colab/prompt_builder.p
 cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
 Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
+> **UI báo “Connection errored out.”?** Kết nối queue của Gradio (SSE) bị cắt — Colab/Forge vẫn chạy. Tải lại cứng trang (Ctrl+Shift+R); nếu lặp lại, so `python3 /content/colab/diagnostics.py --check-queue http://127.0.0.1:7860` với `--check-queue <link public>` để biết lỗi ở tunnel hay ở Forge. [Chi tiết + bảng chẩn đoán](colab/INSTALL.md#connection-errored-out-khi-colab-vẫn-đang-chạy).
+
 > **Mở lại link báo “No interface is running right now”?** Đó là trang của relay `gradio.live`, không phải Forge hỏng: link share hết hạn sau khoảng 10 phút–vài giờ, hoặc runtime Colab vừa restart nên Forge đã tạo link mới. Chạy `bash /content/install.sh --status` (báo link còn sống hay đã chết), rồi `bash /content/install.sh --only launch,verify --restart` và mở **link mới nhất**. [Chi tiết + bảng chẩn đoán](colab/INSTALL.md#no-interface-is-running-right-now-khi-mở-lại-link).
 
 > **Bộ cài 1.0.7:** thêm **Ảnh đã tạo** trong app Gradio (trước đây cả tab Prompt VN): bảng + thumbnail phân trang, xem/tải ảnh gốc, dùng lại seed. Lịch sử ở SQLite trên đĩa, không gom toàn bộ PIL/base64 vào RAM; ảnh gốc/metadata giữ nguyên. [Cập nhật chỉ phần mềm](colab/INSTALL.md#bảng-ảnh-đã-tạo-107).

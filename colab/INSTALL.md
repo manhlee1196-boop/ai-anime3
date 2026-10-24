@@ -605,6 +605,7 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Ảnh chậm / `Unexpected token <` trên Cloudflare | Xem hướng dẫn tunnel ở trên; đợi sinh xong, đổi share và mở link mới; không giảm chất lượng ảnh |
 | Gradio share không tạo link | Thử `--tunnel cloudflared --only launch,verify --restart` sau khi tác vụ sinh kết thúc; không tải lại model/Torch |
 | Mở link lại thấy **“No interface is running right now”** | Link `gradio.live` đã chết, **không** phải Forge hỏng. Xem mục ngay dưới |
+| UI hiện **“Connection errored out.”** nhưng Colab vẫn Running | Kết nối queue (SSE) bị cắt, **không** phải Forge chết. Xem mục *Connection errored out* ngay dưới |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |
 | `EOFError` tại `verify_version()` | Cập nhật cả hai script lên 1.0.1 rồi chỉ chạy launch/verify; xem ô sửa bên trên |
@@ -650,6 +651,55 @@ Link public có thể cho người biết link truy cập UI/API và dùng GPU c
 link công khai; dừng runtime khi dùng xong. Negative prompt không đảm bảo loại bỏ mọi
 nội dung không phù hợp. Tuân thủ giấy phép model/pháp luật/điều khoản Colab, tuyệt đối
 không tạo nội dung tình dục hóa trẻ vị thành niên.
+
+### “Connection errored out.” khi Colab vẫn đang chạy
+
+Đây là câu của **client Gradio** (`@gradio/client`, bundle 4.40.0), không phải Forge in ra:
+
+- Gradio 4 tự khai `protocol: "sse_v3"` → UI giữ **một kết nối SSE dài** tới `/queue/data`.
+  Nếu endpoint đó trả HTTP khác 200 **hoặc** luồng bị cắt, client hiện đúng câu này.
+- App có `gr.State` nên server bật `connect_heartbeat` → **mỗi tab giữ kết nối đó suốt phiên**.
+  Tunnel/proxy nào cắt kết nối "rảnh" sẽ gây lỗi, dù process Forge vẫn khoẻ và Colab vẫn Running.
+
+Vì vậy lỗi này **không** cần cài lại, không cần tải lại model. Thứ tự xử lý:
+
+```bash
+# 1) Tải lại cứng trang (Ctrl+Shift+R). Phần lớn trường hợp hết ngay: client mở session mới.
+
+# 2) Vẫn lỗi: so transport của link public với Forge local
+python3 /content/colab/diagnostics.py --check-queue http://127.0.0.1:7860     # phải on_dinh
+python3 /content/colab/diagnostics.py --check-queue https://xxxx.gradio.live
+
+# 3) --status giờ tự đo transport của link public khi link còn sống
+bash /content/install.sh --status
+```
+
+| `ket_luan` của link public | Nghĩa | Việc cần làm |
+|---|---|---|
+| `on_dinh` | QUEUE mở được | Lỗi ở phía trình duyệt: VPN/adblock/DNS, tab ngủ, hoặc session cũ → tải lại, thử ẩn danh |
+| `queue_loi` | `/queue/data` trả HTTP lỗi | Tunnel/Proxy chặn, hoặc Forge vừa restart: `--only launch --restart` rồi mở link mới |
+| `stream_treo` | Mở được nhưng không có dữ liệu | Tunnel đang buffer kết nối dài → đổi `--tunnel cloudflared` ↔ `share` |
+| `tunnel_chan` | Cả WS lẫn SSE hỏng | Tunnel chặn kết nối dài — restart/đổi tunnel |
+| `khong_ket_noi` | Không tới được host | Mạng/DNS/tunnel, không phải Forge |
+
+Nếu **local `on_dinh` mà public lỗi** thì chắc chắn là tunnel: `bash /content/install.sh
+--only launch --restart` để lấy link mới, hoặc đổi hẳn tunnel. Nếu **local cũng lỗi** thì mới
+là chuyện của Forge: `bash /content/install.sh --status` rồi `--only launch,verify --restart`.
+
+Các tình huống hay gặp, xếp theo tần suất:
+
+1. **Tab bị treo/chuyển nền lâu** (Chrome giảm nhịp tab nền) hoặc **đổi mạng** (Wi-Fi ↔ 4G,
+   bật/tắt VPN) → kết nối SSE đứt. Tải lại trang là xong.
+2. **Tunnel cắt kết nối dài** (`gradio.live` frpc, Cloudflare idle). Trang HTML vẫn trả 200
+   nên `--check-url` báo "sống", nhưng queue đã chết — đó là lý do phải dùng `--check-queue`.
+3. **Forge vừa restart** (`--restart`, Colab reconnect) → session_hash cũ không còn; mọi thao
+   tác báo lỗi cho tới khi tải lại trang bằng link mới.
+4. **Nhiều tab/điện thoại** cùng mở một link: mỗi tab một SSE thường trực, dễ chạm giới hạn
+   của tunnel. Dùng một tab.
+5. **VPN/adblock/DNS lọc** chặn `wss://`/stream tới `*.gradio.live` → thử ẩn danh hoặc mạng khác.
+
+Không có gì để "sửa cài đặt" cho lỗi này: **đừng** chạy lại stage model/torch, cũng đừng xoá
+`/content`. Chỉ cần kết nối lại hoặc đổi tunnel.
 
 ### CPU cao khi không sinh ảnh
 
