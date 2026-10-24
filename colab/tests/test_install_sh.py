@@ -213,6 +213,67 @@ def test_tunnel_defaults(tmp):
     check("Gradio share không tải/chạy Cloudflare", result.returncode == 0 and not result.stdout, result.stderr)
 
 
+def test_public_link_verification():
+    """Link gradio.live chết vẫn trả HTTP 200 ('No interface is running right now')."""
+    print("2b) Kiểm tra link public: phân biệt Gradio sống / relay hết hạn")
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            page = (b"<html><body><gradio-app></gradio-app></body></html>" if self.path.startswith("/live")
+                    else b"<html><body><h1>No interface is running right now</h1></body></html>")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        diag = ROOT / "colab/diagnostics.py"
+        live = subprocess.run([sys.executable, str(diag), "--check-url", base + "/live"],
+                              text=True, capture_output=True, timeout=60)
+        dead = subprocess.run([sys.executable, str(diag), "--check-url", base + "/dead"],
+                              text=True, capture_output=True, timeout=60)
+        check("diagnostics --check-url: Gradio sống → exit 0, loai=gradio_song",
+              live.returncode == 0 and json.loads(live.stdout)["loai"] == "gradio_song", live.stderr)
+        check("diagnostics --check-url: 'No interface' → exit 3, loai=share_het",
+              dead.returncode == 3 and json.loads(dead.stdout)["loai"] == "share_het", dead.stderr)
+
+        script = INSTALL.read_text()
+        for needle, label in (('check_public_link "$link"', "install.sh --status gọi check_public_link"),
+                              ("Link public ĐÃ CHẾT", "install.sh cảnh báo link chết"),
+                              ("--only launch,verify --restart", "install.sh chỉ lệnh lấy link mới")):
+            check(label, needle in script)
+        setup = SETUP.read_text()
+        for needle, label in (('verify_public_link "$pub"', "setup_forge.sh kiểm tra link ngay sau launch"),
+                              ("No interface is running right now", "setup_forge.sh nêu đúng lỗi người dùng gặp"),
+                              ("--check-url", "setup_forge.sh dùng diagnostics --check-url")):
+            check(label, needle in setup, needle)
+
+        # check_public_link chỉ in cảnh báo + cách xử lý: không lộ body/token.
+        result = subprocess.run(
+            ["bash", "-c",
+             'source "$1"; REPO_DIR="$2"; PY_BIN="$3"; warn() { printf "WARN %s\\n" "$*"; }; '
+             'info() { printf "INFO %s\\n" "$*"; }; ok() { printf "OK %s\\n" "$*"; }; '
+             'check_public_link "$4"',
+             "test", str(INSTALL), str(ROOT), sys.executable, base + "/dead"],
+            text=True, capture_output=True, timeout=60, cwd=ROOT)
+        check("Link chết: cảnh báo rõ + gợi ý link local/restart",
+              "WARN" in result.stdout and "127.0.0.1" in result.stdout and "restart" in result.stdout,
+              result.stdout + result.stderr)
+        check("Cảnh báo không in nội dung trang", "No interface is running right now</h1>" not in result.stdout
+              and "<html>" not in result.stdout, result.stdout)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_metadata():
     global HTTP_MODE
     print("2) Metadata Civitai/HuggingFace bằng fixture")
@@ -650,6 +711,7 @@ def main():
         test_config_version(tmp)
         test_lifecycle(tmp)
     test_notebook()
+    test_public_link_verification()
     print("\n" + "=" * 68)
     if FAIL:
         print(f"HỎNG {len(FAIL)}/{len(PASS) + len(FAIL)} kiểm tra:", "; ".join(FAIL))

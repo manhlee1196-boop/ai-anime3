@@ -580,11 +580,47 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Ảnh chậm / `Unexpected token <` trên Cloudflare | Xem hướng dẫn tunnel ở trên; đợi sinh xong, đổi share và mở link mới; không giảm chất lượng ảnh |
 | Gradio share không tạo link | Thử `--tunnel cloudflared --only launch,verify --restart` sau khi tác vụ sinh kết thúc; không tải lại model/Torch |
+| Mở link lại thấy **“No interface is running right now”** | Link `gradio.live` đã chết, **không** phải Forge hỏng. Xem mục ngay dưới |
 | Tunnel cloudflared lỗi | Đổi `--tunnel share --only launch,verify --restart`; tuân thủ điều khoản mạng/dịch vụ |
 | Bản lượng tử hóa nạp/sinh ảnh lỗi | Chọn lại `--model fp16`; các biến thể cộng đồng chưa được kiểm chứng sinh ảnh trên Colab |
 | `EOFError` tại `verify_version()` | Cập nhật cả hai script lên 1.0.1 rồi chỉ chạy launch/verify; xem ô sửa bên trên |
 | `setup_forge.sh` bản cũ | Cập nhật repo sạch cùng nhánh; bộ cài từ chối trộn script không tương thích |
 | Thiếu upscaler anime | `--only extras`; lỗi upscaler là cảnh báo, bộ dựng prompt chọn scaler đang có |
+
+### “No interface is running right now” khi mở lại link
+
+Đây là **trang của relay `gradio.live`**, không phải lỗi của Forge hay bản cài: tunnel còn
+sống nhưng không còn app nào đăng ký phía sau. Thường gặp khi Colab ngắt/khởi động lại
+runtime, Forge crash rồi được bật lại, hoặc phiên ngồi lâu — link share chỉ sống khoảng
+**10 phút đến vài giờ** rồi tự hết hạn. Mỗi lần launch lại, Gradio sinh một link **mới**;
+link cũ vĩnh viễn hỏng nên đừng lưu bookmark.
+
+Trang relay trả **HTTP 200**, vì vậy chỉ nhìn mã HTTP sẽ tưởng link còn sống. Dùng đúng
+bộ lệnh sau để biết chắc:
+
+```bash
+# 1) Forge còn chạy? link public hiện tại là gì? (tự phân loại link sống/chết)
+bash /content/install.sh --status
+
+# 2) Nếu link chết hoặc đã đổi: launch lại để lấy link mới
+bash /content/install.sh --only launch,verify --restart
+
+# 3) Chỉ muốn kiểm tra một link cụ thể (không in nội dung trang)
+python3 /content/colab/diagnostics.py --check-url https://xxxx.gradio.live
+#   exit 0 = Gradio sống · 3 = relay hết hạn ("No interface is running") · 4 = lỗi mạng/DNS/tunnel
+```
+
+| Dấu hiệu | Nghĩa | Việc cần làm |
+|---|---|---|
+| `--status` báo **API đang chạy** + **Link public ĐÃ CHẾT** | Forge tốt, tunnel hết hạn | `--only launch,verify --restart`, mở link mới; trong lúc chờ dùng `http://127.0.0.1:7860` |
+| `--status` báo **Forge chưa phản hồi** | Process chết | `--only launch,verify --restart`; vẫn hỏng thì xem `--doctor` |
+| `--check-url` → `loai: gradio_song` | Link sống thật | Vào lại bằng đúng link đó (link `127.0.0.1` chỉ dùng trong Colab) |
+| `--check-url` → `loai: html_khac` | Tunnel trỏ sai dịch vụ | `--tunnel cloudflared --only launch,verify --restart` |
+| Link chết lặp lại nhiều lần trong ngày | `share` không hợp phiên dài | Chuyển hẳn `--tunnel cloudflared` (cũng đổi link mỗi lần restart) |
+
+Lưu ý: `--status` chỉ đọc trạng thái, không khởi động lại gì; còn `--only launch --restart`
+sẽ **ngắt** phiên Forge đang chạy (job đang sinh ảnh sẽ mất) — đợi ảnh xong hoặc chấp nhận
+mất job. Sau reconnect Colab, luôn chạy lại `--status` trước khi gửi link cho người khác.
 
 Link public có thể cho người biết link truy cập UI/API và dùng GPU của bạn. Không chia sẻ
 link công khai; dừng runtime khi dùng xong. Negative prompt không đảm bảo loại bỏ mọi

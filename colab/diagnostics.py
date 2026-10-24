@@ -128,6 +128,127 @@ def ui_transport(base):
     return {path: http_status(base, path) for path in ("/", "/config", "/info?all_endpoints=True")}
 
 
+# Trang relay của gradio.live trả HTTP 200 nhưng nội dung là "No interface is running right now"
+# (khi tunnel còn sống mà app local đã chết/chưa đăng ký). Vì status 200 nên phải đọc **phân
+# loại** của trang, không thể chỉ nhìn mã HTTP. Không bao giờ in nội dung trang.
+SHARE_DEAD_MARKERS = (
+    "no interface is running right now",
+    "no blocks has been configured for this app",
+    "interface is not running",
+)
+GRADIO_MARKERS = (
+    "<gradio-app",
+    "window.gradio_config",
+    'id="gradio"',
+    "/gradio/",
+    "gradio/api",
+)
+
+PAGE_HINTS = {
+    "gradio_song": "Trang Gradio trả về bình thường.",
+    "share_het": ("Relay còn sống nhưng app local đã chết hoặc chưa đăng ký với tunnel "
+                  "(trang 'No interface is running right now'). Link này không dùng được nữa."),
+    "html_khac": ("Trả HTML nhưng không phải Gradio — có thể là trang lỗi của proxy/tunnel "
+                  "hoặc dịch vụ khác đang chiếm cổng."),
+    "khong_phai_html": "Trả nội dung không phải HTML (JSON/text) — không phải trang giao diện.",
+    "loi": "Không kết nối được để đọc trang.",
+}
+
+
+def page_kind(base, timeout=8):
+    """Đọc `/` (tối đa 256 KiB) và phân loại trang: `gradio_song`, `share_het`, `html_khac`…
+
+    Chỉ trả về mã HTTP + loại trang + gợi ý. Không trả body, header hay bất kỳ chuỗi nào
+    của người dùng, nên an toàn để in trong log/chẩn đoán.
+    """
+    def result(kind, **extra):
+        data = {"loai": kind, "goi_y": PAGE_HINTS.get(kind, "")}
+        data.update(extra)
+        return data
+
+    try:
+        opener = urllib.request.build_opener(_NoRedirect)
+        request = urllib.request.Request(base.rstrip("/") + "/",
+                                         headers={"User-Agent": "wai-readonly-ui-diagnostics"})
+        with opener.open(request, timeout=timeout) as response:
+            status = response.status
+            raw = response.read(256 * 1024)
+            content_type = (response.headers.get("Content-Type") or "").lower()
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        exc.close()
+        return result("loi", http=code)
+    except (OSError, ValueError) as exc:
+        reason = getattr(exc, "reason", exc)
+        kind = "network_unknown"
+        if isinstance(reason, socket.gaierror):
+            kind = "dns"
+        elif isinstance(reason, ssl.SSLCertVerificationError):
+            kind = "tls_certificate"
+        elif isinstance(reason, ssl.SSLError):
+            kind = "tls"
+        elif isinstance(reason, (TimeoutError, socket.timeout)):
+            kind = "timeout"
+        elif isinstance(reason, ConnectionRefusedError):
+            kind = "connection_refused"
+        return result("loi", http=0, loai_loi=kind)
+
+    text = raw.decode("utf-8", errors="replace").lower()
+    if any(marker in text for marker in SHARE_DEAD_MARKERS):
+        return result("share_het", http=status)
+    if any(marker in text for marker in GRADIO_MARKERS):
+        return result("gradio_song", http=status)
+    if "html" in content_type or text.lstrip().startswith("<"):
+        return result("html_khac", http=status)
+    return result("khong_phai_html", http=status)
+
+
+def ui_verdict(local, public=None, port=7860):
+    """Kết luận + việc cần làm dựa trên kết quả `page_kind`.
+
+    `local`/`public` là dict của `page_kind` (hoặc None). Trả list dòng tiếng Việt.
+    """
+    lines = []
+    local_kind = (local or {}).get("loai")
+    public_kind = (public or {}).get("loai")
+
+    if local_kind == "gradio_song":
+        lines.append(f"✅ Forge local (`127.0.0.1:{port}`) đang chạy và trả trang Gradio bình thường.")
+    elif local_kind == "share_het":
+        lines.append("⚠️ Ngay cả link local cũng trả trang 'No interface is running right now' — "
+                     "tiến trình Gradio chưa đăng ký giao diện (launch lỗi hoặc đang khởi động lại).")
+    elif local_kind == "loi":
+        detail = (local or {}).get("loai_loi") or (local or {}).get("http")
+        lines.append(f"❌ Không mở được Forge local (`127.0.0.1:{port}`, {detail}). Forge chưa chạy "
+                     "hoặc đã chết: `bash /content/install.sh --only launch,verify --restart`.")
+    elif local_kind:
+        lines.append(f"🟡 Link local trả `{local_kind}` — xem `--diagnostics` để biết chi tiết.")
+
+    if public is None:
+        return lines
+    if public_kind == "gradio_song":
+        lines.append("✅ Link public đang trỏ đúng giao diện.")
+    elif public_kind == "share_het":
+        lines.append("❌ **Link public đã chết** (đúng lỗi 'No interface is running right now'): "
+                     "relay `gradio.live` còn sống nhưng app local đã khởi động lại hoặc đã chết, "
+                     "nên tunnel không còn nối vào giao diện nào.")
+        if local_kind == "gradio_song":
+            lines.append("👉 Forge vẫn chạy: dùng `http://127.0.0.1:%d` (hoặc IP LAN) trong lúc này, "
+                         "rồi tạo link mới bằng `bash /content/install.sh --only launch,verify --restart`."
+                         % port)
+            lines.append("   Mỗi lần restart, link `gradio.live` **đổi** — link cũ vĩnh viễn hỏng, "
+                         "đừng lưu bookmark.")
+        else:
+            lines.append("👉 Chạy `bash /content/install.sh --only launch,verify --restart` rồi lấy "
+                         "link mới trong output; nếu vẫn hỏng, đổi `TUNNEL=cloudflared`.")
+    elif public_kind == "loi":
+        lines.append("❌ Không mở được link public (mạng/DNS/tunnel). Xem `--diagnostics`; "
+                     "thử `TUNNEL=cloudflared` nếu `gradio.live` bị chặn.")
+    elif public_kind:
+        lines.append(f"🟡 Link public trả `{public_kind}` — tunnel có thể đang trỏ sai dịch vụ.")
+    return lines
+
+
 def traceback_summary(path):
     """Đọc tối đa 256 KiB cuối log; chỉ xuất loại exception/stack, bỏ source/message."""
     path = Path(path)
@@ -304,9 +425,16 @@ print(json.dumps({'python':sys.version,'packages':packages}))'''
         api["checkpoint_ui_initial_config"] = {"loi": str(exc)}
     report["api"] = api
     report["ui_transport_local"] = ui_transport(base)
-    report["optional_assets"] = optional_assets(base)
+    # HTTP 200 chưa đủ: trang relay "No interface is running right now" cũng là 200.
+    local_page = page_kind(base)
+    report["ui_page_local"] = local_page
+    public_page = None
     if public_url:
         report["ui_transport_public"] = ui_transport(public_url)
+        public_page = page_kind(public_url)
+        report["ui_page_public"] = public_page
+    report["ket_luan_ui"] = ui_verdict(local_page, public_page, port)
+    report["optional_assets"] = optional_assets(base)
     if runtime_dir is not None:
         report["graphics_env"] = process_graphics_env(forge, runtime_dir)
         report["forge_log_errors"] = traceback_summary(Path(runtime_dir) / "forge.log")
@@ -323,7 +451,20 @@ def main():
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--runtime-dir", default="/content", help="Thư mục chứa forge.log; chỉ lấy stack đã lọc")
     parser.add_argument("--public-url", default="", help="Tùy chọn: so sánh status tunnel với local; không in body/auth/prompt")
+    parser.add_argument("--check-url", default="",
+                        help="Chỉ phân loại trang của một URL (gradio sống / relay hết hạn / lỗi), in JSON; "
+                             "mã thoát 0=Gradio sống, 3=relay báo 'No interface', 4=lỗi/khác")
     args = parser.parse_args()
+    if args.check_url:
+        try:
+            target = validate_public_url(args.check_url)
+        except ValueError:
+            # Link local (127.0.0.1) không qua validate_public_url, dùng thẳng.
+            target = args.check_url.rstrip("/")
+        info = page_kind(target)
+        print(json.dumps(info, ensure_ascii=False))
+        return 0 if info.get("loai") == "gradio_song" else (
+            3 if info.get("loai") == "share_het" else 4)
     try:
         public_url = validate_public_url(args.public_url)
     except ValueError as exc:
@@ -339,4 +480,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

@@ -854,8 +854,39 @@ stage_status() {
   info "Biến thể: $MODEL_ID · model dir: $MODEL_DIR · Forge: $FORGE_DIR"
   if [[ -d "$MODEL_DIR" ]]; then find "$MODEL_DIR" -maxdepth 1 -name '*.safetensors*' -printf '  %f (%s byte)\n'; fi
   if api_ready; then
-    ok "API đang chạy ở cổng $PORT"; info "Link public: $(public_link)"
+    local link
+    link="$(public_link)"
+    ok "API đang chạy ở cổng $PORT"
+    if [[ -n "$link" ]]; then
+      info "Link public: $link"
+      check_public_link "$link"
+    else
+      warn "Không tìm thấy link public (log: $FORGE_DIR/forge.log / cloudflared.log)."
+      info "Link local: http://127.0.0.1:$PORT"
+    fi
   else info "Forge chưa phản hồi ở cổng $PORT"; fi
+  return 0
+}
+
+# Link gradio.live có thể chết trong khi API local vẫn tốt: relay trả HTTP 200 kèm trang
+# "No interface is running right now". Chỉ in cảnh báo + cách xử lý, không in nội dung trang.
+check_public_link() {
+  local url="$1" rc
+  [[ -f "$REPO_DIR/colab/diagnostics.py" ]] || return 0
+  if "$PY_BIN" "$REPO_DIR/colab/diagnostics.py" --check-url "$url" >/dev/null 2>&1; then
+    return 0
+  else
+    rc=$?
+  fi
+  if [[ "$rc" == "3" ]]; then
+    warn "Link public ĐÃ CHẾT: mở lên sẽ thấy «No interface is running right now»."
+    warn "Nguyên nhân: relay còn sống nhưng app local đã restart/chưa đăng ký; mỗi lần restart link lại đổi."
+    info "Forge vẫn dùng được: http://127.0.0.1:$PORT"
+    info "Lấy link mới: bash $REPO_DIR/colab/install.sh --only launch,verify --restart"
+    info "Ổn định hơn cho Colab: TUNNEL=cloudflared bash $REPO_DIR/colab/install.sh --only launch --restart"
+  elif [[ "$rc" == "4" ]]; then
+    warn "Chưa mở được link public (mạng/DNS/tunnel) — link local vẫn dùng được: http://127.0.0.1:$PORT"
+  fi
   return 0
 }
 stage_doctor() {

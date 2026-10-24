@@ -175,6 +175,57 @@ ValueError: private prompt and token MUST_NOT_APPEAR
         self.assertNotIn("PRIVATE", json.dumps(result))
         self.assertEqual(diag._backend_category("module://PRIVATE"), "backend_khac_da_an")
 
+    def test_09_page_kind_separates_live_gradio_from_dead_share_relay(self):
+        # Relay gradio.live trả 200 + trang "No interface is running right now"; nếu chỉ nhìn
+        # mã HTTP thì tưởng link còn sống. Test này ghim lại phân loại + không rò nội dung.
+        html = {
+            "live": "<html><head></head><body><gradio-app>PRIVATE_TITLE</gradio-app></body></html>",
+            "dead": "<html><body><h1>No interface is running right now</h1>PRIVATE_BODY</body></html>",
+            "other": "<html><body>502 Bad Gateway PRIVATE_BODY</body></html>",
+        }
+        for name, expected in (("live", "gradio_song"), ("dead", "share_het"), ("other", "html_khac")):
+            with patch.object(diag.urllib.request, "build_opener") as opener:
+                response = opener.return_value.open.return_value.__enter__.return_value
+                response.status = 200
+                response.headers = {"Content-Type": "text/html; charset=utf-8"}
+                response.read.return_value = html[name].encode()
+                result = diag.page_kind(self.base)
+            self.assertEqual(result["loai"], expected, name)
+            self.assertEqual(result["http"], 200)
+            self.assertNotIn("PRIVATE", json.dumps(result), name)
+
+    def test_10_ui_verdict_gives_recovery_when_public_link_is_dead(self):
+        live = {"loai": "gradio_song", "http": 200}
+        dead = {"loai": "share_het", "http": 200}
+        broken = {"loai": "loi", "http": 0, "loai_loi": "dns"}
+        text = "\n".join(diag.ui_verdict(live, dead, 7860))
+        self.assertIn("Link public đã chết", text)
+        self.assertIn("127.0.0.1:7860", text)
+        self.assertIn("--restart", text)
+        self.assertIn("gradio.live", text)
+        text = "\n".join(diag.ui_verdict(live, live, 7860))
+        self.assertIn("Link public đang trỏ đúng giao diện", text)
+        text = "\n".join(diag.ui_verdict(broken, broken, 7860))
+        self.assertIn("Không mở được Forge local", text)
+        self.assertIn("cloudflared", "\n".join(diag.ui_verdict(broken, dead, 7860)))
+        # Khi local chết thì không được khuyên mở 127.0.0.1 như thể nó sống.
+        self.assertNotIn("Forge vẫn chạy", "\n".join(diag.ui_verdict(broken, dead, 7860)))
+
+    def test_11_collect_records_page_kind_and_verdict(self):
+        with patch.object(diag, "_run", return_value=""), \
+                patch.object(diag, "api_json", return_value={"models": []}), \
+                patch.object(diag, "ui_transport", return_value={"/": {"http": 200}}), \
+                patch.object(diag, "optional_assets", return_value={}), \
+                patch.object(diag, "page_kind", side_effect=[{"loai": "gradio_song", "http": 200},
+                                                             {"loai": "share_het", "http": 200}]), \
+                patch.object(diag, "process_graphics_env", return_value={}), \
+                patch.object(diag, "traceback_summary", return_value={}):
+            report = diag.collect(self.root, self.root, self.root, "", self.root, 7860,
+                                  public_url="https://abc-123.gradio.live")
+        self.assertEqual(report["ui_page_local"]["loai"], "gradio_song")
+        self.assertEqual(report["ui_page_public"]["loai"], "share_het")
+        self.assertIn("Link public đã chết", "\n".join(report["ket_luan_ui"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

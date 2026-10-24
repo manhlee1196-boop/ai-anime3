@@ -28,6 +28,8 @@ Colab: `python3 colab/prompt_builder.py --demo`.
 cộng đồng (thử nghiệm), chọn thư mục, kiểm SHA256, tải tiếp và chẩn đoán lỗi.
 Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
+> **Mở lại link báo “No interface is running right now”?** Đó là trang của relay `gradio.live`, không phải Forge hỏng: link share hết hạn sau khoảng 10 phút–vài giờ, hoặc runtime Colab vừa restart nên Forge đã tạo link mới. Chạy `bash /content/install.sh --status` (báo link còn sống hay đã chết), rồi `bash /content/install.sh --only launch,verify --restart` và mở **link mới nhất**. [Chi tiết + bảng chẩn đoán](colab/INSTALL.md#no-interface-is-running-right-now-khi-mở-lại-link).
+
 > **Bộ cài 1.0.7:** thêm **Ảnh đã tạo** trong Prompt VN và app: bảng + thumbnail phân trang, xem/tải ảnh gốc, dùng lại seed. Lịch sử ở SQLite trên đĩa, không gom toàn bộ PIL/base64 vào RAM; ảnh gốc/metadata giữ nguyên. [Cập nhật chỉ phần mềm](colab/INSTALL.md#bảng-ảnh-đã-tạo-107).
 
 > **Bộ cài 1.0.6:** cài mới mặc định **Gradio share** (`gradio.live`), Cloudflare vẫn chọn được. Người dùng báo ảnh mở nhanh hơn/chưa lặp lại lỗi HTML→JSON sau khi đổi tunnel; không sửa model/chất lượng ảnh. Phiên Gradio share đang ổn **không cần restart/cài lại**. [Hướng dẫn tunnel](colab/INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106).

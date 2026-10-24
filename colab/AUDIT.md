@@ -323,7 +323,7 @@ preset model khác không bị xóa. Model, ảnh, venv, repo và thay đổi lo
 
 | Bộ kiểm tra | Kết quả / phạm vi |
 |---|---|
-| `test_install_sh.py` | **95/95** kiểm tra; downloader/checksum thật với safetensors nhỏ/HTTP cục bộ, lifecycle stub, resume/cache/exit code/tokens/notebook |
+| `test_install_sh.py` | **123/123** kiểm tra; downloader/checksum thật với safetensors nhỏ/HTTP cục bộ, lifecycle stub, resume/cache/exit code/tokens/notebook, phân loại link public sống/hết hạn (`diagnostics --check-url`, `verify_public_link`) |
 | `test_checkpoint_flow.py` | **16 nhóm đạt**, có subtests: container hỏng, .part, alias/collision/ownership, backup, profile HSWQ, chuẩn bị launch thật, registry/preset/API/PNG, diagnostics chỉ đọc, stale buddy và nâng repo cũ |
 | Mã upstream | Chạy lại hồi quy cùng hàm guard UID, preset, scanner và selector nguyên bản từ revision Forge nêu trên; **không import toàn engine** |
 | `test_prompt_lib.py` | **16 nhóm đạt**: index, tra tiếng Việt/alias, nhóm, negative, cấu trúc prompt, profile model/payload, 16 style Forge (4 mức phân loại + 12 phong cách), độ dài prompt (token/cửa sổ 75, nén tag trùng nghĩa) |

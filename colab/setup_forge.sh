@@ -694,8 +694,43 @@ stage_launch_bg() {
       sleep 2
     done
     [[ -n "$pub" ]] || die "Forge sẵn sàng nhưng chưa có Gradio share link. Thử TUNNEL=cloudflared."
+    verify_public_link "$pub"
   fi
   ok "API Forge đã phản hồi ở cổng $PORT."
+  info "Link local (dùng khi tunnel chết): http://127.0.0.1:$PORT"
+}
+
+# Tunnel gradio.live có thể sống trước khi app local đăng ký xong -> trang
+# "No interface is running right now" dù HTTP 200. Kiểm tra bằng diagnostics (chỉ phân
+# loại trang, không đọc/in nội dung) rồi báo rõ thay vì để người dùng gặp lỗi sau đó.
+verify_public_link() {
+  local url="$1" verdict rc attempt
+  [[ -f "$REPO_DIR/colab/diagnostics.py" ]] || return 0
+  for attempt in 1 2 3 4 5 6; do
+    # Bắt mã thoát thật: `|| true` sẽ luôn trả 0 và làm hỏng việc phân nhánh bên dưới.
+    if verdict=$("$PY" "$REPO_DIR/colab/diagnostics.py" --check-url "$url" 2>/dev/null); then
+      rc=0
+    else
+      rc=$?
+    fi
+    if [[ "$rc" == "0" ]]; then ok "Link public đã trỏ đúng giao diện Gradio."; return 0; fi
+    if [[ "$rc" == "3" ]]; then
+      # Relay sống nhưng app chưa đăng ký: chờ thêm và thử lại.
+      sleep 5
+      continue
+    fi
+    break
+  done
+  if [[ "${rc:-}" == "3" ]]; then
+    warn "Link này đang hiện «No interface is running right now»: relay gradio.live sống nhưng"
+    warn "app local chưa đăng ký. Forge vẫn dùng được ở http://127.0.0.1:$PORT."
+    warn "Chờ ~15s rồi mở lại link, hoặc restart để lấy link mới:"
+    warn "  bash $REPO_DIR/colab/install.sh --only launch,verify --restart"
+    warn "Nếu lặp lại, đổi TUNNEL=cloudflared (link trycloudflare ổn định hơn với Colab)."
+    return 1
+  fi
+  warn "Chưa kiểm tra được link public (${verdict:-không có kết quả}). Link local vẫn dùng được."
+  return 1
 }
 
 # ------------------------------------------------------------------- all
