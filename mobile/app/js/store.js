@@ -105,7 +105,8 @@ function tx(db, mode) {
 
 /**
  * Thêm một ảnh vào thư viện.
- * `record` = {id, dataUrl, prompt, negative, seed, info, params, createdAt}
+ * `record` = {id, blob, name, mime, prompt, negative, seed, info, params, createdAt}
+ * Bản cũ có dataUrl vẫn đọc được; bản mới lưu Blob để tránh base64 trong RAM.
  */
 export async function addImage(record) {
   const item = {

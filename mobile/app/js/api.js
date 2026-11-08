@@ -1,13 +1,12 @@
 /**
  * Gọi API của Forge Neo / A1111 từ điện thoại.
  *
- * Ba việc quan trọng mà bản web hay làm sai, ở đây làm đúng:
- * 1. `POST /sdapi/v1/txt2img` là **đồng bộ** — Forge chỉ trả lời khi ảnh xong. Vì vậy
- *    request chạy song song với việc đọc `/sdapi/v1/progress`, không có timeout cứng
- *    kiểu 30 giây (ảnh Hires trên T4 mất 3–6 phút là bình thường).
- * 2. **Huỷ** gọi `/sdapi/v1/interrupt` rồi bỏ request, để không mất GPU slot.
- * 3. Lỗi được dịch sang việc cần làm (tiếng Việt) thay vì "Failed to fetch".
- */
+ * Ba nguyên tắc của transport mobile:
+ * 1. `POST /vi-mobile/api/jobs` trả job_id ngay; poll trạng thái và tiến trình song song,
+ *    không giữ request trong suốt thời gian GPU chạy và không POST lại khi mất kết nối.
+ * 2. Manifest chỉ chứa metadata; ảnh tải bằng signed URL/local Range thành Blob. Retry
+ *    download độc lập với generation; Huỷ gọi DELETE đúng job_id.
+ * 3. Lỗi được dịch sang việc cần làm (tiếng Việt) thay vì "Failed to fetch". */
 
 import { apiUrl, explainError, normalizeBaseUrl } from './core.js';
 
@@ -18,19 +17,16 @@ const PROGRESS_PATHS = [
   { path: 'internal/progress', method: 'POST', body: { skip_current_image: true } },
 ];
 const PING_PATHS = ['sdapi/v1/options', 'sdapi/v1/cmd-flags'];
-// API do extension Anime3 cung cấp: cùng handler txt2img nhưng nén PNG → JPEG trước
-// khi gửi qua tunnel. Health được đọc TRƯỚC khi tạo job; sau POST txt2img tuyệt đối
-// không đổi endpoint, kể cả 404/5xx, vì job lúc đó có thể đã bắt đầu.
-const GENERATION_PATHS = ['vi-mobile/api/txt2img', 'sdapi/v1/txt2img'];
+// Luồng duy nhất: job nền có id + manifest + file binary. Không fallback base64.
+const JOB_API_ROOT = 'vi-mobile/api';
 
 /** Lỗi có thông điệp tiếng Việt + mã HTTP (0 = lỗi mạng). */
 export class ForgeError extends Error {
-  constructor(message, { status = 0, body = '', incomplete = false } = {}) {
+  constructor(message, { status = 0, body = '' } = {}) {
     super(message);
     this.name = 'ForgeError';
     this.status = status;
     this.body = body;
-    this.incomplete = incomplete;
   }
 }
 
@@ -111,7 +107,7 @@ export class ForgeClient {
     } catch (error) {
       clearTimeout(timer);
       if (signal?.aborted) throw cancelledError();
-      // Header có thể là 200 nhưng thân JSON chứa ảnh bị đứt giữa chừng.
+      // Header có thể là 200 nhưng thân JSON bị đứt giữa chừng.
       throw new ForgeError(explainError(0), {
         status: 0,
         body: `Mất kết nối khi đọc nội dung phản hồi: ${String(error?.message || error)}`,
@@ -126,23 +122,12 @@ export class ForgeClient {
     try {
       return JSON.parse(text);
     } catch (error) {
-      // Một số WebView/proxy trả text đã cắt thay vì reject response.text(). Chỉ xem là
-      // response ảnh đứt khi đúng route txt2img và phần đầu đã có trường images; HTML
-      // của tunnel hết hạn vẫn phải báo lỗi ngay, không chờ khôi phục ba phút.
-      const incomplete = GENERATION_PATHS.includes(path)
-        && /^\s*\{\s*"images"\s*:/.test(text);
       throw new ForgeError(
-        incomplete
-          ? 'Nội dung ảnh bị cắt giữa chừng — đang thử lấy lại kết quả từ Forge.'
-          : 'Máy chủ trả về HTML thay vì JSON — thường là link tunnel đã hết hạn hoặc '
-            + 'Forge chưa bật --api.',
-        {
-          status: incomplete ? 0 : response.status,
-          body: text.slice(0, 300),
-          incomplete,
-        });
+        'Máy chủ trả về HTML thay vì JSON — thường là link tunnel đã hết hạn hoặc '
+        + 'Forge chưa bật --api.', { status: response.status, body: text.slice(0, 300) });
     }
   }
+
 
   /** Kiểm tra kết nối + lấy thông tin model/flag. */
   async ping() {
@@ -212,7 +197,7 @@ export class ForgeClient {
         body: { skip_current_image: true }, optional: true,
       },
       {
-        path: 'vi-mobile/api/health', method: 'GET', label: 'Ảnh nén cho điện thoại',
+        path: 'vi-mobile/api/health', method: 'GET', label: 'Job nền & file stream',
         optional: true,
       },
     ];
@@ -226,9 +211,17 @@ export class ForgeClient {
         const detail = check.path.endsWith('options')
           ? String(data?.sd_model_checkpoint || '(không rõ model)').split(/[\\/]/).pop()
           : check.path === 'vi-mobile/api/health'
-            ? `${String(data?.image_format || 'ảnh nén').toUpperCase()} · giảm dung lượng qua tunnel`
+            ? data?.async_jobs
+              ? `Job nền · ${data?.object_storage?.configured ? 'S3/R2' : 'file local'}`
+              : 'Cần cập nhật Colab để dùng job nền'
             : Array.isArray(data) ? `${data.length} mục` : 'Phản hồi JSON hợp lệ';
-        return { ...check, ok: true, status: 200, detail };
+        return {
+          ...check,
+          ok: true,
+          status: 200,
+          detail,
+          asyncJobs: check.path === 'vi-mobile/api/health' ? Boolean(data?.async_jobs) : undefined,
+        };
       } catch (error) {
         return {
           ...check,
@@ -241,13 +234,13 @@ export class ForgeClient {
     const anyOk = out.some((item) => item.ok);
     const hasApi = Boolean(out.find((item) => item.path === 'sdapi/v1/options')?.ok);
     const hasProgress = out.some((item) => item.path.endsWith('progress') && item.ok);
-    const hasCompactApi = Boolean(out.find((item) => item.path === 'vi-mobile/api/health')?.ok);
+    const hasAsyncJobs = Boolean(out.find((item) => item.path === 'vi-mobile/api/health')?.asyncJobs);
     return {
       base: this.base || '(cùng origin với trang)',
       anyOk,
       hasApi,
       hasProgress,
-      hasCompactApi,
+      hasAsyncJobs,
       checks: out,
     };
   }
@@ -262,200 +255,217 @@ export class ForgeClient {
     }
   }
 
-  /**
-   * Sinh ảnh: POST txt2img + đọc tiến trình song song.
-   * Trả về `{images, info}`; `images` là data URL dùng ngay được trong <img>.
-   */
+  /** Tạo job nền và trả Blob tải từ manifest; không gửi/nhận ảnh base64. */
   async txt2img(payload, {
     onProgress = null,
-    onRecover = null,
+    onJob = null,
+    onDownload = null,
     interval = 1500,
-    recoveryTimeout = 180000,
+    timeout = 3600000,
     signal = null,
+    idempotencyKey = '',
   } = {}) {
-    const controller = new AbortController();
-    const merged = combineSignals([controller.signal, signal]);
-    let finished = false;
-    let latestInfo = null;
-    let latestPreview = null;
-    let previewRequested = false;
+    const merged = combineSignals([signal]);
     const started = Date.now();
-    const poll = async () => {
+    const deadline = started + timeout;
+    let finished = false;
+    let downloading = false;
+    let jobId = '';
+    const polling = (async () => {
       while (!finished) {
-        await new Promise((resolve) => setTimeout(resolve, interval));
-        if (finished) break;
+        await abortableSleep(interval, merged);
+        if (finished || downloading) continue;
         try {
           const info = await this.progress({ signal: merged, timeout: 6000 });
-          latestInfo = info;
           if (onProgress) onProgress(info, Math.round((Date.now() - started) / 1000));
-          // Chỉ tải preview một lần gần cuối, tránh gửi base64 lớn trong mọi lượt poll.
-          if (!previewRequested && info.progress >= 0.9) {
-            previewRequested = true;
-            const preview = await this.progressImage({ signal: merged });
-            if (preview?.image) latestPreview = preview;
-          }
         } catch (error) {
-          if (finished) break;
+          if (merged.aborted) break;
+          // Lỗi đọc tiến trình không được làm hỏng job hoặc tạo job mới.
         }
       }
-    };
-    const polling = poll();
+    })();
 
-    let data;
-    let requestError = null;
     try {
-      let generationPath = GENERATION_PATHS[1];
-      try {
-        const health = await this.request('vi-mobile/api/health', {
-          timeout: 7000,
-          signal: merged,
-        });
-        if (health?.ok && health?.txt2img_available !== false) {
-          generationPath = GENERATION_PATHS[0];
-        }
-      } catch (error) {
-        if (error?.name === 'AbortError') throw error;
-        // Extension cũ hoặc health không khả dụng: chọn API chuẩn TRƯỚC khi có job.
+      const health = await this.request(`${JOB_API_ROOT}/health`, {
+        timeout: 8000, signal: merged,
+      });
+      if (!health?.async_jobs) {
+        throw new ForgeError(
+          'Colab chưa có job API mới. Chạy lại notebook một ô để cập nhật extension; '
+          + 'app sẽ không dùng lại API base64 cũ.', { status: 409 },
+        );
       }
-      data = await this.request(generationPath, {
+      const key = idempotencyKey || makeIdempotencyKey();
+      const created = await this.request(`${JOB_API_ROOT}/jobs`, {
         method: 'POST',
-        body: payload,
-        timeout: 3600000,          // 60 phút: không phải timeout ảnh
+        body: { payload, idempotency_key: key },
+        timeout: 20000,
         signal: merged,
       });
-    } catch (error) {
-      requestError = error;
+      jobId = String(created?.job_id || '');
+      if (!jobId) throw new ForgeError('Máy chủ không trả job_id.', { status: 202 });
+      if (onJob) onJob({ ...created, job_id: jobId, idempotency_key: key });
+
+      let failedStatusReads = 0;
+      while (Date.now() < deadline) {
+        if (merged.aborted) throw cancelledError();
+        let job;
+        try {
+          job = await this.request(`${JOB_API_ROOT}/jobs/${jobId}`, {
+            timeout: 10000, signal: merged,
+          });
+          failedStatusReads = 0;
+        } catch (error) {
+          if (merged.aborted || error?.name === 'AbortError') throw cancelledError();
+          failedStatusReads += 1;
+          if (failedStatusReads >= 5) throw error;
+          await abortableSleep(interval, merged);
+          continue;
+        }
+        if (job?.status === 'done') break;
+        if (job?.status === 'error') {
+          throw new ForgeError(`Job tạo ảnh thất bại: ${job.error || 'lỗi không rõ'}`, {
+            status: 500, body: String(job.error || ''),
+          });
+        }
+        if (job?.status === 'cancelled') throw cancelledError();
+        await abortableSleep(interval, merged);
+      }
+      if (Date.now() >= deadline) {
+        throw new ForgeError('Đã chờ job quá lâu; dùng job_id để kiểm tra lại, không tạo job mới.', {
+          status: 0, body: jobId,
+        });
+      }
+
+      const manifest = await this.request(`${JOB_API_ROOT}/jobs/${jobId}/result`, {
+        timeout: 15000, signal: merged,
+      });
+      const files = Array.isArray(manifest?.files) ? manifest.files : [];
+      if (!files.length) throw new ForgeError('Manifest không có file ảnh.', { status: 200 });
+      downloading = true;
+      const images = [];
+      for (let index = 0; index < files.length; index += 1) {
+        const blob = await this.downloadFile(files[index], {
+          signal: merged,
+          onProgress: (progress) => {
+            if (onDownload) onDownload({ ...progress, index, count: files.length, jobId });
+          },
+        });
+        images.push(blob);
+      }
+      return {
+        images,
+        info: manifest.info || {},
+        elapsed: Math.round((Date.now() - started) / 1000),
+        jobId,
+        storageWarning: manifest.storage_warning || '',
+      };
     } finally {
       finished = true;
       await polling;
     }
-
-    if (requestError) {
-      // Huỷ là thao tác chủ động: không chờ khôi phục và không hiện ảnh sau Huỷ.
-      // (Kiểm tra cả signal vì WebView có thể gói AbortError thành lỗi mạng.)
-      if (merged.aborted || requestError?.name === 'AbortError') throw requestError;
-      const recoverable = requestError?.incomplete
-        || [0, 502, 503, 504].includes(Number(requestError?.status));
-      if (!recoverable) throw requestError;
-      if (onRecover) onRecover();
-      // Không POST lại: Forge có thể đã xong hoặc vẫn đang chạy, POST lại sẽ nhân đôi job.
-      const recovered = await this.recoverGeneratedImage({
-        previousInfo: latestInfo,
-        previousImage: latestPreview,
-        signal: merged,
-        timeout: recoveryTimeout,
-      });
-      if (recovered) {
-        const info = {
-          prompt: payload.prompt || '',
-          negative_prompt: payload.negative_prompt || '',
-          width: payload.width,
-          height: payload.height,
-          steps: payload.steps,
-          sampler_name: payload.sampler_name,
-          cfg_scale: payload.cfg_scale,
-          recovered_from_progress: true,
-        };
-        if (Number(payload.seed) >= 0) info.seed = Number(payload.seed);
-        return {
-          images: [toDataUrl(recovered.image)],
-          info,
-          elapsed: Math.round((Date.now() - started) / 1000),
-          recovered: true,
-        };
-      }
-      if (Number(requestError?.status) === 0) {
-        throw new ForgeError(
-          'Mất kết nối khi tải ảnh kết quả. API vẫn hoạt động nhưng gói ảnh lớn bị đứt. '
-          + 'Job có thể đã xong; không tạo lại ngay. Kiểm tra output của Forge, rồi tắt Hires '
-          + 'hoặc giảm kích thước trước khi thử lại.',
-          { status: 0, body: requestError.body || '' },
-        );
-      }
-      throw requestError;
-    }
-
-    const images = Array.isArray(data?.images) ? data.images.filter(Boolean) : [];
-    if (!images.length) {
-      throw new ForgeError('Forge không trả ảnh nào — kiểm tra forge.log.', { status: 200 });
-    }
-    return {
-      images: images.map(toDataUrl),
-      info: parseInfo(data.info),
-      elapsed: Math.round((Date.now() - started) / 1000),
-    };
   }
 
-  /** Đọc preview cuối từ progress sau khi response txt2img bị đứt; không tạo job mới. */
-  async recoverGeneratedImage({
-    previousInfo = null, previousImage = null, signal = null, timeout = 180000,
-  } = {}) {
-    if (signal?.aborted) return null;
-    if (previousImage?.image && Number(previousInfo?.progress) >= 0.9) return previousImage;
-    const deadline = Date.now() + timeout;
-    let sawJob = Boolean(previousInfo && (previousInfo.jobCount > 0 || previousInfo.progress > 0));
-    let failedRounds = 0;
-    while (Date.now() < deadline && !signal?.aborted) {
-      const snapshot = await this.progressImage({ signal });
-      if (!snapshot) {
-        failedRounds += 1;
-        if (failedRounds >= 2) return null;
-      } else {
-        failedRounds = 0;
-        const { info, image } = snapshot;
-        sawJob = sawJob || info.jobCount > 0 || info.progress > 0;
-        const nearFinal = info.progress >= 0.85 || Number(previousInfo?.progress) >= 0.85;
-        const finished = sawJob && info.jobCount === 0 && info.progress === 0;
-        if (image && (nearFinal || finished)) return { image, info };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-    }
-    return null;
+  /** Huỷ đúng job; server chỉ interrupt job đang chạy, bỏ queued job khỏi worker. */
+  async cancelJob(jobId, { signal = null } = {}) {
+    return this.request(`${JOB_API_ROOT}/jobs/${jobId}`, {
+      method: 'DELETE', timeout: 8000, signal,
+    });
   }
 
-  /** Một lượt progress có current_image; lỗi trả null để còn thử endpoint/lượt khác. */
-  async progressImage({ signal = null } = {}) {
-    let withoutImage = null;
-    for (const endpoint of PROGRESS_PATHS) {
+  /** Tải binary có tiến trình + tối đa 3 lượt resume Range; không liên quan job GPU. */
+  async downloadFile(file, { signal = null, onProgress = null } = {}) {
+    const absolute = /^https?:\/\//i.test(file.url);
+    const url = absolute ? file.url : this.url(file.url);
+    const sameForge = !absolute || (this.base && url.startsWith(`${this.base}/`));
+    const expected = Number(file.size) || 0;
+    let loaded = 0;
+    let chunks = [];
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const controller = new AbortController();
+      const merged = combineSignals([controller.signal, signal]);
+      const timer = setTimeout(() => controller.abort(new Error('download timeout')), 120000);
       try {
-        const path = endpoint.method === 'GET'
-          ? `${endpoint.path}?skip_current_image=false`
-          : endpoint.path;
-        const data = await this.request(path, {
-          method: endpoint.method,
-          body: endpoint.method === 'POST' ? { skip_current_image: false } : null,
-          timeout: 8000,
-          signal,
+        const headers = sameForge ? this.headers({ Accept: file.mime || '*/*' }) : {};
+        if (loaded > 0) headers.Range = `bytes=${loaded}-`;
+        const response = await this.fetch(url, {
+          method: 'GET', headers, signal: merged, credentials: 'omit', cache: 'no-store',
         });
-        const info = normaliseProgress(data, endpoint.path);
-        const image = typeof data?.current_image === 'string' ? data.current_image : '';
-        if (image) return { info, image };
-        withoutImage = { info, image: '' };
+        if (response.status === 416 && expected && loaded >= expected) {
+          return new Blob(chunks, { type: file.mime || 'application/octet-stream' });
+        }
+        if (!response.ok) {
+          throw new ForgeError(`Tải file thất bại (HTTP ${response.status}).`, {
+            status: response.status, body: await response.text(),
+          });
+        }
+        // Server không nhận Range thì phải đọc lại từ đầu, không nối trùng byte.
+        if (loaded > 0 && response.status !== 206) {
+          chunks = [];
+          loaded = 0;
+        }
+        if (response.body?.getReader) {
+          const reader = response.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            loaded += value.byteLength;
+            if (onProgress) onProgress({ loaded, total: expected || loaded });
+          }
+        } else {
+          const blob = await response.blob();
+          chunks.push(blob);
+          loaded += blob.size;
+          if (onProgress) onProgress({ loaded, total: expected || loaded });
+        }
+        if (expected && loaded !== expected) {
+          throw new ForgeError(`File thiếu byte: ${loaded}/${expected}.`, { status: 0 });
+        }
+        return new Blob(chunks, { type: file.mime || 'application/octet-stream' });
       } catch (error) {
-        if (signal?.aborted) return null;
+        lastError = error;
+        if (signal?.aborted || error?.name === 'AbortError' && signal?.aborted) {
+          throw cancelledError();
+        }
+        if (Number(error?.status) >= 400 && Number(error?.status) < 500
+          && Number(error?.status) !== 416) throw error;
+        if (attempt < 2) await abortableSleep(400 * (attempt + 1), signal);
+      } finally {
+        clearTimeout(timer);
       }
     }
-    return withoutImage;
+    throw new ForgeError(
+      `Không tải được ${file.name || 'ảnh'} sau 3 lượt. Job đã xong; chỉ cần thử tải lại file.`,
+      { status: Number(lastError?.status) || 0, body: String(lastError?.message || lastError) },
+    );
   }
 
 }
 
-function toDataUrl(encoded) {
-  if (typeof encoded !== 'string') return '';
-  if (encoded.startsWith('data:')) return encoded;
-  return `data:image/png;base64,${encoded}`;
+function makeIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function parseInfo(info) {
-  if (!info) return {};
-  if (typeof info === 'string') {
-    try {
-      return JSON.parse(info);
-    } catch (error) {
-      return {};
+function abortableSleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(cancelledError());
+      return;
     }
-  }
-  return typeof info === 'object' ? info : {};
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(cancelledError());
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 function normaliseProgress(data, source) {

@@ -86,7 +86,7 @@ const idle = {
       }
       if (path === '/sdapi/v1/sd-models') return jsonResponse([{ title: 'wai_v17' }]);
       if (path.endsWith('/progress')) return jsonResponse(idle);
-      return jsonResponse({ api: true });
+      return jsonResponse({ api: true, async_jobs: true });
     },
   });
   const result = await api.diagnose();
@@ -95,7 +95,7 @@ const idle = {
   check('chẩn đoán internal/progress dùng POST', internal.ok && internal.method === 'POST'
     && internal.status === 200);
   check('mọi endpoint đều OK khi Forge phản hồi đúng', result.checks.every((item) => item.ok)
-    && result.hasApi && result.hasProgress && result.hasCompactApi && result.anyOk);
+    && result.hasApi && result.hasProgress && result.hasAsyncJobs && result.anyOk);
   check('chẩn đoán giữ method rõ ràng cho từng dòng UI', result.checks
     .filter((item) => item.path !== 'internal/progress')
     .every((item) => item.method === 'GET'));
@@ -119,290 +119,197 @@ const idle = {
     result.hasProgress && !internal.ok && internal.optional && internal.status === 404);
 }
 
-// Response 200 nhưng body lớn bị đứt: lấy lại current_image, tuyệt đối không POST lại.
+// Job nền: chỉ metadata nhỏ, ảnh tải từ signed URL thành Blob, không base64/job trùng.
 {
-  let postCount = 0;
-  let recoveryCalled = false;
-  const progressCalls = [];
+  const JOB = 'a'.repeat(32);
+  let createPosts = 0;
+  let standardPosts = 0;
+  let signedAuth = null;
+  let submittedKey = '';
+  let downloadProgress = null;
   const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === '/sdapi/v1/txt2img') {
-        postCount += 1;
-        return {
-          ok: true,
-          status: 200,
-          text: async () => { throw new TypeError('body stream lost'); },
-        };
-      }
-      if (parsed.pathname === '/sdapi/v1/progress') {
-        progressCalls.push(parsed.searchParams.get('skip_current_image'));
-        return jsonResponse({
-          progress: 0.96,
-          state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
-          current_image: 'aGVsbG8=',
-        });
-      }
-      return jsonResponse({}, 404);
-    },
-  });
-  const result = await api.txt2img(
-    { prompt: '1girl', negative_prompt: '', seed: 123, width: 1024, height: 1344 },
-    { interval: 1, recoveryTimeout: 50, onRecover: () => { recoveryCalled = true; } },
-  );
-  check('đứt body ảnh được khôi phục từ current_image', result.recovered
-    && result.images[0] === 'data:image/png;base64,aGVsbG8='
-    && result.info.recovered_from_progress && result.info.seed === 123);
-  check('khôi phục ảnh không POST tạo job lần hai', postCount === 1 && recoveryCalled);
-  check('chỉ request current_image khi cần khôi phục', progressCalls.includes('false'));
-}
-
-// Preview đã đọc lúc >=90% vẫn dùng được nếu response lớn bị đứt ngay sau đó.
-{
-  let postCount = 0;
-  let imageReads = 0;
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === '/sdapi/v1/txt2img') {
-        postCount += 1;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        throw new TypeError('connection closed at final response');
-      }
-      if (parsed.pathname === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
-      if (parsed.searchParams.get('skip_current_image') === 'false') imageReads += 1;
-      return jsonResponse({
-        progress: 0.96,
-        state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
-        current_image: 'cHJldmlldw==',
-      });
-    },
-  });
-  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 20 });
-  check('dùng preview gần cuối đã cache khi response bị đứt', result.recovered
-    && result.images[0] === 'data:image/png;base64,cHJldmlldw==');
-  check('preview gần cuối chỉ được tải một lần và không tạo lại job', postCount === 1 && imageReads === 1);
-}
-
-// Không có bằng chứng job chạy thì không lấy ảnh cũ; lỗi phải nói đúng giai đoạn tải ảnh.
-{
-  let postCount = 0;
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
+    base: 'https://forge.example', user: 'user', pass: 'pass',
+    fetchImpl: async (url, init) => {
       const path = new URL(url).pathname;
-      if (path === '/sdapi/v1/txt2img') {
-        postCount += 1;
-        throw new TypeError('fetch failed');
+      if (path === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: true, object_storage: { configured: true } });
       }
-      if (path === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
-      return jsonResponse({ progress: 0, state: { job_count: 0 }, current_image: 'anh-cu' });
-    },
-  });
-  let failure = null;
-  try {
-    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
-  } catch (error) {
-    failure = error;
-  }
-  check('không dùng ảnh cũ khi không xác nhận được job', failure?.status === 0
-    && /tải ảnh kết quả/.test(failure.message) && /không tạo lại ngay/i.test(failure.message));
-  check('request thất bại vẫn không tự tạo lại job', postCount === 1);
-}
-
-// WebView có thể trả text JSON đã cắt thay vì reject stream: vẫn phải đi nhánh khôi phục.
-{
-  let postCount = 0;
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === '/sdapi/v1/txt2img') {
-        postCount += 1;
-        return {
-          ok: true,
-          status: 200,
-          text: async () => {
-            await new Promise((resolve) => setTimeout(resolve, 30));
-            return '{"images":["aGVsbG8=';
-          },
-        };
+      if (path === '/vi-mobile/api/jobs' && init.method === 'POST') {
+        createPosts += 1;
+        submittedKey = JSON.parse(init.body).idempotency_key;
+        return jsonResponse({ job_id: JOB, status: 'queued' }, 202);
       }
-      if (parsed.pathname === '/sdapi/v1/progress') {
+      if (path === `/vi-mobile/api/jobs/${JOB}/result`) {
         return jsonResponse({
-          progress: 0,
-          state: { sampling_step: 25, sampling_steps: 25, job_count: 0 },
-          current_image: 'aGVsbG8=',
+          info: { seed: 42 },
+          files: [{ name: '000.png', size: 4, mime: 'image/png', storage: 's3',
+            url: 'https://cdn.example/signed/000.png' }],
         });
       }
+      if (path === `/vi-mobile/api/jobs/${JOB}`) return jsonResponse({ job_id: JOB, status: 'done' });
+      if (url === 'https://cdn.example/signed/000.png') {
+        signedAuth = init.headers.Authorization || '';
+        return {
+          ok: true, status: 200,
+          blob: async () => new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+          text: async () => '',
+        };
+      }
+      if (path === '/sdapi/v1/txt2img') standardPosts += 1;
       return jsonResponse({}, 404);
     },
   });
-  // Đã có tiến trình trước lúc response kết thúc để không nhận nhầm current_image cũ.
-  let ticks = 0;
-  const originalProgress = api.progress.bind(api);
-  api.progress = async (...args) => {
-    ticks += 1;
-    if (ticks === 1) return { available: true, progress: 0.96, jobCount: 1 };
-    return originalProgress(...args);
-  };
-  const result = await api.txt2img(
-    { prompt: '1girl' },
-    { interval: 20, recoveryTimeout: 50 },
-  );
-  check('JSON ảnh cắt giữa chừng vẫn được khôi phục', result.recovered
-    && result.images[0] === 'data:image/png;base64,aGVsbG8=');
-  check('JSON ảnh cắt không bị báo nhầm HTML và không POST lại', postCount === 1);
+  const result = await api.txt2img({ prompt: '1girl' }, {
+    interval: 1, idempotencyKey: 'same-request-42',
+    onDownload: (progress) => { downloadProgress = progress; },
+  });
+  check('job nền trả Blob từ signed URL, giữ seed và tiến trình tải', result.jobId === JOB
+    && result.info.seed === 42 && result.images[0] instanceof Blob
+    && result.images[0].size === 4 && result.images[0].type === 'image/png'
+    && downloadProgress?.loaded === 4);
+  check('signed URL không nhận Basic Auth và không gọi API txt2img cũ', !signedAuth
+    && standardPosts === 0 && createPosts === 1 && submittedKey === 'same-request-42');
 }
 
-// Huỷ gần cuối phải thoát ngay, không chạy recovery hay trả preview sau thao tác Huỷ.
+// Lỗi đọc trạng thái được retry độc lập, tuyệt đối không POST job mới.
 {
-  const controller = new AbortController();
-  let postCount = 0;
-  let recoveryCalled = false;
+  const JOB = 'b'.repeat(32);
+  let createPosts = 0;
+  let statusReads = 0;
   const api = new ForgeClient({
     base: 'https://forge.example',
     fetchImpl: async (url, init) => {
-      const parsed = new URL(url);
-      if (parsed.pathname === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
-      if (parsed.pathname === '/sdapi/v1/txt2img') {
-        postCount += 1;
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') return jsonResponse({ ok: true, async_jobs: true });
+      if (path === '/vi-mobile/api/jobs' && init.method === 'POST') {
+        createPosts += 1;
+        return jsonResponse({ job_id: JOB, status: 'queued' }, 202);
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}/result`) {
+        return jsonResponse({ info: {}, files: [{ name: '000.png', size: 1,
+          mime: 'image/png', url: 'https://cdn.example/one.png' }] });
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}`) {
+        statusReads += 1;
+        if (statusReads <= 2) throw new TypeError('temporary network failure');
+        return jsonResponse({ job_id: JOB, status: 'done' });
+      }
+      if (url === 'https://cdn.example/one.png') {
+        return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([9])]), text: async () => '' };
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1 });
+  check('retry đọc trạng thái không tạo lại job', result.images.length === 1
+    && createPosts === 1 && statusReads >= 3);
+}
+
+// Extension cũ/thiếu job API phải báo cập nhật, không âm thầm quay về base64.
+{
+  let posts = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      if (new URL(url).pathname === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: false });
+      }
+      if (init.method === 'POST') posts += 1;
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try { await api.txt2img({ prompt: '1girl' }, { interval: 1 }); }
+  catch (error) { failure = error; }
+  check('thiếu async_jobs thì dừng trước khi tạo job, không fallback base64',
+    failure?.status === 409 && /không dùng lại API base64/.test(failure.message) && posts === 0);
+}
+
+// Job lỗi: không tải manifest và không tạo job khác.
+{
+  const JOB = 'c'.repeat(32);
+  let createPosts = 0;
+  let resultReads = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') return jsonResponse({ ok: true, async_jobs: true });
+      if (path === '/vi-mobile/api/jobs' && init.method === 'POST') {
+        createPosts += 1;
+        return jsonResponse({ job_id: JOB, status: 'queued' }, 202);
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}/result`) resultReads += 1;
+      if (path === `/vi-mobile/api/jobs/${JOB}`) {
+        return jsonResponse({ job_id: JOB, status: 'error', error: 'CUDA out of memory' });
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try { await api.txt2img({ prompt: '1girl' }, { interval: 1 }); }
+  catch (error) { failure = error; }
+  check('job lỗi được giữ nguyên, không đọc manifest hoặc POST lại', failure?.status === 500
+    && /CUDA out of memory/.test(failure.message) && createPosts === 1 && resultReads === 0);
+}
+
+// Huỷ gọi DELETE đúng job_id.
+{
+  const JOB = 'd'.repeat(32);
+  let call = null;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      call = { url, init };
+      return jsonResponse({ job_id: JOB, status: 'cancelled' });
+    },
+  });
+  const result = await api.cancelJob(JOB);
+  check('huỷ job dùng DELETE đúng job_id', result.status === 'cancelled'
+    && call.init.method === 'DELETE' && new URL(call.url).pathname === `/vi-mobile/api/jobs/${JOB}`);
+}
+
+// Tải local bị đứt sau 2 byte: lượt hai phải Range từ byte 2 và nối đúng dữ liệu.
+{
+  let fileCalls = 0;
+  let range = '';
+  let auth = '';
+  const api = new ForgeClient({
+    base: 'https://forge.example', user: 'user', pass: 'pass',
+    fetchImpl: async (url, init) => {
+      fileCalls += 1;
+      range = init.headers.Range || '';
+      auth = init.headers.Authorization || '';
+      if (fileCalls === 1) {
         return {
-          ok: true,
-          status: 200,
-          text: () => new Promise((resolve, reject) => {
-            const abort = () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
-            if (init.signal.aborted) abort();
-            else init.signal.addEventListener('abort', abort, { once: true });
-          }),
+          ok: true, status: 200,
+          body: { getReader: () => {
+            let sent = false;
+            return { read: async () => {
+              if (!sent) {
+                sent = true;
+                return { done: false, value: new Uint8Array([1, 2]) };
+              }
+              throw new TypeError('stream lost');
+            } };
+          } },
+          text: async () => '', blob: async () => new Blob([]),
         };
       }
-      return jsonResponse({
-        progress: 0.96,
-        state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
-        current_image: 'cHJldmlldw==',
-      });
+      return {
+        ok: true, status: 206,
+        blob: async () => new Blob([new Uint8Array([3, 4])], { type: 'image/png' }),
+        text: async () => '',
+      };
     },
   });
-  let failure = null;
-  try {
-    await api.txt2img({ prompt: '1girl' }, {
-      signal: controller.signal,
-      interval: 1,
-      recoveryTimeout: 50,
-      onProgress: () => controller.abort(),
-      onRecover: () => { recoveryCalled = true; },
-    });
-  } catch (error) {
-    failure = error;
-  }
-  check('Huỷ job được giữ là AbortError, không báo mất máy chủ', failure?.name === 'AbortError'
-    && failure?.status === 0);
-  check('Huỷ gần cuối không khôi phục ảnh và không tạo lại job', postCount === 1 && !recoveryCalled);
-}
-
-// Extension mới: dùng ảnh JPEG đã nén, không gọi thêm API chuẩn.
-{
-  const paths = [];
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const path = new URL(url).pathname;
-      paths.push(path);
-      if (path === '/vi-mobile/api/health') {
-        return jsonResponse({ ok: true, txt2img_available: true, image_format: 'jpeg' });
-      }
-      if (path === '/vi-mobile/api/txt2img') {
-        return jsonResponse({
-          images: ['data:image/jpeg;base64,anBlZw=='],
-          info: '{"seed": 42}',
-          mobile_image_format: 'jpeg',
-        });
-      }
-      if (path === '/sdapi/v1/txt2img') throw new Error('Không được gọi API chuẩn');
-      return jsonResponse({}, 404);
-    },
+  const blob = await api.downloadFile({
+    name: '000.png', size: 4, mime: 'image/png', url: '/vi-mobile/api/files/a/000.png',
   });
-  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1 });
-  check('app ưu tiên API ảnh nén và giữ đúng MIME JPEG', !result.recovered
-    && result.images[0] === 'data:image/jpeg;base64,anBlZw==' && result.info.seed === 42);
-  check('API ảnh nén thành công chỉ gửi một request tạo ảnh',
-    paths.filter((path) => path.endsWith('txt2img')).length === 1);
-}
-
-// Extension cũ: health 404 thì chọn API chuẩn ngay, không POST thử route nén.
-{
-  const paths = [];
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const path = new URL(url).pathname;
-      paths.push(path);
-      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'Not Found' }, 404);
-      if (path === '/sdapi/v1/txt2img') return jsonResponse({ images: ['cG5n'], info: '{}' });
-      return jsonResponse({}, 404);
-    },
-  });
-  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1 });
-  check('health 404 chọn API chuẩn trước khi tạo job', result.images.length === 1
-    && paths.includes('/vi-mobile/api/health') && paths.includes('/sdapi/v1/txt2img')
-    && !paths.includes('/vi-mobile/api/txt2img'));
-}
-
-// 500 có thể xảy ra sau khi job đã chạy: không được fallback rồi nhân đôi GPU/job.
-{
-  let standardPosts = 0;
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const path = new URL(url).pathname;
-      if (path === '/vi-mobile/api/health') {
-        return jsonResponse({ ok: true, txt2img_available: true, image_format: 'jpeg' });
-      }
-      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'CUDA error' }, 500);
-      if (path === '/sdapi/v1/txt2img') {
-        standardPosts += 1;
-        return jsonResponse({ images: ['khong-duoc-goi'] });
-      }
-      return jsonResponse({}, 404);
-    },
-  });
-  let failure = null;
-  try {
-    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
-  } catch (error) {
-    failure = error;
-  }
-  check('lỗi 500 từ API nén không tự tạo lại job bằng API chuẩn',
-    failure?.status === 500 && standardPosts === 0);
-}
-
-// Ngay cả 404 từ trong job cũng không được đổi endpoint và nhân đôi request.
-{
-  let standardPosts = 0;
-  const api = new ForgeClient({
-    base: 'https://forge.example',
-    fetchImpl: async (url) => {
-      const path = new URL(url).pathname;
-      if (path === '/vi-mobile/api/health') return jsonResponse({ ok: true });
-      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'Job error' }, 404);
-      if (path === '/sdapi/v1/txt2img') {
-        standardPosts += 1;
-        return jsonResponse({ images: ['khong-duoc-goi'] });
-      }
-      return jsonResponse({}, 404);
-    },
-  });
-  let failure = null;
-  try {
-    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
-  } catch (error) {
-    failure = error;
-  }
-  check('404 sau POST nén cũng không tạo lại job bằng API chuẩn',
-    failure?.status === 404 && standardPosts === 0);
+  const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+  check('resume Range nối đúng byte và giữ auth ở file local', fileCalls === 2
+    && range === 'bytes=2-' && auth.startsWith('Basic ')
+    && bytes.join(',') === '1,2,3,4' && blob.type === 'image/png');
 }
 
 console.log(`\n✅ ${passed} kiểm tra ForgeClient đạt.`);

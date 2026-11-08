@@ -30,7 +30,8 @@ colab/
     workflow.py                    preset, validation, metadata seed theo ảnh
     system_tags.py                 tag hệ thống WAI-Illustrious + preset tham số
   extension/vi-prompt-builder/   extension Forge: khối prompt Việt trong tab txt2img
-    scripts/vi_prompt_tab.py
+    scripts/vi_prompt_tab.py       tích hợp route/auth Forge và app mobile
+    scripts/mobile_jobs.py         job nền, idempotency, S3/R2, manifest, Range stream
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
   tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
@@ -59,9 +60,11 @@ kéo ứng dụng thì *Thêm vào màn hình chính* (PWA) hoặc build APK b�
 (`.github/workflows/android-apk.yml`). Chi tiết: [`../mobile/README.md`](../mobile/README.md).
 
 `setup_forge.sh launch` đã thêm `--cors-allow-origins=*` (tắt bằng `CORS_ALLOW_ORIGINS=none`)
-để bản cài riêng/APK gọi được API. Extension còn có `/vi-mobile/api/txt2img`: dùng đúng
-handler txt2img của Forge nhưng trả JPEG quality 88 thay vì PNG base64 lớn, giúp tránh
-đứt response trên tunnel. Web `/sdapi/v1/txt2img` và ảnh gốc trong outputs không đổi.
+để bản cài riêng/APK gọi được API. Extension cung cấp **job nền** `/vi-mobile/api/jobs`:
+trả `202 {job_id}`, poll trạng thái, nhận manifest rồi tải file PNG/JPEG/WebP gốc từ signed
+URL S3/R2 hoặc file local có HTTP Range. Không còn response ảnh base64 và không nén lại JPEG.
+Web `/sdapi/v1/txt2img` và ảnh gốc trong outputs không đổi. Cấu hình Secrets S3/R2: xem
+[`../mobile/README.md`](../mobile/README.md#s3--cloudflare-r2-tuỳ-chọn-khuyến-nghị-cho-apk).
 
 ## Bộ cài một lệnh / notebook một ô (khuyên dùng)
 
@@ -72,7 +75,7 @@ Các tùy chọn nâng cao vẫn nằm trong `install.sh`/notebook chi tiết.
 
 [**Mở notebook Colab tối giản**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F0f8a8365-ai-anime3/colab/WAI_v17_1click.ipynb)
 → chọn GPU T4 → **Run all**. Chạy lại ô sẽ cập nhật code/extension, giữ model và
-restart Forge để nạp API ảnh nén cho Android; đợi job hiện tại kết thúc trước khi chạy.
+restart Forge để nạp job API mới cho Android; đợi job hiện tại kết thúc trước khi chạy.
 Ô cài vẫn từ chối cache cũ hơn 1.0.7.
 **Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong app Gradio rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.

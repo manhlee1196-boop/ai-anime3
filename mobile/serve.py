@@ -23,6 +23,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 import zlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -140,6 +141,27 @@ class MockForge:
 
 
 MOCK = MockForge()
+MOCK_JOBS = {}
+
+
+def _mock_job_worker(job_id, payload):
+    MOCK.begin(payload)
+    deadline = time.time() + MOCK.duration
+    while time.time() < deadline and MOCK.started:
+        time.sleep(0.1)
+        if MOCK_JOBS[job_id]['status'] == 'cancelled':
+            return
+    if not MOCK.started or MOCK_JOBS[job_id]['status'] == 'cancelled':
+        MOCK_JOBS[job_id]['status'] = 'cancelled'
+        return
+    result = MOCK.render(payload)
+    image = base64.b64decode(result['images'][0])
+    MOCK_JOBS[job_id].update({
+        'status': 'done',
+        'info': json.loads(result['info']),
+        'image': image,
+    })
+    MOCK.started = 0.0
 
 
 # --------------------------------------------------------------------- handler
@@ -160,6 +182,29 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _binary(self, body, content_type='application/octet-stream'):
+        start = 0
+        status = 200
+        range_header = self.headers.get('Range', '')
+        if range_header.startswith('bytes=') and range_header[6:].split('-', 1)[0].isdigit():
+            start = int(range_header[6:].split('-', 1)[0])
+            if start >= len(body):
+                self.send_response(416)
+                self.send_header('Content-Range', f'bytes */{len(body)}')
+                self.end_headers()
+                return
+            status = 206
+        part = body[start:]
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(part)))
+        self.send_header('Accept-Ranges', 'bytes')
+        if status == 206:
+            self.send_header('Content-Range', f'bytes {start}-{len(body) - 1}/{len(body)}')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(part)
+
     def _body(self):
         length = int(self.headers.get('Content-Length') or 0)
         return self.rfile.read(length) if length else b''
@@ -172,7 +217,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Headers', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
         self.end_headers()
 
     def do_GET(self):
@@ -185,6 +230,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._proxy('POST')
         self.send_error(404)
 
+    def do_DELETE(self):
+        if any(self.path.startswith(prefix) for prefix in PROXY_PREFIXES):
+            return self._proxy('DELETE')
+        self.send_error(404)
+
     # ---------------------------------------------------------------- proxy
     def _proxy(self, method):
         body = self._body() if method == 'POST' else None
@@ -192,19 +242,28 @@ class Handler(SimpleHTTPRequestHandler):
             return self._mock(method, body)
         url = f"{self.forge}{self.path}"
         headers = {'Content-Type': self.headers.get('Content-Type', 'application/json')}
+        if self.headers.get('Range'):
+            headers['Range'] = self.headers['Range']
         if self.headers.get('Authorization'):
             headers['Authorization'] = self.headers['Authorization']
         request = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
             with urllib.request.urlopen(request, timeout=LONG_TIMEOUT) as response:
-                payload = response.read()
                 self.send_response(response.status)
                 self.send_header('Content-Type',
                                  response.headers.get('Content-Type', 'application/json'))
-                self.send_header('Content-Length', str(len(payload)))
+                if response.headers.get('Content-Length'):
+                    self.send_header('Content-Length', response.headers['Content-Length'])
+                if response.headers.get('Content-Range'):
+                    self.send_header('Content-Range', response.headers['Content-Range'])
+                self.send_header('Accept-Ranges', response.headers.get('Accept-Ranges', 'bytes'))
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(payload)
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
         except urllib.error.HTTPError as error:
             payload = error.read()
             self._json({'error': payload.decode('utf-8', 'replace')[:800]}, error.code)
@@ -220,8 +279,54 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/sdapi/v1/cmd-flags':
             return self._json({'api': True, 'port': 7860, 'listen': True, 'mock': True})
         if path == '/vi-mobile/api/health':
-            return self._json({'ok': True, 'txt2img_available': True,
-                               'image_format': 'jpeg', 'jpeg_quality': 88, 'mock': True})
+            return self._json({'ok': True, 'txt2img_available': True, 'async_jobs': True,
+                               'object_storage': {'configured': False, 'prefix': ''}, 'mock': True})
+        if path == '/vi-mobile/api/jobs' and method == 'POST':
+            key = str(payload.get('idempotency_key') or '')[:128]
+            existing = next((job for job in MOCK_JOBS.values()
+                             if key and job.get('key') == key), None)
+            if existing:
+                return self._json({'job_id': existing['id'], 'status': existing['status'],
+                                   'deduplicated': True}, 202)
+            job_id = uuid.uuid4().hex
+            MOCK_JOBS[job_id] = {'id': job_id, 'key': key, 'status': 'queued',
+                                 'image': None, 'info': {}}
+            threading.Thread(target=_mock_job_worker,
+                             args=(job_id, payload.get('payload') or {}), daemon=True).start()
+            return self._json({'job_id': job_id, 'status': 'queued'}, 202)
+        parts = path.strip('/').split('/')
+        if len(parts) == 4 and parts[:3] == ['vi-mobile', 'api', 'jobs']:
+            job = MOCK_JOBS.get(parts[3])
+            if not job:
+                return self._json({'detail': 'Không tìm thấy job'}, 404)
+            if method == 'DELETE':
+                job['status'] = 'cancelled'
+                MOCK.interrupt()
+                return self._json({'job_id': parts[3], 'status': 'cancelled'})
+            return self._json({'job_id': parts[3], 'status': job['status'],
+                               'error': job.get('error', '')})
+        if len(parts) == 5 and parts[:3] == ['vi-mobile', 'api', 'jobs']:
+            job_id, action = parts[3], parts[4]
+            job = MOCK_JOBS.get(job_id)
+            if not job:
+                return self._json({'detail': 'Không tìm thấy job'}, 404)
+            if action == 'result' and method == 'GET':
+                if job['status'] != 'done':
+                    return self._json({'detail': 'Job chưa hoàn thành'}, 409)
+                image = job['image']
+                return self._json({'job_id': job_id, 'status': 'done', 'info': job['info'],
+                                   'storage_warning': '', 'files': [{
+                                       'name': '000.png', 'index': 0, 'size': len(image),
+                                       'mime': 'image/png', 'storage': 'local',
+                                       'url': f'/vi-mobile/api/files/{job_id}/000.png'}]})
+            if action == 'cancel' and method == 'DELETE':
+                job['status'] = 'cancelled'
+                MOCK.interrupt()
+                return self._json({'job_id': job_id, 'status': 'cancelled'})
+        if len(parts) == 5 and parts[:3] == ['vi-mobile', 'api', 'files']:
+            job = MOCK_JOBS.get(parts[3])
+            if job and job['status'] == 'done' and job['image']:
+                return self._binary(job['image'], 'image/png')
         # Giống Forge thật: API chuẩn đọc bằng GET, route nội bộ chỉ nhận POST.
         if path == '/internal/progress' and method != 'POST':
             return self._json({'detail': 'Method Not Allowed'}, 405)
@@ -238,7 +343,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/sdapi/v1/upscalers':
             return self._json([{'name': name} for name in
                                ('RealESRGAN_x4plus_anime_6B', 'R-ESRGAN 4x+', 'Latent')])
-        if path in ('/vi-mobile/api/txt2img', '/sdapi/v1/txt2img'):
+        if path == '/sdapi/v1/txt2img':
             MOCK.begin(payload)
             deadline = time.time() + MOCK.duration
             while time.time() < deadline and MOCK.started:

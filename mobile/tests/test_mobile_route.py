@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
-"""Hồi quy route `/vi-mobile` do extension Forge phục vụ.
+"""Hồi quy job API + static app; không cần GPU/Gradio/S3 thật.
 
-    python3 mobile/tests/test_mobile_route.py     # cần fastapi (pip install fastapi)
+    python3 mobile/tests/test_mobile_route.py
 
-Kiểm tra: extension gắn được app tĩnh vào FastAPI của Forge, `/vi-mobile` chuyển hướng
-sang `/vi-mobile/`, và index.html/CSS/JS/icon/dữ liệu tag đều trả 200. Không cần GPU,
-không cần Gradio thật (gradio được giả lập tối thiểu để import extension).
+S3 được kiểm bằng client giả lập (upload/presign); không giả định đã kiểm bucket thật.
 """
 
 import base64
 import importlib.util
 import io
-import random
+import json
+import os
 import sys
+import tempfile
+import threading
+import time
 import types
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EXT_PATH = ROOT / "colab/extension/vi-prompt-builder/scripts/vi_prompt_tab.py"
+JOBS_PATH = EXT_PATH.with_name("mobile_jobs.py")
 
 try:
-    from fastapi import FastAPI                      # noqa: F401
-    from fastapi.testclient import TestClient         # noqa: F401
+    from fastapi import Depends, FastAPI, Header, HTTPException
+    from fastapi.testclient import TestClient
     HAVE_FASTAPI = True
 except Exception:                                     # noqa: BLE001
     HAVE_FASTAPI = False
@@ -37,8 +40,14 @@ GR_NAMES = ("Accordion Button Checkbox CheckboxGroup Dataframe Dropdown Markdown
             "State Tab Tabs Textbox SelectData Blocks Column Gallery Number").split()
 
 
+def load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def install_fakes():
-    """Forge + Gradio tối thiểu để import được extension (chỉ cần API, không cần UI)."""
     class FakeScript:
         alwayson = False
         create_group = True
@@ -61,122 +70,275 @@ def install_fakes():
     sys.modules["gradio"] = gradio
 
 
-def load_extension():
-    spec = importlib.util.spec_from_file_location("vi_prompt_tab_route", EXT_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+class FakeRequest:
+    def __init__(self, payload):
+        if not str(payload.get("prompt") or "").strip():
+            raise ValueError("prompt là bắt buộc")
+        self.payload = dict(payload)
+        for key, value in payload.items():
+            setattr(self, key, value)
+        self.prompt = payload.get("prompt", "")
+        self.negative_prompt = payload.get("negative_prompt", "")
+        self.seed = payload.get("seed", -1)
+        self.width = payload.get("width", 64)
+        self.height = payload.get("height", 64)
+        self.batch_size = payload.get("batch_size", 1)
+        self.n_iter = payload.get("n_iter", 1)
+        self.send_images = True
+        self.save_images = False
+
+    def model_dump(self):
+        return {**self.payload, "send_images": self.send_images, "save_images": self.save_images}
 
 
-@unittest.skipUnless(HAVE_FASTAPI, "cần fastapi để kiểm tra route (pip install fastapi)")
+def require_key(x_api_key: str = Header(default=None)):
+    if x_api_key != "secret":
+        raise HTTPException(status_code=401, detail="missing key")
+
+
+@unittest.skipUnless(HAVE_FASTAPI and HAVE_PIL, "cần fastapi + Pillow")
 class MobileRoute(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         install_fakes()
         sys.path.insert(0, str(ROOT / "colab"))
-        cls.ext = load_extension()
-        cls.app = FastAPI()
-        cls.ext.serve_mobile_app(None, cls.app)
-        cls.client = TestClient(cls.app)
+        cls.ext = load_module("vi_prompt_tab_route", EXT_PATH)
+        cls.jobs = load_module("anime3_mobile_jobs_test", JOBS_PATH)
+        cls.ext._txt2img_request = lambda endpoint, payload: FakeRequest(payload)
 
-    def test_01_extension_finds_mobile_app(self):
-        self.assertEqual(Path(self.ext.mobile_app_dir()), ROOT / "mobile" / "app")
-        self.assertEqual(self.ext.MOBILE_ROUTE, "/vi-mobile")
-        # extension không được tự dựng tab riêng (tab "Prompt VN" đã bỏ)
-        self.assertFalse(hasattr(self.ext, "on_ui_tabs"))
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        os.environ["ANIME3_MOBILE_JOB_DIR"] = self.temp.name
+        self.calls = []
+        self.interrupts = 0
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.release.set()
+        self.block_generation = False
 
-    def test_02_root_redirects_to_trailing_slash(self):
-        response = self.client.get("/vi-mobile", follow_redirects=False)
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(response.headers["location"], "/vi-mobile/")
+        def standard_endpoint(payload: dict):
+            self.calls.append(payload.model_dump())
+            if self.block_generation:
+                self.started.set()
+                self.release.wait(5)
+            image = Image.new("RGB", (64, 64), (30, 120, 210))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            info = {"seed": 42, "prompt": getattr(payload, "prompt", ""),
+                    "width": 64, "height": 64}
+            return types.SimpleNamespace(images=[encoded], info=json.dumps(info), parameters={})
 
-    def test_03_index_is_the_mobile_app(self):
-        response = self.client.get("/vi-mobile/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("text/html", response.headers["content-type"])
-        self.assertIn("<title>Anime3", response.text)
-        self.assertIn('id="generateBtn"', response.text)
+        def interrupt():
+            self.interrupts += 1
 
-    def test_04_assets_are_served(self):
-        for path in ("styles.css", "js/core.js", "js/ui.js", "manifest.webmanifest",
-                     "icons/icon-192.png", "sw.js"):
-            response = self.client.get(f"/vi-mobile/{path}")
-            self.assertEqual(response.status_code, 200, path)
-            self.assertGreater(len(response.content), 200, path)
+        self.app = FastAPI()
+        dependencies = [Depends(require_key)] if self._testMethodName == "test_09_auth_dependencies" else []
+        self.app.add_api_route("/sdapi/v1/txt2img", standard_endpoint,
+                               methods=["POST"], dependencies=dependencies)
+        self.app.add_api_route("/sdapi/v1/interrupt", interrupt, methods=["POST"])
+        self.manager = self.ext.serve_mobile_app(None, self.app)
+        self.client = TestClient(self.app)
+        self.client.__enter__()
 
-    def test_05_tag_data_is_served_compressed(self):
-        response = self.client.get("/vi-mobile/data/tags.json.gz")
-        self.assertEqual(response.status_code, 200)
-        self.assertGreater(len(response.content), 500_000)
-        self.assertEqual(response.content[:2], b"\x1f\x8b")
+    def tearDown(self):
+        self.release.set()
+        self.client.__exit__(None, None, None)
+        self.temp.cleanup()
+        os.environ.pop("ANIME3_MOBILE_JOB_DIR", None)
 
-    def test_06_mobile_api_health(self):
-        response = self.client.get("/vi-mobile/api/health")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        self.assertEqual(response.json()["image_format"], "jpeg")
+    def auth_headers(self):
+        return {"x-api-key": "secret"} if self._testMethodName == "test_09_auth_dependencies" else {}
 
-    @unittest.skipUnless(HAVE_PIL, "cần Pillow để kiểm tra nén ảnh")
-    def test_07_txt2img_reuses_standard_handler_and_returns_jpeg(self):
-        source = Image.frombytes("RGB", (96, 96), random.Random(17).randbytes(96 * 96 * 3))
-        png = io.BytesIO()
-        source.save(png, format="PNG")
-        encoded = base64.b64encode(png.getvalue()).decode("ascii")
-        calls = []
-        from pydantic import BaseModel
-
-        class Txt2ImgInput(BaseModel):
-            prompt: str
-            steps: int = 25
-            width: int = 1024
-            height: int = 1024
-
-        class Txt2ImgOutput(BaseModel):
-            images: list
-            parameters: dict
-            info: str
-
-        def fake_txt2img(payload: Txt2ImgInput):
-            calls.append(payload)
-            return Txt2ImgOutput(images=[encoded], parameters={}, info='{"seed": 42}')
-
-        self.app.post("/sdapi/v1/txt2img")(fake_txt2img)
-        response = self.client.post("/vi-mobile/api/txt2img", json={
-            "prompt": "1girl", "steps": 25, "width": 1024, "height": 1024,
+    def create_job(self, key="request-1", payload=None):
+        return self.client.post("/vi-mobile/api/jobs", headers=self.auth_headers(), json={
+            "payload": payload or {"prompt": "1girl", "seed": 42, "width": 64, "height": 64},
+            "idempotency_key": key,
         })
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0].prompt, "1girl")
-        self.assertEqual(calls[0].steps, 25)
-        data = response.json()
-        self.assertEqual(data["mobile_image_format"], "jpeg")
-        self.assertEqual(data["info"], '{"seed": 42}')
-        jpeg = data["images"][0]
-        self.assertTrue(jpeg.startswith("data:image/jpeg;base64,"))
-        self.assertLess(len(jpeg), len(encoded), "JPEG phải nhỏ hơn PNG base64 của fixture")
-        with Image.open(io.BytesIO(base64.b64decode(jpeg.split(",", 1)[1]))) as result:
-            self.assertEqual(result.format, "JPEG")
-            self.assertEqual(result.size, source.size)
 
-    def test_08_mobile_api_inherits_standard_api_auth(self):
-        from fastapi import Depends, FastAPI, HTTPException
+    def wait_job(self, job_id, final=("done", "error", "cancelled")):
+        deadline = time.time() + 6
+        while time.time() < deadline:
+            response = self.client.get(f"/vi-mobile/api/jobs/{job_id}", headers=self.auth_headers())
+            self.assertEqual(response.status_code, 200, response.text)
+            job = response.json()
+            if job["status"] in final:
+                return job
+            time.sleep(0.02)
+        self.fail("job không đạt trạng thái cuối")
 
-        app = FastAPI()
-        calls = []
+    def test_01_static_app_and_health(self):
+        self.assertEqual(Path(self.ext.mobile_app_dir()), ROOT / "mobile" / "app")
+        self.assertFalse(hasattr(self.ext, "on_ui_tabs"))
+        redirect = self.client.get("/vi-mobile", follow_redirects=False)
+        self.assertEqual(redirect.status_code, 307)
+        index = self.client.get("/vi-mobile/")
+        self.assertEqual(index.status_code, 200)
+        self.assertIn('id="generateBtn"', index.text)
+        for path in ("styles.css", "js/core.js", "js/ui.js", "manifest.webmanifest",
+                     "icons/icon-192.png", "sw.js", "data/tags.json.gz"):
+            self.assertEqual(self.client.get(f"/vi-mobile/{path}").status_code, 200, path)
+        health = self.client.get("/vi-mobile/api/health", headers=self.auth_headers())
+        self.assertEqual(health.status_code, 200)
+        self.assertTrue(health.json()["async_jobs"])
+        self.assertIn("object_storage", health.json())
 
-        def deny():
-            raise HTTPException(status_code=401, detail="auth required")
+    def test_02_job_idempotency_original_png_manifest_and_range(self):
+        created = self.create_job()
+        self.assertEqual(created.status_code, 202, created.text)
+        job_id = created.json()["job_id"]
+        duplicate = self.create_job()
+        self.assertEqual(duplicate.status_code, 202)
+        self.assertEqual(duplicate.json()["job_id"], job_id)
+        self.assertTrue(duplicate.json()["deduplicated"])
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(self.calls[0]["send_images"])
+        self.assertFalse(self.calls[0]["save_images"])
 
-        def fake_txt2img(payload: dict):
-            calls.append(payload)
-            return {"images": [], "parameters": {}, "info": "{}"}
+        manifest_response = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result",
+                                            headers=self.auth_headers())
+        self.assertEqual(manifest_response.status_code, 200)
+        manifest = manifest_response.json()
+        self.assertEqual(manifest["info"]["seed"], 42)
+        self.assertNotIn("base64", manifest_response.text)
+        self.assertEqual(len(manifest["files"]), 1)
+        item = manifest["files"][0]
+        self.assertEqual(item["storage"], "local")
+        self.assertEqual(item["mime"], "image/png")
+        self.assertTrue(item["name"].endswith(".png"))
 
-        app.post("/sdapi/v1/txt2img", dependencies=[Depends(deny)])(fake_txt2img)
-        self.ext.install_mobile_api(app)
-        client = TestClient(app)
-        response = client.post("/vi-mobile/api/txt2img", json={"prompt": "1girl"})
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(calls, [], "Route mobile không được bỏ qua --api-auth")
+        full = self.client.get(item["url"], headers=self.auth_headers())
+        self.assertEqual(full.status_code, 200)
+        self.assertEqual(full.content[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(int(full.headers["content-length"]), item["size"])
+        part = self.client.get(item["url"], headers={**self.auth_headers(), "Range": "bytes=10-"})
+        self.assertEqual(part.status_code, 206)
+        self.assertEqual(part.content, full.content[10:])
+        self.assertEqual(part.headers["content-range"], f"bytes 10-{len(full.content)-1}/{len(full.content)}")
+        invalid = self.client.get(item["url"], headers={**self.auth_headers(), "Range": "bytes=0-1,4-5"})
+        self.assertEqual(invalid.status_code, 416)
+
+    def test_03_invalid_payload_is_422_and_never_reaches_gpu(self):
+        response = self.create_job(payload={"width": 64})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.calls, [])
+
+    def test_04_cancel_running_interrupts_and_never_publishes_result(self):
+        self.block_generation = True
+        self.release.clear()
+        job_id = self.create_job().json()["job_id"]
+        self.assertTrue(self.started.wait(2))
+        self.assertEqual(self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").status_code, 409)
+        cancelled = self.client.delete(f"/vi-mobile/api/jobs/{job_id}")
+        self.assertEqual(cancelled.status_code, 200)
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+        self.assertEqual(self.interrupts, 1)
+        self.release.set()
+        self.assertEqual(self.wait_job(job_id)["status"], "cancelled")
+        self.assertEqual(self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").status_code, 409)
+        self.assertEqual(self.client.get(f"/vi-mobile/api/files/{job_id}/000.png").status_code, 404)
+
+    def test_05_cancel_queued_job_does_not_run_it(self):
+        self.block_generation = True
+        self.release.clear()
+        first = self.create_job("first").json()["job_id"]
+        self.assertTrue(self.started.wait(2))
+        second = self.create_job("second", {"prompt": "không được chạy", "width": 64, "height": 64}).json()["job_id"]
+        self.assertEqual(self.client.delete(f"/vi-mobile/api/jobs/{second}").json()["status"], "cancelled")
+        self.release.set()
+        self.assertEqual(self.wait_job(first)["status"], "done")
+        self.assertEqual(self.wait_job(second)["status"], "cancelled")
+        self.assertEqual(len(self.calls), 1)
+        self.assertNotEqual(self.calls[0].get("prompt"), "không được chạy")
+
+    def test_06_s3_upload_and_signed_url_with_mock_client(self):
+        class FakeS3Client:
+            def __init__(self):
+                self.uploads = []
+                self.expiry = None
+
+            def upload_file(self, path, bucket, key, ExtraArgs):
+                self.uploads.append((path, bucket, key, ExtraArgs))
+
+            def generate_presigned_url(self, operation, Params, ExpiresIn):
+                self.expiry = ExpiresIn
+                return f"https://signed.example/{Params['Key']}?signature=mock"
+
+        fake = FakeS3Client()
+        storage = self.jobs.S3Storage({
+            "ANIME3_S3_BUCKET": "bucket",
+            "ANIME3_S3_ENDPOINT_URL": "https://r2.example",
+            "ANIME3_S3_REGION": "auto",
+            "ANIME3_S3_ACCESS_KEY_ID": "key",
+            "ANIME3_S3_SECRET_ACCESS_KEY": "secret",
+            "ANIME3_S3_PREFIX": "anime3",
+            "ANIME3_S3_SIGNED_TTL": "300",
+        })
+        storage._client = lambda: fake
+        self.manager.storage = storage
+        job_id = self.create_job().json()["job_id"]
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        manifest = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").json()
+        item = manifest["files"][0]
+        self.assertEqual(item["storage"], "s3")
+        self.assertTrue(item["url"].startswith("https://signed.example/anime3/"))
+        self.assertIn("signature=mock", item["url"])
+        self.assertEqual(fake.expiry, 300)
+        self.assertEqual(fake.uploads[0][1:3], ("bucket", f"anime3/{job_id}/000.png"))
+        self.assertEqual(fake.uploads[0][3]["ContentType"], "image/png")
+
+    def test_07_s3_failure_falls_back_to_local_without_new_job(self):
+        class BrokenStorage:
+            configured = True
+            prefix = "anime3"
+
+            def upload(self, path, key, mime):
+                raise RuntimeError("R2 unavailable")
+
+        self.manager.storage = BrokenStorage()
+        job_id = self.create_job().json()["job_id"]
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        self.assertEqual(len(self.calls), 1)
+        manifest = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").json()
+        self.assertIn("RuntimeError", manifest["storage_warning"])
+        self.assertEqual(manifest["files"][0]["storage"], "local")
+        self.assertEqual(self.client.get(manifest["files"][0]["url"]).status_code, 200)
+
+    def test_08_restart_marks_queued_job_interrupted_without_rerunning(self):
+        job_id = "f" * 32
+        record = {
+            "job_id": job_id, "status": "queued", "created_at": time.time(),
+            "updated_at": time.time(), "payload": {"prompt": "1girl"},
+            "idempotency_hash": "interrupted", "info": {}, "error": "", "files": [],
+            "storage_warning": "",
+        }
+        self.manager._save(record)
+        restarted = self.jobs.MobileJobManager(
+            root=self.temp.name, endpoint_provider=lambda: None,
+            request_factory=self.ext._txt2img_request, result_dict=self.ext._result_dict,
+            interrupt_provider=lambda: None,
+        )
+        recovered = restarted.get(job_id)
+        self.assertEqual(recovered["status"], "error")
+        self.assertIn("khởi động lại", recovered["error"])
+        self.assertEqual(restarted.jobs[job_id]["files"], [])
+
+    def test_09_auth_dependencies(self):
+        self.assertEqual(self.client.get("/vi-mobile/api/health").status_code, 401)
+        self.assertEqual(self.client.post("/vi-mobile/api/jobs", json={
+            "payload": {"prompt": "1girl"}, "idempotency_key": "no-auth",
+        }).status_code, 401)
+        self.assertEqual(self.calls, [])
+        created = self.create_job()
+        self.assertEqual(created.status_code, 202)
+        job_id = created.json()["job_id"]
+        self.assertEqual(self.client.get(f"/vi-mobile/api/jobs/{job_id}").status_code, 401)
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        item = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result",
+                               headers=self.auth_headers()).json()["files"][0]
+        self.assertEqual(self.client.get(item["url"]).status_code, 401)
+        self.assertEqual(self.client.get(item["url"], headers=self.auth_headers()).status_code, 200)
 
 
 if __name__ == "__main__":

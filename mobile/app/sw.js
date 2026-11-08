@@ -1,7 +1,7 @@
 /* Service worker: app cài ra màn hình chính vẫn mở được khi mạng chập chờn.
-   Không bao giờ cache /sdapi — tiến trình và ảnh phải luôn là dữ liệu thật. */
+   Không bao giờ cache API/job/file — trạng thái và ảnh phải luôn là dữ liệu thật. */
 
-const CACHE = 'anime3-shell-v8';
+const CACHE = 'anime3-shell-v9';
 const SHELL = [
   './',
   './index.html',
@@ -34,7 +34,8 @@ self.addEventListener('activate', (event) => {
 });
 
 function isApi(url) {
-  return url.pathname.includes('/sdapi/') || url.pathname.includes('/internal/');
+  return url.pathname.includes('/sdapi/') || url.pathname.includes('/internal/')
+    || url.pathname.includes('/vi-mobile/api/');
 }
 
 self.addEventListener('fetch', (event) => {

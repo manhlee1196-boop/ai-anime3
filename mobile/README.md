@@ -115,7 +115,7 @@ tunnel** khi bạn quay về.
 | **🔗 Kết nối** + ô địa chỉ | Dán tay `https://xxxx.gradio.live` hoặc `192.168.1.9:7860` (Forge trong LAN, tự hiểu là `http`) |
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link gradio.live hết hạn thì chạy lệnh này, link mới hiện ra, quay lại app là tự nhận |
-| **🩺 Chẩn đoán kết nối** | Gọi song song 6 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`, `vi-mobile/api/health`) bằng đúng GET/POST; kiểm tra cả API ảnh nén cho Android |
+| **🩺 Chẩn đoán kết nối** | Gọi song song 6 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`, `vi-mobile/api/health`) bằng đúng GET/POST; kiểm tra **job nền + file stream** |
 | **Lịch sử link** | 6 link gần nhất kèm ✅/❌ lần dùng cuối; bấm là kết nối lại. Tự kiểm tra lại mỗi 60 giây |
 
 **Vì sao không nhúng thẳng Colab vào app (iframe/WebView)?** Google **chặn đăng nhập
@@ -129,6 +129,29 @@ Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ t�
 
 ---
 
+## S3 / Cloudflare R2 (tuỳ chọn, khuyến nghị cho APK)
+
+Không cấu hình object storage thì app vẫn tải file local từ Forge bằng HTTP Range. Khi có
+S3/R2, worker upload **file ảnh gốc** và manifest chỉ trả **signed URL**; credential không
+đi qua APK. Thêm các giá trị sau vào **Colab Secrets**, bật **Notebook access**, rồi chạy
+lại notebook một ô để cài `boto3` và restart Forge:
+
+| Secret | Bắt buộc | Ý nghĩa |
+|---|---|---|
+| `ANIME3_S3_BUCKET` | ✅ | Tên bucket |
+| `ANIME3_S3_ENDPOINT_URL` | R2/S3 tương thích | R2: `https://<account_id>.r2.cloudflarestorage.com`; AWS S3 có thể để trống |
+| `ANIME3_S3_ACCESS_KEY_ID` | ✅ | Access key của token chỉ có quyền cần thiết trên bucket |
+| `ANIME3_S3_SECRET_ACCESS_KEY` | ✅ | Secret key; không dán vào code/notebook/APK |
+| `ANIME3_S3_REGION` | — | Mặc định `auto`; AWS có thể đặt region thật |
+| `ANIME3_S3_PREFIX` | — | Thư mục object, mặc định `anime3` |
+| `ANIME3_S3_SIGNED_TTL` | — | Thời hạn signed URL 300–86400 giây, mặc định 3600 |
+
+Bucket nên **private**, có lifecycle tự xoá object tạm sau vài ngày. CORS của bucket cần
+cho `GET`/`HEAD` từ `https://localhost` (APK) và origin tunnel khi dùng PWA; cho header
+`Range`, expose `Content-Length`, `Content-Range`, `Accept-Ranges`, `ETag`. Nếu upload hoặc
+cấu hình S3 lỗi, cùng job vẫn hoàn tất bằng file local và manifest có `storage_warning`;
+app **không tạo lại ảnh**.
+
 ## App có gì
 
 | Màn hình | Nội dung |
@@ -137,7 +160,7 @@ Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ t�
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed** |
-| **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge/API ảnh nén, công tắc tự nhận link |
+| **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge + job API, công tắc tự nhận link |
 | **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
 
 Tham số mặc định lấy **nguyên từ `prompt_lib/system_tags.py`** khi sinh dữ liệu
@@ -155,16 +178,16 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 
 `serve.py` chuyển tiếp `/sdapi/*` sang Forge, nên mở từ **điện thoại cùng Wi-Fi** bằng
 `http://<IP-máy-tính>:8787` là dùng được (địa chỉ IP được in ra khi khởi động). Chế độ
-`--mock` dựng Forge giả: tiến trình tăng dần, **Huỷ** hoạt động, trả ảnh PNG gradient —
-đủ để kiểm tra toàn bộ giao diện mà không tốn giây GPU nào.
+`--mock` dựng Forge giả: tạo `job_id`, tiến trình tăng dần, **Huỷ** hoạt động, manifest và
+file PNG gradient có HTTP Range — đủ kiểm toàn bộ giao diện mà không tốn giây GPU nào.
 
 ## Kiểm thử
 
 ```bash
 node mobile/tests/test_core.mjs          # 37 test logic: prompt, payload, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
-node mobile/tests/test_api.mjs           # 26 test ForgeClient: ảnh nén, chọn endpoint trước job, không nhân đôi job, huỷ
+node mobile/tests/test_api.mjs           # 17 test ForgeClient: job, manifest, Blob, retry status, Range, huỷ
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
-python3 mobile/tests/test_mobile_route.py    # 8 test route FastAPI + JPEG + kế thừa API auth
+python3 mobile/tests/test_mobile_route.py    # 9 test job FastAPI, PNG gốc, S3 giả lập, Range, idempotency, API auth
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
 ```
@@ -180,8 +203,8 @@ tham số hires khi tắt hires…) nên sửa một bên mà quên bên kia là
 | `app/index.html`, `app/styles.css` | Khung 4 tab + các sheet, CSS mobile (safe-area, nút ≥ 44 px, dark) |
 | `app/js/core.js` | Logic thuần: parse tag/trọng số, chuẩn hoá prompt, token, payload, dịch lỗi, `extractForgeUrl` (bắt link tunnel trong log Colab). **Không DOM** → test được bằng Node |
 | `app/js/data.js` | Nạp `tags.json(.gz)`, tìm tag Anh↔Việt, 506 phong cách |
-| `app/js/api.js` | Gọi Forge: ping, tiến trình, kiểm tra health rồi chọn API nén JPEG/API chuẩn trước khi tạo job, `interrupt` |
-| `app/js/store.js` | Cài đặt (localStorage) + ảnh (IndexedDB) |
+| `app/js/api.js` | Health, `POST /jobs`, poll trạng thái, manifest, tải Blob signed/local có tiến trình + resume Range, `DELETE /jobs/{id}`; không fallback base64 |
+| `app/js/store.js` | Cài đặt (localStorage) + Blob ảnh và thumbnail nhỏ (IndexedDB) |
 | `app/js/ui.js` | Nối DOM, 4 tab (thêm **Máy chủ**: Colab, clipboard, chẩn đoán), sheet Cài đặt/Phong cách/Xem ảnh |
 | `app/sw.js`, `app/manifest.webmanifest`, `app/icons/` | PWA: cài ra màn hình chính, mở nhanh khi mạng chập chờn |
 | `app/data/tags.json(.gz)` | **Sinh ra**, không commit (`.gitignore`) |
@@ -201,7 +224,10 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 | Hiện tượng | Nguyên nhân & cách sửa |
 |---|---|
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
-| Web tạo ảnh bình thường nhưng APK mất kết nối lúc trả ảnh | Web dùng transport Gradio, APK tải JSON base64 lớn. Chạy lại notebook một ô để cập nhật extension + restart Forge; chẩn đoán phải có **Ảnh nén cho điện thoại**. App sẽ gọi `/vi-mobile/api/txt2img` nhận JPEG nhỏ thay vì PNG lớn; không đổi engine/job |
+| Web tạo ảnh nhưng APK mất kết nối lúc trả ảnh | Cập nhật notebook/extension để có **Job nền & file stream**. App chỉ nhận JSON nhỏ rồi tải file gốc từ S3/R2 hoặc local Range; lỗi download được retry mà không tạo job mới |
+| Chẩn đoán thiếu `async_jobs` | Extension Colab đang ở bản cũ. Chạy lại notebook một ô và dùng link mới; app cố ý không quay lại `/vi-mobile/api/txt2img` base64 |
+| Signed URL tải bị CORS | Bucket chưa cho `GET`/`HEAD` từ `https://localhost` (APK) hoặc origin PWA; kiểm tra lại CORS theo mục S3/R2 |
+| Manifest có `storage_warning` | Upload S3/R2 lỗi; ảnh vẫn ở cùng job và app tải file local. Kiểm tra credential, endpoint, quyền bucket rồi dùng job sau |
 | “Không thấy /sdapi” (404) | Forge chạy thiếu `--api`; bộ cài đã bật sẵn |
 | Không ghép dấu tiếng Việt được / Enter làm mất chữ | APK cũ có thể xử lý gợi ý giữa lúc IME ghép dấu. Bản mới chờ `compositionend`, không chặn Enter/keyCode 229 và hỗ trợ chuyển cụm Việt đã biết sang tag Anh |
 | Chẩn đoán báo `internal/progress` HTTP 405 | APK cũ gọi nhầm GET; bản mới dùng `POST` với `skip_current_image=true`. Cài lại APK build mới nhất |
@@ -215,21 +241,23 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 
 ## Ghi chú kỹ thuật
 
-- **Ảnh nhẹ cho tunnel**: ưu tiên `POST /vi-mobile/api/txt2img`; extension gọi đúng
-  handler txt2img của Forge rồi đổi PNG base64 thành JPEG quality 88. Web/API chuẩn
-  không bị sửa và ảnh gốc trong outputs không bị ghi đè. App đọc `/vi-mobile/api/health`
-  để chọn endpoint **trước khi tạo job**; sau POST, mọi lỗi mạng/404/5xx đều không gửi
-  lại sang endpoint khác.
-- **Không có timeout cứng cho việc sinh ảnh**: request txt2img là đồng bộ,
-  Forge chỉ trả lời khi xong (Hires trên T4 mất 3–6 phút). App chạy POST và poll
-  `/sdapi/v1/progress` song song, nên vẫn thấy tiến trình và huỷ được.
-- **Khôi phục dự phòng khi đứt response ảnh**: app đọc `current_image` một lần lúc tiến trình ≥90%.
-  Nếu body `txt2img` bị đứt, app chờ/đọc lại preview gần cuối thay vì POST tạo job trùng;
-  không có bằng chứng job chạy thì không dùng ảnh cũ.
-- **Huỷ** gọi `/sdapi/v1/interrupt` rồi bỏ request — không để Forge chạy tiếp một job
-  người dùng đã bỏ.
-- API mobile trả JPEG, API chuẩn trả PNG; app lưu **data URL** vào IndexedDB (không nhét vào
-  `localStorage` vì giới hạn ~5 MB).
+- **Job bất đồng bộ**: `POST /vi-mobile/api/jobs` validate payload rồi trả `202 {job_id}`.
+  Một worker gọi đúng handler txt2img của Forge; app poll `GET /jobs/{id}` và đọc tiến trình
+  chuẩn song song. Request tạo job không bị giữ trong suốt thời gian GPU chạy.
+- **Idempotency**: client gửi một khoá ngẫu nhiên cho mỗi lần bấm; server lưu hash khoá cùng
+  `job.json`. Trùng khoá trả lại job cũ. Lỗi đọc trạng thái chỉ retry `GET`, không POST lại.
+- **Manifest + file gốc**: khi xong, `GET /jobs/{id}/result` chỉ chứa metadata, MIME, kích
+  thước và URL file. Worker giữ PNG/JPEG/WebP gốc, không đưa base64 vào response và không
+  nén lại thành JPEG. S3/R2 trả signed URL; local fallback stream binary có một Range `bytes`.
+- **Retry download**: app tải Blob, hiện tiến trình từng file và thử tối đa ba lượt. Nếu đã có
+  một phần file thì gửi `Range: bytes=<đã có>-`; nếu server bỏ qua Range thì đọc lại từ đầu,
+  không nối trùng byte. Không dùng `current_image` recovery.
+- **Huỷ/restart**: `DELETE /jobs/{id}` bỏ queued job hoặc gọi interrupt cho running job. Job
+  queued/running/uploading khi Forge restart được đánh dấu lỗi gián đoạn, không tự chạy lại.
+- **Bộ nhớ**: app lưu Blob trong IndexedDB, hiển thị/chia sẻ bằng Object URL và thu hồi URL;
+  chỉ thumbnail JPEG nhỏ dùng data URL. Credential S3 chỉ ở environment của Colab/Forge.
+- Route job/file kế thừa dependencies auth của `/sdapi/v1/txt2img`; signed URL không nhận
+  Basic Auth của Forge. Web/API chuẩn và ảnh trong outputs không bị thay đổi.
 - Payload theo đúng `prompt_lib/builder.py`: `clip_skip` đi qua
   `override_settings.clip_stop_at_last_layers`, sampler `… Karras` tách thành sampler +
   `scheduler=Karras`, tắt Hires thì bỏ luôn 4 khoá `hr_*`/`denoising_strength`.

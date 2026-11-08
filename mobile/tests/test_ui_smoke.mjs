@@ -67,12 +67,14 @@ async function main() {
   globalThis.fetch = (input, init) => {
     const url = new URL(String(input), BASE).href;
     fetchCalls.push(url);
-    if (url.includes('txt2img') && init?.body) generationPayloads.push(JSON.parse(init.body));
+    if (url.endsWith('/vi-mobile/api/jobs') && init?.body) {
+      generationPayloads.push(JSON.parse(init.body).payload);
+    }
     return realFetch(url, init);
   };
 
   for (const key of ['window', 'document', 'HTMLElement', 'Node', 'Event', 'FormData',
-    'File', 'Blob', 'navigator', 'location', 'localStorage', 'confirm']) {
+    'navigator', 'location', 'localStorage', 'confirm']) {
     const value = window[key] ?? globalThis[key];
     Object.defineProperty(globalThis, key, { value, writable: true, configurable: true });
   }
@@ -87,7 +89,7 @@ async function main() {
       if (await fn()) return;
       await wait(100);
     }
-    throw new Error(`quá thời gian chờ ${label}`);
+    throw new Error(`quá thời gian chờ ${label}; status=${doc.querySelector('#status')?.textContent}`);
   }
 
   const doc = window.document;
@@ -150,10 +152,19 @@ const state_settings_api_url = () => {
   $('#generateBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => /\d+%|Xong/.test($('#status').textContent), { label: 'tiến trình' });
   assert.ok(!$('#cancelBtn').classList.contains('hidden'), 'nút Huỷ phải hiện khi đang chạy');
-  await until(() => $$('#resultImages img').length > 0, { timeout: 40000, label: 'ảnh trả về' });
-  assert.match($('#status').textContent, /Xong/);
-  assert.equal(fetchCalls.filter((url) => url.includes('txt2img')).length, 1,
-    'mỗi lần bấm chỉ được POST txt2img một lần');
+  await until(() => $$('#resultImages img').length > 0, {
+    timeout: 40000,
+    label: `ảnh trả về; status=${$('#status').textContent}; calls=${fetchCalls.join(', ')}`,
+  });
+  assert.match($('#status').textContent, /xong/i);
+  assert.equal(fetchCalls.filter((url) => url.endsWith('/vi-mobile/api/jobs')).length, 1,
+    'mỗi lần bấm chỉ được POST job một lần');
+  assert.equal(fetchCalls.filter((url) => url.includes('/sdapi/v1/txt2img')).length, 0,
+    'không được gọi API base64 đồng bộ');
+  assert.ok(fetchCalls.some((url) => url.includes('/vi-mobile/api/files/')),
+    'phải tải file binary từ manifest');
+  assert.ok($('#resultImages img').src.startsWith('blob:'),
+    'ảnh kết quả phải hiển thị bằng Object URL, không phải data URL');
   assert.equal(generationPayloads.length, 1);
   assert.match(generationPayloads[0].prompt, /long_hair/);
   assert.match(generationPayloads[0].prompt, /ao_dai/);
@@ -165,6 +176,10 @@ const state_settings_api_url = () => {
   await until(() => $$('#gallery button').length > 0, { label: 'ảnh vào thư viện' });
   assert.ok($('#galleryEmpty').classList.contains('hidden'),
     'thư viện còn trống dù vừa tạo ảnh');
+  $('#gallery button').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => !$('#sheetImage').classList.contains('hidden'), { label: 'mở Blob từ thư viện' });
+  assert.ok($('#imageView').src.startsWith('blob:'), 'ảnh lưu phải đọc lại bằng Object URL');
+  $('#sheetImage [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
 
   // --- kho tag tiếng Việt
   $('.tab-btn[data-tab="tags"]').dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -272,7 +287,7 @@ const state_settings_api_url = () => {
   await until(() => clipboard.writes.some((text) => text.includes('--restart')),
     { label: 'copy lệnh lấy link mới' });
 
-  // chẩn đoán: đủ 6 endpoint, internal/progress phải POST và có API ảnh nén
+  // chẩn đoán: đủ 6 endpoint, internal/progress phải POST và có job API
   $('#diagnoseBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => $$('#diagnoseOut .diag-line').length === 6, { label: 'kết quả chẩn đoán' });
   assert.equal($$('#diagnoseOut .diag-line.ok').length, 6, 'chẩn đoán có endpoint lỗi');
@@ -293,6 +308,7 @@ try {
   await main();
 } catch (error) {
   console.error('❌ smoke test UI lỗi:', error.message);
+  console.error(serverLog.slice(-30).join(''));
   exitCode = 1;
 }
 server.kill('SIGTERM');

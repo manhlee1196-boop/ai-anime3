@@ -567,6 +567,21 @@ PYSTY
   # trỏ extension tới repo để nó tự tìm prompt_lib và các file CSV
   echo "$REPO_DIR" > "$ext/vi-prompt-builder/.repo_root"
   ok "Đã cài extension (tab 'Prompt VN' sẽ hiện trong Forge)."
+
+  # 7) Object storage là tuỳ chọn. Không cài boto3 cho cấu hình local mặc định,
+  #    không in credential và không ghi credential vào settings.json/APK.
+  if [[ -n "${ANIME3_S3_BUCKET:-}" ]]; then
+    info "S3/R2 được cấu hình: kiểm tra boto3 cho job API mobile"
+    if ! "$FORGE_DIR/venv/bin/python" -c 'import boto3' >/dev/null 2>&1; then
+      "$FORGE_DIR/venv/bin/python" -m pip install --quiet --disable-pip-version-check boto3 \
+        || die "Không cài được boto3 dù ANIME3_S3_BUCKET đã bật. Sửa lỗi pip rồi chạy lại extras."
+    fi
+    [[ -n "${ANIME3_S3_ACCESS_KEY_ID:-}" && -n "${ANIME3_S3_SECRET_ACCESS_KEY:-}" ]] \
+      || warn "Thiếu Access Key/Secret Key; upload S3 sẽ lỗi và app dùng file local."
+    ok "boto3 sẵn sàng; ảnh job sẽ ưu tiên S3/R2, lỗi upload thì giữ file local."
+  else
+    info "Không có ANIME3_S3_BUCKET: app dùng file local có HTTP Range."
+  fi
 }
 
 # ------------------------------------------------------------------- launch

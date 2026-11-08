@@ -696,6 +696,17 @@ def test_notebook():
     check("Ô code Python hợp lệ, không có outputs đã chạy", cells[0]["outputs"] == [])
     check("Dropdown đủ 4 model, storage /content", all(x in source for x in ("fp16", "fp8", "int8", "hswq", "/content/models")))
     check("Token đọc từ Colab Secrets, không ghi literal", 'userdata.get("CIVITAI_TOKEN")' in source and 'GITHUB_TOKEN = "' not in source)
+    s3_names = ("ANIME3_S3_BUCKET", "ANIME3_S3_ENDPOINT_URL", "ANIME3_S3_REGION",
+                "ANIME3_S3_ACCESS_KEY_ID", "ANIME3_S3_SECRET_ACCESS_KEY",
+                "ANIME3_S3_PREFIX", "ANIME3_S3_SIGNED_TTL")
+    check("S3/R2 Secrets được chuyển qua env, không in credential",
+          all(f'"{name}"' in source for name in s3_names) and "print(value)" not in source)
+    setup_source = (ROOT / "colab/setup_forge.sh").read_text()
+    check("boto3 chỉ cài khi bật bucket và không lưu credential",
+          'if [[ -n "${ANIME3_S3_BUCKET:-}" ]]' in setup_source
+          and "pip install --quiet --disable-pip-version-check boto3" in setup_source
+          and not any(name in (ROOT / "colab/install.sh").read_text().split("CONFIG_KEYS=(", 1)[1].split(")", 1)[0]
+                      for name in s3_names))
     check("Form tối giản chỉ có model và tunnel", source.count("#@param") == 2 and "NO_LAUNCH" not in source and "SMOKE_TEST" not in source)
     check("Không mount Drive", "drive.mount" not in source)
     check("Bootstrap có raw GitHub và API dự phòng", "raw.githubusercontent.com" in source and "api.github.com" in source)

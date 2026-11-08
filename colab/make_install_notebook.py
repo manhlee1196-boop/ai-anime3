@@ -18,12 +18,15 @@ INTRO = """# ⚡ WAI-Illustrious v17 — Colab một ô
 **Dùng:** bật **GPU T4** → chạy ô duy nhất bên dưới (**Runtime → Run all**) → mở link public được in ra.
 
 - **FP16 + Gradio share** là mặc định khuyến nghị; chỉ đổi khi thật sự cần.
-- Tự cài Forge Neo, checkpoint, tag tiếng Việt, app `/vi-mobile/` và **API ảnh JPEG nhẹ cho Android**.
+- Tự cài Forge Neo, checkpoint, tag tiếng Việt, app `/vi-mobile/` và **job nền + file stream cho Android**.
+- Ảnh giữ PNG/JPEG/WebP gốc; có thể bật **S3/Cloudflare R2** bằng Colab Secrets để tải qua signed URL. Không cấu hình thì dùng file local có resume Range.
 - Model/ảnh nằm trong `/content`, **không mount Drive**, không tự xóa dữ liệu cũ.
 - Chạy lại ô sẽ cập nhật code/extension, giữ model đã có và khởi động lại Forge để nạp bản mới. **Đợi job hiện tại kết thúc trước khi chạy lại.**
 
 ### App Android
-Mở app → **Máy chủ** → dán link public. Nếu chẩn đoán thiếu **Ảnh nén cho điện thoại**, chạy lại ô này rồi dùng link mới. Web txt2img và app dùng cùng engine; API mobile chỉ nén ảnh trả về để tunnel không phải tải PNG base64 lớn.
+Mở app → **Máy chủ** → dán link public. Chẩn đoán phải có **Job nền & file stream**. App tạo `job_id`, poll trạng thái, nhận manifest nhỏ rồi tải Blob; lỗi tải file chỉ retry download, không tạo lại ảnh. Web txt2img và app dùng cùng engine.
+
+**S3/R2 (tuỳ chọn):** thêm các Secrets `ANIME3_S3_BUCKET`, `ANIME3_S3_ENDPOINT_URL`, `ANIME3_S3_ACCESS_KEY_ID`, `ANIME3_S3_SECRET_ACCESS_KEY`; tuỳ chọn thêm `ANIME3_S3_REGION`, `ANIME3_S3_PREFIX`, `ANIME3_S3_SIGNED_TTL`. Bật quyền **Notebook access** cho các Secret đó trước khi chạy ô. Credential không nằm trong APK hay file cấu hình repo.
 
 ### Đường dẫn nhanh
 - Web Forge: `<link public>/`
@@ -59,6 +62,25 @@ try:
 except Exception:
     pass
 
+# S3/R2 tuỳ chọn: chỉ chuyển giá trị vào environment của process cài/Forge.
+# Không in, không ghi vào notebook, settings.json hoặc APK.
+S3_SECRETS = (
+    "ANIME3_S3_BUCKET", "ANIME3_S3_ENDPOINT_URL", "ANIME3_S3_REGION",
+    "ANIME3_S3_ACCESS_KEY_ID", "ANIME3_S3_SECRET_ACCESS_KEY",
+    "ANIME3_S3_PREFIX", "ANIME3_S3_SIGNED_TTL",
+)
+try:
+    from google.colab import userdata
+    for name in S3_SECRETS:
+        try:
+            value = userdata.get(name)
+            if value:
+                env[name] = value
+        except Exception:
+            pass
+except Exception:
+    pass
+
 __BOOTSTRAP__
 dest = Path("/content/install.sh")
 download_installer(dest, BRANCH, env)
@@ -87,7 +109,7 @@ if rc:
 
 print("\n✅ Hoàn tất. Dùng link public mới ở phía trên.")
 print("▶ Web: mở link → txt2img → Generate.")
-print("▶ Android: dán link vào tab Máy chủ; chẩn đoán phải có 'Ảnh nén cho điện thoại'.")
+print("▶ Android: dán link vào tab Máy chủ; chẩn đoán phải có 'Job nền & file stream'.")
 print("▶ Không cài APK: mở <link public>/vi-mobile/")
 '''.replace("__BOOTSTRAP__", BOOTSTRAP_SOURCE).replace("__BRANCH__", BRANCH)
 

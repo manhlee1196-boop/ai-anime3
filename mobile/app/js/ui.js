@@ -31,10 +31,13 @@ const state = {
   styleGroup: null,
   busy: false,
   controller: null,
-  results: [],             // data URL của lần sinh gần nhất
+  activeClient: null,
+  activeJobId: '',
+  results: [],             // [{blob, url, name}] — không giữ base64
   lastInfo: null,
   lastSeed: null,
   viewId: null,
+  viewUrl: '',
   installEvent: null,
   connected: false,
   connectedModel: '',
@@ -97,6 +100,12 @@ function setProgress(percent) {
   }
   box.classList.remove('hidden');
   bar.style.width = `${Math.max(4, Math.min(100, percent))}%`;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(0, Math.round(bytes / 1024))} KB`;
 }
 
 function client() {
@@ -370,7 +379,7 @@ function bindEvents() {
   $('#imageReuseBtn').addEventListener('click', reuseImage);
   $('#imageShareBtn').addEventListener('click', async () => {
     const item = state.viewId ? await store.getImage(state.viewId) : null;
-    if (item) shareImage(item.dataUrl);
+    if (item) shareImage(item);
   });
   $('#imageDeleteBtn').addEventListener('click', async () => {
     if (!state.viewId) return;
@@ -415,6 +424,10 @@ function openSheet(selector) {
 
 function closeSheet(sheet) {
   sheet.classList.add('hidden');
+  if (sheet.id === 'sheetImage' && state.viewUrl) {
+    URL.revokeObjectURL(state.viewUrl);
+    state.viewUrl = '';
+  }
   if (!$$('.sheet').some((item) => !item.classList.contains('hidden'))) {
     document.body.style.overflow = '';
   }
@@ -987,30 +1000,38 @@ async function generate() {
 
   try {
     const api = client();
+    state.activeClient = api;
     const result = await api.txt2img(payload, {
       signal: state.controller.signal,
+      onJob: (job) => { state.activeJobId = job.job_id; },
       onProgress: (info, elapsed) => {
         setProgress((Number(info.progress) || 0) * 100);
         setStatus(core.progressText(info, elapsed));
       },
-      onRecover: () => {
-        setProgress(95);
-        setStatus('⚠️ Đứt kết nối khi nhận ảnh. Đang chờ Forge và lấy lại kết quả, không tạo lại job…');
+      onDownload: ({ loaded, total, index, count }) => {
+        const percent = total ? (loaded / total) * 100 : 95;
+        setProgress(percent);
+        setStatus(`⬇️ Đang tải file ${index + 1}/${count}: ${formatBytes(loaded)}/${formatBytes(total)} · không chạy lại job`);
       },
     });
-    state.results = result.images;
+    const media = result.images.map((blob, index) => {
+      const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp' })[blob.type] || 'png';
+      return {
+        blob,
+        url: URL.createObjectURL(blob),
+        name: `anime3-${core.seedFromInfo(result.info) ?? Date.now()}-${index}.${extension}`,
+      };
+    });
+    revokeResultUrls();
+    state.results = media;
     state.lastInfo = result.info;
     state.lastSeed = core.seedFromInfo(result.info);
-    renderResult(result);
+    renderResult({ ...result, images: media });
     setProgress(100);
-    setStatus(result.recovered
-      ? `✅ Đã khôi phục ảnh từ tiến trình sau ${core.formatDuration(result.elapsed)}`
-      : `✅ Xong sau ${core.formatDuration(result.elapsed)}`
-        + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
-    if (result.recovered) {
-      toast('Kết nối bị đứt lúc tải kết quả; app đã lấy lại ảnh mà không tạo lại job.', { ms: 5000 });
-    }
-    await saveResultImages(result);
+    setStatus(`✅ Job ${result.jobId.slice(0, 8)} · xong sau ${core.formatDuration(result.elapsed)}`
+      + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
+    if (result.storageWarning) toast(result.storageWarning, { error: true, ms: 6000 });
+    await saveResultImages({ ...result, images: media });
     pingServer();
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -1026,6 +1047,8 @@ async function generate() {
   } finally {
     state.busy = false;
     state.controller = null;
+    state.activeClient = null;
+    state.activeJobId = '';
     $('#generateBtn').classList.remove('hidden');
     $('#cancelBtn').classList.add('hidden');
     renderServerTab();
@@ -1035,8 +1058,18 @@ async function generate() {
 async function cancelJob() {
   if (!state.busy) return;
   setStatus('⛔ Đang huỷ…');
-  await client().interrupt();
+  if (state.activeClient && state.activeJobId) {
+    await state.activeClient.cancelJob(state.activeJobId);
+  } else {
+    await client().interrupt();
+  }
   state.controller?.abort();
+}
+
+function revokeResultUrls() {
+  for (const item of state.results) {
+    if (item?.url) URL.revokeObjectURL(item.url);
+  }
 }
 
 function renderResult(result) {
@@ -1050,10 +1083,10 @@ function renderResult(result) {
     `${core.formatDuration(result.elapsed)}`,
     info.sampler_name ? `${info.sampler_name} · ${info.steps || '?'} bước` : '',
   ].filter(Boolean).join(' · ');
-  $('#resultImages').replaceChildren(...result.images.map((src) => h('img', {
-    src,
+  $('#resultImages').replaceChildren(...result.images.map((item) => h('img', {
+    src: item.url,
     alt: 'Ảnh vừa tạo',
-    onclick: () => openImage(null, src, $('#resultMeta').textContent),
+    onclick: () => openImage(null, item.url, $('#resultMeta').textContent),
   })));
   $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1062,12 +1095,13 @@ function renderResult(result) {
  * Ảnh thu nhỏ cho lưới thư viện (JPEG ~420 px). Không có canvas/ảnh thì trả '' —
  * thư viện vẫn mở được ảnh gốc, chỉ mất ảnh xem trước.
  */
-async function makeThumb(dataUrl, max = 420) {
+async function makeThumb(image, max = 420) {
   try {
     let bitmap;
     if (typeof createImageBitmap === 'function') {
+      const blob = image?.blob || await (await fetch(image)).blob();
       bitmap = await Promise.race([
-        createImageBitmap(await (await fetch(dataUrl)).blob()),
+        createImageBitmap(blob),
         new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
       ]);
     }
@@ -1088,11 +1122,13 @@ async function makeThumb(dataUrl, max = 420) {
 
 async function saveResultImages(result) {
   const reuse = core.reuseFromInfo(result.info) || {};
-  for (const [index, dataUrl] of result.images.entries()) {
+  for (const [index, image] of result.images.entries()) {
     try {
       await store.addImage({
-        dataUrl,
-        thumb: await makeThumb(dataUrl),
+        blob: image.blob,
+        name: image.name,
+        mime: image.blob.type,
+        thumb: await makeThumb(image),
         prompt: reuse.prompt || $('#prompt').value,
         negative: reuse.negative || $('#negative').value,
         seed: reuse.seed,
@@ -1129,7 +1165,7 @@ function describeItem(item) {
   ].filter(Boolean).join(' · ');
 }
 
-/** Mở một mục trong thư viện: nạp ảnh gốc (data URL) rồi mở sheet. */
+/** Mở một mục: lấy Blob từ IndexedDB rồi tạo object URL có vòng đời rõ ràng. */
 async function openItem(item) {
   const full = await store.getImage(item.id);
   if (!full) {
@@ -1137,7 +1173,9 @@ async function openItem(item) {
     renderGallery();
     return;
   }
-  openImage(item.id, full.dataUrl, describeItem(item));
+  if (state.viewUrl) URL.revokeObjectURL(state.viewUrl);
+  state.viewUrl = full.blob ? URL.createObjectURL(full.blob) : '';
+  openImage(item.id, state.viewUrl || full.dataUrl, describeItem(item));
 }
 
 async function openImage(id, dataUrl, meta) {
@@ -1166,11 +1204,13 @@ async function reuseImage() {
   toast('Đã nạp lại prompt và seed');
 }
 
-async function shareImage(dataUrl) {
-  if (!dataUrl) return;
+async function shareImage(image) {
+  if (!image) return;
   try {
-    const blob = await (await fetch(dataUrl)).blob();
-    const file = new File([blob], `anime3-${Date.now()}.png`, { type: blob.type || 'image/png' });
+    const blob = image?.blob || await (await fetch(image?.dataUrl || image)).blob();
+    const file = new File([blob], image?.name || `anime3-${Date.now()}.png`, {
+      type: blob.type || 'image/png',
+    });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: 'Anime3' });
       return;
@@ -1462,8 +1502,8 @@ async function runDiagnose() {
     if (result.anyOk && !result.hasProgress) {
       hints.push('Vẫn có thể tạo ảnh, nhưng thanh tiến trình sẽ không cập nhật. Hãy cập nhật Forge hoặc kiểm tra cờ --api.');
     }
-    if (result.hasApi && !result.hasCompactApi) {
-      hints.push('Colab chưa có API ảnh nén cho điện thoại. Chạy lại notebook một ô để cập nhật extension và khởi động lại Forge; không cần tải lại model.');
+    if (result.hasApi && !result.hasAsyncJobs) {
+      hints.push('Colab chưa có job nền + file stream. Chạy lại notebook một ô để cập nhật extension; app không quay lại API base64 cũ.');
     }
     const hasNetworkError = result.checks.some((item) => !item.ok && item.status === 0);
     if (hasNetworkError && location.protocol === 'https:' && location.hostname === 'localhost') {

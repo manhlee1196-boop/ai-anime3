@@ -462,7 +462,6 @@ class ViPromptInline(Script):
 # CORS và không cần cài APK. Nếu thư mục mobile/app chưa có (bản repo cũ) thì bỏ qua.
 MOBILE_ROUTE = "/vi-mobile"
 MOBILE_API_ROUTE = f"{MOBILE_ROUTE}/api"
-MOBILE_JPEG_QUALITY = 88
 
 
 def _result_dict(result):
@@ -480,30 +479,6 @@ def _result_dict(result):
         if hasattr(result, key):
             data[key] = getattr(result, key)
     return data
-
-
-def _mobile_jpeg_data_url(encoded):
-    """PNG base64 của API Forge → JPEG nhỏ hơn; ảnh gốc trong outputs không bị sửa."""
-    import base64
-    import io
-    from PIL import Image
-
-    if not isinstance(encoded, str) or not encoded:
-        raise ValueError("Ảnh API rỗng")
-    if encoded.startswith("data:image/jpeg") or encoded.startswith("data:image/jpg"):
-        return encoded
-    raw = encoded.split(",", 1)[1] if encoded.startswith("data:") else encoded
-    source = base64.b64decode(raw, validate=True)
-    with Image.open(io.BytesIO(source)) as opened:
-        has_alpha = "A" in opened.getbands() or "transparency" in opened.info
-        image = opened.convert("RGBA") if has_alpha else opened.convert("RGB")
-        if image.mode == "RGBA":
-            background = Image.new("RGB", image.size, "white")
-            background.paste(image, mask=image.getchannel("A"))
-            image = background
-        output = io.BytesIO()
-        image.save(output, format="JPEG", quality=MOBILE_JPEG_QUALITY, optimize=True)
-    return "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode("ascii")
 
 
 def _standard_txt2img_route(app):
@@ -537,69 +512,32 @@ def _txt2img_request(endpoint, payload):
     return annotation(**payload)
 
 
+def _standard_interrupt_endpoint(app):
+    for route in getattr(app, "routes", []):
+        methods = getattr(route, "methods", set()) or set()
+        if getattr(route, "path", "") == "/sdapi/v1/interrupt" and "POST" in methods:
+            return getattr(route, "endpoint", None)
+    return None
+
+
 def install_mobile_api(app):
-    """API riêng cho APK: gọi đúng handler txt2img của Forge rồi nén body trả về.
+    """Cài job API mới; giữ auth của route Forge và không dùng response base64."""
+    import importlib.util
 
-    Không thay `/sdapi/v1/txt2img`, nên giao diện web và client khác giữ nguyên PNG.
-    Handler chuẩn vẫn chịu trách nhiệm validation, queue, GPU, seed và lưu outputs.
-    """
-    import inspect
-    from fastapi import Request
-    from fastapi.concurrency import run_in_threadpool
-    from fastapi.responses import JSONResponse
-
-    # Forge Neo gắn --api-auth bằng Depends(self.auth) trên từng route, không phải
-    # middleware toàn cục. Phải mang nguyên dependencies sang route mobile để không
-    # tạo cửa hậu bỏ qua Basic Auth.
     standard_route = _standard_txt2img_route(app)
     dependencies = list(getattr(standard_route, "dependencies", []) or [])
-
-    @app.get(f"{MOBILE_API_ROUTE}/health", include_in_schema=False)
-    async def _mobile_api_health():
-        return {
-            "ok": True,
-            "txt2img_available": _standard_txt2img_endpoint(app) is not None,
-            "image_format": "jpeg",
-            "jpeg_quality": MOBILE_JPEG_QUALITY,
-        }
-
-    @app.post(f"{MOBILE_API_ROUTE}/txt2img", include_in_schema=False, dependencies=dependencies)
-    async def _mobile_txt2img(request: Request):
-        endpoint = _standard_txt2img_endpoint(app)
-        if endpoint is None:
-            return JSONResponse(status_code=503, content={
-                "detail": "Forge chưa có /sdapi/v1/txt2img; cần khởi chạy với --api.",
-            })
-        try:
-            payload = await request.json()
-            if not isinstance(payload, dict):
-                raise ValueError("JSON body phải là object")
-            model = _txt2img_request(endpoint, payload)
-        except Exception:
-            return JSONResponse(status_code=422, content={"detail": "Payload txt2img không hợp lệ."})
-
-        # API Forge/A1111 thường là hàm sync: phải chạy trong threadpool để không
-        # khóa event loop/progress. Không bắt lỗi generation để mã 4xx/5xx thật được giữ.
-        if inspect.iscoroutinefunction(endpoint):
-            result = await endpoint(model)
-        else:
-            result = await run_in_threadpool(endpoint, model)
-        data = _result_dict(result)
-        images = data.get("images") or []
-        compact = []
-        failed = 0
-        for encoded in images:
-            try:
-                compact.append(_mobile_jpeg_data_url(encoded))
-            except Exception as exc:
-                # Không đổi job hay tạo lại ảnh chỉ vì codec; trả nguyên ảnh đó và ghi
-                # marker để chẩn đoán biết body có thể vẫn lớn.
-                failed += 1
-                compact.append(encoded)
-                print(f"[vi-prompt-builder] Không nén được một ảnh mobile: {type(exc).__name__}")
-        data["images"] = compact
-        data["mobile_image_format"] = "mixed" if failed else "jpeg"
-        return JSONResponse(data)
+    module_path = os.path.join(os.path.dirname(__file__), "mobile_jobs.py")
+    spec = importlib.util.spec_from_file_location("anime3_mobile_jobs", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.install_mobile_jobs(
+        app,
+        endpoint_provider=lambda: _standard_txt2img_endpoint(app),
+        request_factory=_txt2img_request,
+        result_dict=_result_dict,
+        interrupt_provider=lambda: _standard_interrupt_endpoint(app),
+        dependencies=dependencies,
+    )
 
 
 def mobile_app_dir():
@@ -612,20 +550,21 @@ def mobile_app_dir():
 
 def serve_mobile_app(demo, app):
     """Gắn app điện thoại vào FastAPI của Forge (gọi qua `on_app_started`)."""
+    manager = None
     try:
         # Đăng ký trước StaticFiles mount /vi-mobile để route API không bị che.
-        install_mobile_api(app)
+        manager = install_mobile_api(app)
     except Exception as exc:                      # noqa: BLE001 - không làm hỏng Forge
-        print(f"[vi-prompt-builder] Không gắn được API ảnh nén cho mobile: {exc}")
+        print(f"[vi-prompt-builder] Không gắn được job API cho mobile: {exc}")
     root = mobile_app_dir()
     if not root:
-        return
+        return manager
     try:
         from fastapi.responses import RedirectResponse
         from fastapi.staticfiles import StaticFiles
     except Exception as exc:                      # noqa: BLE001 - thiếu fastapi thì thôi
         print(f"[vi-prompt-builder] Không phục vụ được {MOBILE_ROUTE}: {exc}")
-        return
+        return manager
     try:
         @app.get(MOBILE_ROUTE, include_in_schema=False)
         def _mobile_entry():
@@ -637,6 +576,7 @@ def serve_mobile_app(demo, app):
               f"({root}{'' if has_data else ' — thiếu data/tags.json, chạy python3 mobile/build_data.py'})")
     except Exception as exc:                      # noqa: BLE001 - không được làm hỏng Forge
         print(f"[vi-prompt-builder] Không gắn được {MOBILE_ROUTE}: {exc}")
+    return manager
 
 
 try:
