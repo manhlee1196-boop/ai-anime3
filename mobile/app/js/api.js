@@ -147,6 +147,40 @@ export class ForgeClient {
     return { available: false, progress: 0, step: 0, steps: 0, eta: 0 };
   }
 
+  /**
+   * Chẩn đoán nhanh: gọi từng endpoint quan trọng và trả về kết quả có thể đọc được.
+   * Dùng cho tab "Máy chủ" khi link tunnel sống nhưng app vẫn không sinh ảnh được.
+   */
+  async diagnose() {
+    const checks = [
+      ['sdapi/v1/options', 'tuỳ chọn + checkpoint'],
+      ['sdapi/v1/cmd-flags', 'cờ khởi động (có --api?)'],
+      ['sdapi/v1/sd-models', 'danh sách model'],
+      ['sdapi/v1/progress', 'tiến trình (cần cho thanh chạy)'],
+      ['internal/progress', 'tiến trình nội bộ của Forge'],
+    ];
+    const out = [];
+    for (const [path, label] of checks) {
+      try {
+        const data = await this.request(path, { timeout: 7000 });
+        const detail = path.endsWith('options')
+          ? String(data?.sd_model_checkpoint || '(không rõ model)').split(/[\\/]/).pop()
+          : Array.isArray(data) ? `${data.length} mục` : 'OK';
+        out.push({ path, label, ok: true, detail });
+      } catch (error) {
+        out.push({ path, label, ok: false, detail: error.message });
+      }
+    }
+    const anyOk = out.some((item) => item.ok);
+    const hasApi = out.find((item) => item.path === 'sdapi/v1/options')?.ok;
+    return {
+      base: this.base || '(cùng origin với trang)',
+      anyOk,
+      hasApi,
+      checks: out,
+    };
+  }
+
   /** Dừng job đang chạy trên Forge. */
   async interrupt() {
     try {

@@ -178,6 +178,41 @@ check('apiUrl dùng đường dẫn tuyệt đối khi không có base', () => {
     'https://x.gradio.live/sdapi/v1/options');
 });
 
+check('extractForgeUrl lấy link trong output của Colab', () => {
+  assert.equal(core.extractForgeUrl('Link public: https://abc123.gradio.live'),
+    'https://abc123.gradio.live');
+  assert.equal(core.extractForgeUrl('Link public: https://abc123.gradio.live/'),
+    'https://abc123.gradio.live');
+  assert.equal(core.extractForgeUrl('(xem https://khac.gradio.live).'), 'https://khac.gradio.live');
+});
+
+check('extractForgeUrl bỏ localhost và link Colab/GitHub', () => {
+  assert.equal(core.extractForgeUrl('Forge: http://127.0.0.1:7860  ·  share: none'), '');
+  assert.equal(core.extractForgeUrl('https://colab.research.google.com/github/a/b/blob/main/x.ipynb'), '');
+  assert.equal(core.extractForgeUrl('https://github.com/manhlee1196-boop/ai-anime3'), '');
+});
+
+check('extractForgeUrl chọn link công khai giữa nhiều link', () => {
+  const text = `Đang chạy trên http://127.0.0.1:7860
+Link local: http://0.0.0.0:7860
+Link public: https://abc123.gradio.live`;
+  assert.equal(core.extractForgeUrl(text), 'https://abc123.gradio.live');
+});
+
+check('extractForgeUrl hiểu log cloudflared và host trần', () => {
+  const log = '2026-11-08 INF | https://random-words-here.trycloudflare.com |';
+  assert.equal(core.extractForgeUrl(log), 'https://random-words-here.trycloudflare.com');
+  assert.equal(core.extractForgeUrl('mở abc.gradio.live là được'), 'https://abc.gradio.live');
+  // host LAN trần → http (Forge trong nhà), link tunnel → https
+  assert.equal(core.extractForgeUrl('192.168.1.9:7860'), 'http://192.168.1.9:7860');
+});
+
+check('extractForgeUrl trả rỗng với text không có link', () => {
+  assert.equal(core.extractForgeUrl(''), '');
+  assert.equal(core.extractForgeUrl('không có gì ở đây'), '');
+  assert.equal(core.extractForgeUrl('bash /content/install.sh --status'), '');
+});
+
 check('explainError dịch lỗi thành việc cần làm', () => {
   assert.match(core.explainError(0), /link tunnel|CORS/i);
   assert.match(core.explainError(404), /--api/);

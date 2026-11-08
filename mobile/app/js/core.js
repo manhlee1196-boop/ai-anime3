@@ -306,6 +306,57 @@ export function payloadWarnings(payload) {
   return out;
 }
 
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>)\]}]+/gi;
+const BARE_HOSTS = /\b((?:[a-z0-9-]+\.)+(?:gradio\.live|trycloudflare\.com|ngrok-free\.app|ngrok\.io)|\d{1,3}(?:\.\d{1,3}){3}:\d{2,5})\b/gi;
+const FORGE_HOSTS = /(gradio\.live|trycloudflare\.com|ngrok|\d{1,3}(?:\.\d{1,3}){3}:\d{2,5})/i;
+
+/**
+ * Rút link Forge từ một khối text bất kỳ (clipboard sau khi chạy Colab).
+ *
+ * Colab in ra đủ thứ: `Link public: https://abc123.gradio.live`, log cloudflared,
+ * link nội bộ `http://127.0.0.1:7860`… Hàm này chọn link **dùng được từ điện thoại**:
+ * ưu tiên gradio.live / trycloudflare / ngrok, bỏ localhost/127.0.0.1, bỏ link
+ * `colab.research.google.com`. Trả `''` nếu không có.
+ */
+export function extractForgeUrl(text) {
+  const raw = String(text ?? '');
+  if (!raw.trim()) return '';
+  const candidates = [];
+  for (const match of raw.match(URL_IN_TEXT) || []) candidates.push(match);
+  for (const match of raw.match(BARE_HOSTS) || []) candidates.push(match.replace(/^[a-z]+:\/\//i, ''));
+
+  let best = '';
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const cleaned = candidate.replace(/[.,;:'")\]}]+$/, '');
+    // Host trần kiểu "192.168.1.9:7860" là Forge trong LAN (http), còn link tunnel
+    // (gradio.live, trycloudflare, ngrok) luôn https — đoán sai scheme là lỗi im lặng.
+    const bareIp = /^\d{1,3}(?:\.\d{1,3}){3}(?::\d{2,5})?(?:\/|$)/.test(cleaned);
+    let url;
+    try {
+      url = normalizeBaseUrl(bareIp ? `http://${cleaned.replace(/^[a-z]+:\/\//i, '')}` : cleaned);
+    } catch (error) {
+      continue;
+    }
+    if (!/^https?:\/\//i.test(url)) continue;
+    const host = url.replace(/^https?:\/\//i, '').split('/')[0].toLowerCase();
+    if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(host)) continue;
+    if (host.includes('colab.research.google.com') || host.includes('github.com')) continue;
+    let score = 1;
+    if (host.includes('gradio.live')) score = 5;
+    else if (host.includes('trycloudflare.com')) score = 4;
+    else if (host.includes('ngrok')) score = 3;
+    else if (FORGE_HOSTS.test(host)) score = 2;
+    // link có đường dẫn lạ (ảnh, docs) ít khả năng là Forge
+    if (/\/(file|assets?|static|favicon)/i.test(url)) score -= 1;
+    if (score > bestScore) {
+      bestScore = score;
+      best = url;
+    }
+  }
+  return best;
+}
+
 /** Chuẩn hoá URL người dùng dán: bỏ dấu cách, bỏ '/' cuối, thêm https nếu thiếu scheme. */
 export function normalizeBaseUrl(input) {
   let url = String(input ?? '').trim();

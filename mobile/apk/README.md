@@ -27,6 +27,25 @@ Workflow tự chạy khi push lên nhánh `arena/**` hoặc `main` **và** có t
 “Run workflow” chỉ hiện khi file này có trên nhánh mặc định; ở repo này `main` là commit
 upload ban đầu (không cùng gốc lịch sử) nên dùng cách push tag / Re-run all jobs.
 
+## Nút “Mở Colab & chạy” (plugin `@capacitor/browser`)
+
+Tab **🔌 Máy chủ** gọi `Capacitor.Plugins.Browser.open({ url })` để mở notebook Colab
+bằng **Custom Tab**: vẫn là ngữ cảnh của app (thanh trên có nút quay lại), nhưng là
+trình duyệt thật — nên **đăng nhập Google vẫn được**. Không dùng WebView/iframe cho
+Colab vì Google chặn đăng nhập trong WebView (`disallowed_useragent`).
+
+```json
+"dependencies": { "@capacitor/browser": "^6.0.4" }
+```
+
+- Plugin này **không bắt buộc để app chạy**: nếu thiếu, `ui.js` tự rơi xuống
+  `window.open(url)`. Nhưng trong APK thì `window.open` mở tab ẩn của WebView (dễ mất
+  phiên đăng nhập), nên vẫn nên có plugin.
+- `npx cap sync android` phải chạy **sau** `npm install` để plugin được chép vào project
+  Android (`android/capacitor.settings.gradle`). Workflow đã làm đúng thứ tự này.
+- Sau khi Colab in link public, người dùng quay lại app: app đọc clipboard và tự kết
+  nối — xem mục D trong [`../README.md`](../README.md).
+
 ## Điều cần biết
 
 - **Đừng đóng gói `data/tags.json.gz`**: AAPT coi `*.gz` là "bản nén của file cùng tên"

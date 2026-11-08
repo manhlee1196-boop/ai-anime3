@@ -117,6 +117,66 @@
     </div>
   </section>
 
+  <!-- ---------------------------------------------------------------- Máy chủ -->
+  <section id="tab-server" class="tab">
+    <div class="card">
+      <div class="card-head">
+        <span class="label">Máy chủ sinh ảnh (Colab)</span>
+        <span id="serverState" class="pill">chưa kết nối</span>
+      </div>
+      <p id="serverModel" class="hint">Chưa có địa chỉ Forge.</p>
+      <div class="row gap wrap">
+        <button id="openColabBtn" class="primary" type="button">▶ Mở Colab &amp; chạy</button>
+        <button id="pasteLinkBtn" class="chip" type="button">📋 Dán link Forge</button>
+      </div>
+      <p class="hint">
+        Colab mở bằng trình duyệt / Chrome Custom Tab (Google chặn đăng nhập trong WebView
+        nhúng). Chạy xong, bấm nút copy link ở Colab rồi quay lại app — app tự nhận link.
+      </p>
+    </div>
+
+    <div class="card">
+      <span class="label">3 bước trên Colab</span>
+      <ol class="steps">
+        <li>Chọn <b>Runtime → Change runtime type → T4 GPU</b></li>
+        <li><b>Runtime → Run all</b> — lần đầu 10–25 phút (tải model 6,5 GB)</li>
+        <li>Chờ dòng <code>Link public: https://…</code> rồi bấm nút copy của Colab</li>
+      </ol>
+      <div class="row gap wrap">
+        <button id="copyStatusCmdBtn" class="mini" type="button">📋 Lệnh kiểm tra link</button>
+        <button id="copyRestartCmdBtn" class="mini" type="button">📋 Lệnh lấy link mới</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="label" for="serverUrl">Địa chỉ Forge</label>
+      <div class="row gap">
+        <input id="serverUrl" type="url" inputmode="url" autocapitalize="off" spellcheck="false"
+          placeholder="https://xxxx.gradio.live">
+        <button id="connectBtn" class="primary small" type="button">Kết nối</button>
+      </div>
+      <label class="switch"><input id="autoConnect" type="checkbox" checked> Tự nhận link khi quay lại app</label>
+      <div id="serverHelp" class="hint"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="label">Link đã dùng</span>
+        <button id="clearLinksBtn" class="mini" type="button">Xoá</button>
+      </div>
+      <div id="linkList" class="tag-list"></div>
+      <p id="linkEmpty" class="hint">Chưa có link nào. Link gradio.live hết hạn sau vài giờ nên app giữ lại để bạn thử lại nhanh.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="label">Chẩn đoán kết nối</span>
+        <button id="diagnoseBtn" class="mini" type="button">🔎 Chạy</button>
+      </div>
+      <div id="diagnoseOut" class="hint">Bấm “Chạy” khi app báo lỗi kết nối để biết hỏng ở đâu.</div>
+    </div>
+  </section>
+
   <!-- ---------------------------------------------------------------- Thư viện -->
   <section id="tab-gallery" class="tab">
     <div id="gallery" class="gallery"></div>
@@ -137,6 +197,7 @@
   <button class="tab-btn active" data-tab="create" type="button"><span>🖼️</span>Tạo ảnh</button>
   <button class="tab-btn" data-tab="tags" type="button"><span>🔎</span>Kho tag</button>
   <button class="tab-btn" data-tab="gallery" type="button"><span>📚</span>Thư viện</button>
+  <button class="tab-btn" data-tab="server" type="button"><span>🔌</span>Máy chủ</button>
 </nav>
 
 <!-- ------------------------------------------------------------------ Cài đặt -->

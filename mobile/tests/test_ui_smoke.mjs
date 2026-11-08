@@ -89,6 +89,13 @@ async function main() {
   }
 
   const doc = window.document;
+const state_settings_api_url = () => {
+  try {
+    return JSON.parse(window.localStorage.getItem('anime3.mobile.settings.v1') || '{}').apiUrl || '';
+  } catch (error) {
+    return '';
+  }
+};
   const $ = (selector) => doc.querySelector(selector);
   const $$ = (selector) => Array.from(doc.querySelectorAll(selector));
 
@@ -144,7 +151,81 @@ async function main() {
   assert.ok($$('#setQuality option').length >= 4, 'thiếu preset chất lượng');
   assert.ok($$('#setSampler option').length >= 6, 'thiếu danh sách sampler');
 
-  console.log('✅ smoke test UI: khởi động · sinh ảnh · tra tag · chèn tag · phong cách · cài đặt');
+  // --- tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán
+  $('.tab-btn[data-tab="server"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.ok($('#tab-server').classList.contains('active'), 'tab Máy chủ không mở');
+  assert.ok($('#serverState').textContent.length > 0, 'thiếu nhãn trạng thái máy chủ');
+
+  // nút "Mở Colab & chạy" phải mở đúng notebook (không phải link Github/Colab chung)
+  const opened = [];
+  window.open = (url) => { opened.push(url); return {}; };
+  $('#openColabBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => opened.length === 1, { label: 'mở Colab' });
+  assert.match(opened[0],
+    /^https:\/\/colab\.research\.google\.com\/github\/[^/]+\/[^/]+\/blob\/.+WAI_v17_1click\.ipynb$/);
+
+  // clipboard giả + Forge giả cho host tunnel (khỏi gọi mạng thật)
+  const clipboard = { text: '', writes: [] };
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      readText: async () => clipboard.text,
+      writeText: async (text) => { clipboard.writes.push(text); },
+    },
+  });
+  const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body),
+    { status, headers: { 'content-type': 'application/json' } });
+  const realGlobalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = new URL(String(input), BASE);
+    if (url.hostname === 'abc123.gradio.live') {
+      if (url.pathname.endsWith('/sdapi/v1/options')) {
+        return Promise.resolve(jsonResponse({ sd_model_checkpoint: 'wai_v17_abc.safetensors' }));
+      }
+      if (url.pathname.includes('progress')) {
+        return Promise.resolve(jsonResponse({ progress: 0, state: {}, current_image: null }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    }
+    if (url.hostname === '192.168.1.9') {
+      return Promise.resolve(jsonResponse({ detail: 'unreachable' }, 502));
+    }
+    return realGlobalFetch(input, init);
+  };
+
+  // dán link Forge đã chết: phải lưu địa chỉ + báo "không kết nối được"
+  clipboard.text = 'Link public: http://192.168.1.9:7860';
+  $('#pasteLinkBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => state_settings_api_url() === 'http://192.168.1.9:7860',
+    { label: 'lưu địa chỉ Forge từ clipboard' });
+  await until(() => $('#serverState').textContent === 'không kết nối được',
+    { label: 'báo link chết' });
+  assert.ok($$('#linkList .tag-row').length >= 1, 'lịch sử link trống');
+
+  // quay lại app sau khi chạy Colab: tự đọc clipboard, thấy link sống -> kết nối
+  clipboard.text = 'Link public: https://abc123.gradio.live';
+  document.dispatchEvent(new window.Event('visibilitychange'));
+  await until(() => state_settings_api_url() === 'https://abc123.gradio.live',
+    { timeout: 15000, label: 'tự nhận link khi quay lại app' });
+  await until(() => $('#serverState').textContent === 'đã kết nối', { label: 'ping link mới' });
+  assert.match($('#serverModel').textContent, /wai_v17_abc/,
+    'không hiện tên model sau khi tự kết nối');
+  assert.ok($$('#linkList .tag-row').length >= 2, 'lịch sử link không ghi thêm link mới');
+
+  // copy lệnh lấy link mới cho Colab
+  $('#copyRestartCmdBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => clipboard.writes.some((text) => text.includes('--restart')),
+    { label: 'copy lệnh lấy link mới' });
+
+  // chẩn đoán: 5 endpoint, phải thấy endpoint OK
+  $('#diagnoseBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => $$('#diagnoseOut .diag-line').length >= 3, { label: 'kết quả chẩn đoán' });
+  assert.ok($$('#diagnoseOut .diag-line.ok').length >= 2, 'chẩn đoán không thấy endpoint nào OK');
+
+  globalThis.fetch = realGlobalFetch;
+
+  console.log('✅ smoke test UI: khởi động · sinh ảnh · tra tag · chèn tag · phong cách · cài đặt'
+    + ' · Máy chủ (Colab, dán link, chẩn đoán)');
 }
 
 // Không dùng `finally` + process.exit: exit() thoát ngay, bỏ lại server giả chiếm cổng.

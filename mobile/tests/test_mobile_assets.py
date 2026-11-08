@@ -68,6 +68,22 @@ class MobileData(unittest.TestCase):
             self.assertGreaterEqual(row[3], 0)
             self.assertLess(row[3], len(self.groups), row[0])
 
+    def test_05b_colab_link_for_app(self):
+        """Tab Máy chủ mở notebook Colab bằng một nút: link phải đúng và đủ lệnh."""
+        colab = self.payload.get("colab") or {}
+        self.assertTrue(colab.get("url", "").startswith(
+            "https://colab.research.google.com/github/"), colab)
+        self.assertTrue(colab["url"].endswith("colab/WAI_v17_1click.ipynb"), colab["url"])
+        self.assertIn("/blob/", colab["url"])
+        self.assertTrue(colab["repo"].count("/") == 1, colab["repo"])
+        self.assertNotIn(" ", colab["url"])
+        # Colab không mở được ref có dấu '/' (bị mã hoá %2F) -> phải là tag/nhánh
+        # không dấu gạch chéo hoặc commit SHA.
+        self.assertNotIn("/", colab["ref"], colab["ref"])
+        self.assertNotIn("%2F", colab["url"])
+        self.assertEqual(colab["cmd_status"], "bash /content/install.sh --status")
+        self.assertIn("--restart", colab["cmd_restart"])
+
     def test_06_presets_complete(self):
         presets = self.payload["presets"]
         for key in ("quality", "negative", "ratings", "sizes", "defaults",
@@ -144,6 +160,18 @@ class MobileAssets(unittest.TestCase):
         dynamic = {"seed", "steps", "cfg", "batch", "clipSkip", "hrScale", "denoise"}
         missing = sorted(used - self.ids - dynamic)
         self.assertEqual(missing, [], f"ui.js dùng id không có trong index.html: {missing}")
+
+    def test_13b_server_tab_elements_wired(self):
+        """Tab Máy chủ cần đủ phần tử và ui.js phải gắn hết (không nút chết)."""
+        needed = {"tab-server", "openColabBtn", "pasteLinkBtn", "connectBtn", "serverUrl",
+                  "autoConnect", "linkList", "diagnoseBtn", "diagnoseOut", "serverState",
+                  "copyStatusCmdBtn", "copyRestartCmdBtn", "clearLinksBtn"}
+        missing = sorted(needed - self.ids)
+        self.assertEqual(missing, [], f"index.html thiếu: {missing}")
+        for name in sorted(needed):
+            if name == "tab-server":
+                continue
+            self.assertIn(f"$('#{name}')", self.ui, f"ui.js không gắn {name}")
 
     def test_14_html_has_no_external_dependency(self):
         """App phải chạy offline trong APK: không CDN, không font ngoài."""

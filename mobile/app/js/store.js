@@ -29,6 +29,8 @@ export const DEFAULT_SETTINGS = {
   qualityPreset: 'WAI khuyến nghị (đầy đủ)',
   negativePreset: 'WAI khuyến nghị (ngắn)',
   negativeExtra: '',
+  autoConnect: true,          // tự nhận link Forge trong clipboard khi quay lại app
+  links: [],                  // [{url, at, ok, model}] — 6 link gần nhất
 };
 
 export function loadSettings() {
@@ -40,6 +42,19 @@ export function loadSettings() {
   } catch (error) {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/**
+ * Ghi nhớ một link Forge vừa dùng (mới nhất lên đầu, tối đa `max`).
+ * Trả về danh sách mới để UI vẽ lại.
+ */
+export function rememberLink(settings, url, { ok = null, model = '' } = {}) {
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!clean) return settings.links || [];
+  const list = (settings.links || []).filter((item) => item.url !== clean);
+  list.unshift({ url: clean, at: Date.now(), ok, model });
+  settings.links = list.slice(0, 6);
+  return settings.links;
 }
 
 export function saveSettings(settings) {

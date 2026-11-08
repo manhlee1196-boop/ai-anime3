@@ -30,6 +30,20 @@ const state = {
   lastSeed: null,
   viewId: null,
   installEvent: null,
+  connected: false,
+  connectedModel: '',
+  diagnoseBusy: false,
+};
+
+// Dùng khi chưa nạp được data/tags.json (app vẫn mở được tab Máy chủ).
+// Dùng khi tags.json chưa kịp có mục `colab` (bản APK cũ / dữ liệu lỗi): trỏ tới
+// tag phát hành gần nhất, KHÔNG trỏ `main` vì main của repo không chứa notebook.
+const FALLBACK_COLAB = {
+  repo: 'manhlee1196-boop/ai-anime3',
+  branch: 'v1.1.0',
+  url: 'https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/v1.1.0/colab/WAI_v17_1click.ipynb',
+  cmd_status: 'bash /content/install.sh --status',
+  cmd_restart: 'bash /content/install.sh --only launch,verify --restart',
 };
 
 // ------------------------------------------------------------------ tiện ích DOM
@@ -133,18 +147,21 @@ async function init() {
   hideSplash();
   pingServer();
   firstRunHint();
+  renderServerTab();
+  setupResumeWatch();
   renderGallery();
   registerServiceWorker();
 }
 
-/** Trong APK (https://localhost) chưa có địa chỉ Forge thì chỉ thẳng vào Cài đặt. */
+/**
+ * Lần đầu chạy trong APK (https://localhost) chưa có địa chỉ Forge: mở thẳng tab
+ * "Máy chủ" — nơi có nút Mở Colab và tự nhận link, thay vì để người dùng đoán.
+ */
 function firstRunHint() {
   const inApp = location.protocol === 'https:' && location.hostname === 'localhost';
   if (!inApp || state.settings.apiUrl) return;
   setConn('chưa có địa chỉ Forge', 'bad');
-  if (!$('#status').textContent) {
-    setStatus('⚙ Bấm nút ⚙ ở góc trên và dán địa chỉ Forge (link tunnel) để bắt đầu.');
-  }
+  showTab('server');
 }
 
 function splash(text, error = false) {
@@ -181,7 +198,33 @@ function bindEvents() {
   $('#settingsBtn').addEventListener('click', () => openSheet('#sheetSettings'));
   $('#styleBtn').addEventListener('click', () => openSheet('#sheetStyle'));
   $('#tagBtn').addEventListener('click', () => { showTab('tags'); $('#tagSearch').focus(); });
-  $('#connBtn').addEventListener('click', () => openSheet('#sheetSettings'));
+  // bấm trạng thái ở thanh trên = mở tab Máy chủ (Colab / đổi link)
+  $('#connBtn').addEventListener('click', () => showTab('server'));
+
+  // --- tab Máy chủ
+  $('#openColabBtn').addEventListener('click', openColab);
+  $('#pasteLinkBtn').addEventListener('click', pasteAndConnect);
+  $('#connectBtn').addEventListener('click', () => connectTo($('#serverUrl').value));
+  $('#serverUrl').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      connectTo($('#serverUrl').value);
+    }
+  });
+  $('#autoConnect').addEventListener('change', () => {
+    state.settings.autoConnect = $('#autoConnect').checked;
+    saveSettingsNow();
+    toast(state.settings.autoConnect ? 'Sẽ tự nhận link khi quay lại app' : 'Đã tắt tự nhận link');
+  });
+  $('#clearLinksBtn').addEventListener('click', () => {
+    state.settings.links = [];
+    saveSettingsNow();
+    renderLinks();
+    toast('Đã xoá danh sách link');
+  });
+  $('#diagnoseBtn').addEventListener('click', runDiagnose);
+  $('#copyStatusCmdBtn').addEventListener('click', () => copyText(colabInfo().cmd_status, 'lệnh kiểm tra'));
+  $('#copyRestartCmdBtn').addEventListener('click', () => copyText(colabInfo().cmd_restart, 'lệnh lấy link mới'));
   for (const sheet of $$('.sheet')) {
     sheet.addEventListener('click', (event) => {
       if (event.target === sheet) closeSheet(sheet);
@@ -245,12 +288,7 @@ function bindEvents() {
   });
 
   // cài đặt
-  $('#apiUrl').addEventListener('change', () => {
-    state.settings.apiUrl = core.normalizeBaseUrl($('#apiUrl').value);
-    $('#apiUrl').value = state.settings.apiUrl;
-    saveSettingsNow();
-    pingServer();
-  });
+  $('#apiUrl').addEventListener('change', () => connectTo($('#apiUrl').value));
   $('#apiUser').addEventListener('change', () => { state.settings.user = $('#apiUser').value.trim(); saveSettingsNow(); });
   $('#apiPass').addEventListener('change', () => { state.settings.pass = $('#apiPass').value; saveSettingsNow(); });
   $('#testBtn').addEventListener('click', testConnection);
@@ -304,6 +342,7 @@ function showTab(name) {
   for (const button of $$('.tab-btn')) button.classList.toggle('active', button.dataset.tab === name);
   if (name === 'gallery') renderGallery();
   if (name === 'tags' && state.data) renderTagResults();
+  if (name === 'server') renderServerTab();
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
@@ -725,6 +764,7 @@ async function generate() {
 
   state.busy = true;
   state.controller = new AbortController();
+  renderServerTab();
   $('#generateBtn').classList.add('hidden');
   $('#cancelBtn').classList.remove('hidden');
   setProgress(4);
@@ -765,6 +805,7 @@ async function generate() {
     state.controller = null;
     $('#generateBtn').classList.remove('hidden');
     $('#cancelBtn').classList.add('hidden');
+    renderServerTab();
   }
 }
 
@@ -931,22 +972,260 @@ function setConn(text, variant = '') {
 }
 
 let pingTimer = null;
+/** Ping Forge; trả về `true` nếu kết nối được. Cập nhật luôn thanh trên + tab Máy chủ. */
 async function pingServer() {
   clearTimeout(pingTimer);
   setConn('đang kiểm tra…');
   try {
     const info = await client().ping();
-    const model = info.model ? info.model.split(/[\\/]/).pop().replace(/\.safetensors$/, '') : '';
+    const model = info.model
+      ? info.model.split(/[\\/]/).pop().replace(/\.safetensors$/, '')
+      : '';
+    state.connected = true;
+    state.connectedModel = model;
     setConn(model ? `● ${model}` : '● đã kết nối', 'ok');
     $('#connInfo').textContent = model
       ? `Đã kết nối Forge · model: ${model}`
       : 'Đã kết nối Forge.';
+    if (state.settings.apiUrl) {
+      store.rememberLink(state.settings, state.settings.apiUrl, { ok: true, model });
+      store.saveSettings(state.settings);
+    }
+    renderServerTab();
+    return true;
   } catch (error) {
+    state.connected = false;
+    state.connectedModel = '';
     setConn('chưa kết nối', 'bad');
     $('#connInfo').textContent = error.message || 'Không kết nối được.';
+    if (state.settings.apiUrl) {
+      store.rememberLink(state.settings, state.settings.apiUrl, { ok: false });
+      store.saveSettings(state.settings);
+    }
+    renderServerTab();
+    return false;
+  } finally {
+    // kiểm tra lại mỗi 60 giây để link tunnel hết hạn là biết ngay
+    pingTimer = setTimeout(pingServer, 60000);
   }
-  // kiểm tra lại mỗi 60 giây để link tunnel hết hạn là biết ngay
-  pingTimer = setTimeout(pingServer, 60000);
+}
+
+// ------------------------------------------------------------------ tab Máy chủ (Colab)
+function colabInfo() {
+  return state.data?.raw?.colab || FALLBACK_COLAB;
+}
+
+function shortUrl(url) {
+  return String(url || '').replace(/^https?:\/\//, '').slice(0, 42);
+}
+
+function setServerPill(text, variant = '') {
+  const pill = $('#serverState');
+  if (!pill) return;
+  pill.textContent = text;
+  pill.className = `pill ${variant}`;
+}
+
+/** Vẽ lại toàn bộ tab Máy chủ từ state (không gọi mạng). */
+function renderServerTab() {
+  if (!$('#serverState')) return;
+  if (state.busy) setServerPill('đang sinh ảnh…', 'busy');
+  else if (state.connected) setServerPill('đã kết nối', 'ok');
+  else if (state.settings.apiUrl) setServerPill('không kết nối được', 'bad');
+  else setServerPill('chưa có địa chỉ', '');
+
+  const where = state.settings.apiUrl || 'cùng origin với app';
+  $('#serverModel').textContent = state.connected
+    ? `Model: ${state.connectedModel || '(không rõ)'} · ${where}`
+    : state.settings.apiUrl
+      ? `Đã lưu ${state.settings.apiUrl} nhưng chưa phản hồi — link gradio.live hết hạn sau vài giờ.`
+      : 'Chưa có địa chỉ Forge. Bấm “Mở Colab & chạy” để bắt đầu.';
+
+  const input = $('#serverUrl');
+  if (document.activeElement !== input) input.value = state.settings.apiUrl || '';
+  $('#autoConnect').checked = state.settings.autoConnect !== false;
+
+  const colab = colabInfo();
+  $('#serverHelp').textContent = state.data
+    ? `Notebook: ${colab.repo} · bản ${colab.branch} · ${colab.notebook}`
+    : 'Chưa nạp được dữ liệu app — vẫn dùng được ô địa chỉ Forge bên trên.';
+
+  renderLinks();
+}
+
+function renderLinks() {
+  const box = $('#linkList');
+  const list = state.settings.links || [];
+  $('#linkEmpty').classList.toggle('hidden', list.length > 0);
+  box.replaceChildren(...list.map((item) => {
+    const status = item.ok === true ? '✅' : item.ok === false ? '❌' : '•';
+    const when = item.at ? new Date(item.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '';
+    return h('button', {
+      class: `tag-row${item.url === state.settings.apiUrl ? ' selected' : ''}`,
+      type: 'button',
+      onclick: () => connectTo(item.url),
+    },
+    h('span', { class: 'tag-main' },
+      h('span', { class: 'tag-en' }, `${status} ${shortUrl(item.url)}`),
+      h('span', { class: 'tag-vi' }, [item.model || 'Forge', when].filter(Boolean).join(' · ')),
+    ),
+    h('span', { class: 'tag-count' }, item.ok === true ? 'sống' : item.ok === false ? 'chết' : 'chưa thử'));
+  }));
+}
+
+/** Mở Colab bằng một nút: Custom Tab (APK) hoặc tab mới của trình duyệt (PWA). */
+async function openColab() {
+  const url = colabInfo().url;
+  const plugin = window.Capacitor?.Plugins?.Browser;
+  if (plugin?.open) {
+    try {
+      await plugin.open({ url });
+      toast('Đã mở Colab — chạy Run all rồi quay lại app');
+      return;
+    } catch (error) {
+      console.warn('Không mở được Custom Tab', error);
+    }
+  }
+  const opened = window.open(url, '_blank', 'noopener');
+  if (!opened && !plugin) {
+    toast(`Trình duyệt chặn tab mới. Mở tay: ${url}`, { error: true, ms: 6000 });
+    $('#serverUrl').value = url;
+    return;
+  }
+  toast('Đã mở Colab — chạy Run all rồi quay lại app');
+}
+
+/**
+ * Kết nối một link Forge: lưu vào lịch sử, ping thử, cập nhật UI.
+ * Trả về `true` nếu Forge trả lời.
+ */
+async function connectTo(rawUrl, { silent = false } = {}) {
+  const url = core.normalizeBaseUrl(rawUrl);
+  if (!url) {
+    toast('Dán link Forge, ví dụ https://abc123.gradio.live', { error: true });
+    return false;
+  }
+  if (!/^https?:\/\/[^\s]+$/i.test(url)) {
+    toast('Link không hợp lệ', { error: true });
+    return false;
+  }
+  state.settings.apiUrl = url;
+  $('#apiUrl').value = url;
+  $('#serverUrl').value = url;
+  store.rememberLink(state.settings, url);
+  saveSettingsNow();
+  renderServerTab();
+  if (!silent) toast(`Đang kết nối ${shortUrl(url)}…`);
+  const ok = await pingServer();
+  if (ok) toast('Đã kết nối Forge');
+  return ok;
+}
+
+async function readClipboard() {
+  try {
+    if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
+  } catch (error) {
+    // Chrome/WebView có thể từ chối đọc clipboard không có thao tác người dùng
+  }
+  return '';
+}
+
+async function pasteAndConnect() {
+  const text = await readClipboard();
+  if (!text) {
+    toast('Không đọc được clipboard — dán tay vào ô bên dưới', { error: true });
+    $('#serverUrl').focus();
+    return;
+  }
+  const url = core.extractForgeUrl(text);
+  if (!url) {
+    toast('Clipboard không có link Forge (gradio.live / trycloudflare)', { error: true });
+    return;
+  }
+  await connectTo(url);
+}
+
+async function copyText(text, label) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      toast(`Đã copy ${label} — dán vào ô của Colab`);
+      return;
+    }
+  } catch (error) {
+    // rơi xuống dưới
+  }
+  $('#serverHelp').textContent = `${label}: ${text}`;
+  toast('Không copy tự động được — lệnh đã hiện dưới ô địa chỉ', { ms: 4000 });
+}
+
+/**
+ * Tự nhận link khi quay lại app: người dùng copy link trong Colab (hoặc nút copy
+ * của Colab), chuyển sang app → đọc clipboard → thấy link Forge → kết nối luôn.
+ * Đây là phần "chạy Colab ngay trong app" khả thi nhất: Google không cho nhúng
+ * Colab vào WebView (chặn đăng nhập) và không có API bấm Run all hộ.
+ */
+let lastClipboardUrl = '';
+function setupResumeWatch() {
+  const check = () => setTimeout(checkClipboardForLink, 700);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') check();
+  });
+  window.addEventListener('focus', check);
+}
+
+async function checkClipboardForLink() {
+  if (state.settings.autoConnect === false) return;
+  if (state.connected || state.busy) return;
+  if (!navigator.clipboard?.readText) return;
+  const text = await readClipboard();
+  const url = core.extractForgeUrl(text);
+  if (!url || url === state.settings.apiUrl || url === lastClipboardUrl) return;
+  lastClipboardUrl = url;
+  toast(`Tự nhận link trong clipboard: ${shortUrl(url)}`, { ms: 3000 });
+  await connectTo(url, { silent: true });
+}
+
+async function runDiagnose() {
+  if (state.diagnoseBusy) return;
+  state.diagnoseBusy = true;
+  const out = $('#diagnoseOut');
+  out.textContent = 'Đang kiểm tra…';
+  try {
+    const result = await client().diagnose();
+    const lines = result.checks.map((item) => h('div', {
+      class: `diag-line ${item.ok ? 'ok' : 'bad'}`,
+    }, h('span', { text: item.ok ? '✅' : '❌' }),
+    h('span', { class: 'path', text: item.path }),
+    h('span', { text: item.detail })));
+
+    const hints = [];
+    if (!result.anyOk) {
+      hints.push('Không endpoint nào trả lời: link tunnel đã chết hoặc URL sai. '
+        + 'Lấy link mới bằng lệnh ở trên (hoặc mở lại Colab), rồi bấm “Dán link Forge”.');
+    } else if (!result.hasApi) {
+      hints.push('Thiếu /sdapi → Forge chưa chạy với --api (bộ cài đã bật sẵn).');
+    }
+    if (result.anyOk && !result.checks.find((item) => item.path.endsWith('progress') && item.ok)) {
+      hints.push('Không đọc được endpoint tiến trình: vẫn sinh ảnh được nhưng thanh % sẽ đứng.');
+    }
+    if (result.anyOk && location.protocol === 'https:' && location.hostname === 'localhost') {
+      hints.push('Trong APK mà Forge ở domain khác: Forge phải bật --cors-allow-origins '
+        + '(bộ cài đã thêm). Mở app qua <link Forge>/vi-mobile/ thì không cần cờ này.');
+    }
+    out.replaceChildren(
+      h('div', { class: 'hint' }, `Địa chỉ: ${result.base}`),
+      ...lines,
+      ...(hints.length ? [h('div', { class: 'warn', text: hints.join(' ') })] : []),
+      ...(result.anyOk && !hints.length
+        ? [h('div', { class: 'hint', text: 'Mọi endpoint cần thiết đều trả lời bình thường.' })]
+        : []),
+    );
+  } catch (error) {
+    out.textContent = `Không chẩn đoán được: ${error.message}`;
+  } finally {
+    state.diagnoseBusy = false;
+  }
 }
 
 async function testConnection() {

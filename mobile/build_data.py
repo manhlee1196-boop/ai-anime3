@@ -27,8 +27,11 @@ import argparse
 import csv
 import gzip
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "colab"))
@@ -98,6 +101,58 @@ def load_styles():
     return [item[1] for item in out]
 
 
+def git_ref():
+    """Chọn `ref` đưa vào link Colab — phải tồn tại trên GitHub và không chứa dấu '/'.
+
+    Colab tải notebook qua `github.com/<repo>/blob/<ref>/<path>`; nhánh có dấu '/'
+    (arena/..., feature/...) bị mã hoá %2F và Colab thường không mở được. Thứ tự ưu
+    tiên: WAI_COLAB_REF (đặt tay) → tag của CI (GITHUB_REF_NAME khi build từ tag)
+    → WAI_COLAB_BRANCH → nhánh hiện tại nếu không có '/' → commit SHA.
+    """
+    for env in ("WAI_COLAB_REF", "GITHUB_REF_NAME", "WAI_COLAB_BRANCH"):
+        value = (os.environ.get(env) or "").strip()
+        if value and "/" not in value:
+            return value, "tag" if env == "GITHUB_REF_NAME" else "ref"
+    try:
+        branch = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        branch = ""
+    if branch and branch != "HEAD" and "/" not in branch:
+        return branch, "branch"
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        sha = ""
+    # không có git (bản zip): 'main' là mặc định của GitHub — có thể 404 notebook,
+    # nên dùng luôn tag của bản phát hành gần nhất nếu biết.
+    return (sha or "main"), "commit"
+
+
+def colab_info():
+    """Link notebook Colab để app mở bằng một nút."""
+    repo = (os.environ.get("WAI_REPO_SLUG") or "manhlee1196-boop/ai-anime3").strip()
+    ref, kind = git_ref()
+    notebook = "colab/WAI_v17_1click.ipynb"
+    return {
+        "repo": repo,
+        "branch": ref,
+        "ref": ref,
+        "ref_kind": kind,
+        "notebook": notebook,
+        "url": f"https://colab.research.google.com/github/{repo}/blob/"
+               f"{quote(ref, safe='')}/{notebook}",
+        # lệnh dán vào Colab khi cần kiểm tra/lấy link mới
+        "cmd_status": "bash /content/install.sh --status",
+        "cmd_restart": "bash /content/install.sh --only launch,verify --restart",
+    }
+
+
 def build_payload(min_count=DEFAULT_MIN_COUNT):
     """Dựng dict dữ liệu cho app (hàm thuần, dùng lại được trong test)."""
     translations = load_translations()
@@ -149,6 +204,7 @@ def build_payload(min_count=DEFAULT_MIN_COUNT):
             "style_presets": [[name, list(tags_), note]
                               for name, (tags_, note) in STYLE_PRESETS.items()],
         },
+        "colab": colab_info(),
         "styles": load_styles(),
         "quick": quick,
         "tags": rows,

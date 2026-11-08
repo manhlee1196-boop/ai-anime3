@@ -9,6 +9,7 @@
     "apk": "npm run android:add && npm run sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/browser": "^6.0.4",
     "@capacitor/core": "^6.2.3"
   },
   "devDependencies": {
