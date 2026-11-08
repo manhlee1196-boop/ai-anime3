@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v10", sw)
+        self.assertIn("anime3-shell-v11", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -166,6 +166,25 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("overflow-x: auto", size_rule.group(1))
         self.assertIn("grid-template-columns: repeat(4", rating_rule.group(1))
         self.assertRegex(self.html, r'id="sizeChips" role="group" aria-label="Độ phân giải ảnh"')
+
+    def test_12c_native_save_uses_public_pictures(self):
+        """APK phải lưu bằng MediaStore, không báo tải thành công qua blob WebView."""
+        native = MOBILE / "apk" / "native"
+        plugin = (native / "Anime3MediaPlugin.java").read_text(encoding="utf-8")
+        activity = (native / "MainActivity.java").read_text(encoding="utf-8")
+        installer = (native / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("Environment.DIRECTORY_PICTURES + \"/Anime3\"", plugin)
+        self.assertIn("MediaStore.Images.Media.IS_PENDING", plugin)
+        self.assertIn('result.put("path", "Pictures/Anime3/" + name)', plugin)
+        self.assertIn("registerPlugin(Anime3MediaPlugin.class)", activity)
+        self.assertIn("Anime3MediaPlugin.java", installer)
+        build = (MOBILE / "apk" / "build.sh").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
+        self.assertIn("native/install.sh", build)
+        self.assertIn("native/install.sh", workflow)
+        self.assertIn('id="saveBtn"', self.html)
+        self.assertIn('id="imageSaveBtn"', self.html)
+        self.assertNotIn("toast('Đã tải ảnh về máy')", self.ui)
 
     def test_13_ui_references_known_element_ids(self):
         """Bắt lỗi gõ sai id — thứ mà test Node không thấy vì không có DOM."""

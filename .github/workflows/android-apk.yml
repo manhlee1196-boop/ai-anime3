@@ -78,6 +78,7 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+          bash native/install.sh
           test -f android/app/src/main/assets/public/index.html
           test -f android/app/src/main/assets/public/data/tags.json
           # AAPT coi *.gz là "bản nén của file cùng tên" nên tags.json.gz + tags.json bị

@@ -12,6 +12,7 @@ cd mobile/apk
 npm install
 npx cap add android               # sinh thư mục android/ (đã .gitignore)
 npx cap sync android              # chép ../app vào android/app/src/main/assets/public
+bash native/install.sh            # plugin lưu ảnh MediaStore
 cd android && ./gradlew assembleDebug
 ```
 
@@ -45,6 +46,19 @@ Colab vì Google chặn đăng nhập trong WebView (`disallowed_useragent`).
   Android (`android/capacitor.settings.gradle`). Workflow đã làm đúng thứ tự này.
 - Sau khi Colab in link public, người dùng quay lại app: app đọc clipboard và tự kết
   nối — xem mục D trong [`../README.md`](../README.md).
+
+## Lưu ảnh ra thư viện điện thoại
+
+Nút **💾 Lưu vào máy** ở kết quả/thư viện gọi plugin `Anime3Media` trong `native/`.
+Trên Android 10+ plugin ghi bằng MediaStore vào **`Pictures/Anime3`**, đặt `IS_PENDING`
+trong lúc ghi rồi publish; ảnh xuất hiện trong Google Photos/Files và app hiện đúng tên
+thư mục. Android 9 trở xuống dùng `Android/data/vn.anime3.mobile/files/Pictures/Anime3`,
+không xin quyền ghi toàn bộ bộ nhớ. Nút **Chia sẻ** vẫn dùng share sheet khi hệ thống hỗ trợ.
+
+`native/install.sh` chép `MainActivity.java` và `Anime3MediaPlugin.java` vào project do
+Capacitor sinh ra; cả `build.sh` và workflow đều gọi script này trước khi build. Trên PWA,
+download vẫn do trình duyệt quản lý nên app hướng dẫn kiểm tra thông báo/Download thay vì
+khẳng định một đường dẫn cố định.
 
 ## Điều cần biết
 

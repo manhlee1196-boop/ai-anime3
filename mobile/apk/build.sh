@@ -29,6 +29,7 @@ say "Cài Capacitor"
 say "Tạo project Android + chép app"
 (cd "$APK_DIR" && [ -d android ] || npx cap add android)
 (cd "$APK_DIR" && npx cap sync android)
+bash "$APK_DIR/native/install.sh"
 [ -f "$APK_DIR/android/app/src/main/assets/public/index.html" ] \
   || die "webDir chưa được chép — xem webDir trong capacitor.config.json."
 [ -f "$APK_DIR/android/app/src/main/assets/public/data/tags.json" ] \

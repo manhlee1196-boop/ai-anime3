@@ -1,7 +1,7 @@
 /* Service worker: app cài ra màn hình chính vẫn mở được khi mạng chập chờn.
    Không bao giờ cache API/job/file — trạng thái và ảnh phải luôn là dữ liệu thật. */
 
-const CACHE = 'anime3-shell-v10';
+const CACHE = 'anime3-shell-v11';
 const SHELL = [
   './',
   './index.html',

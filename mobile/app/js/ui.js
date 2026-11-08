@@ -301,6 +301,7 @@ function bindEvents() {
     saveSettingsNow();
     toast(`Đã khoá seed ${state.lastSeed}`);
   });
+  $('#saveBtn').addEventListener('click', () => saveImageToDevice(state.results[0]));
   $('#shareBtn').addEventListener('click', () => shareImage(state.results[0]));
 
   // kho tag
@@ -377,6 +378,10 @@ function bindEvents() {
 
   // ảnh
   $('#imageReuseBtn').addEventListener('click', reuseImage);
+  $('#imageSaveBtn').addEventListener('click', async () => {
+    const item = state.viewId ? await store.getImage(state.viewId) : null;
+    if (item) saveImageToDevice(item);
+  });
   $('#imageShareBtn').addEventListener('click', async () => {
     const item = state.viewId ? await store.getImage(state.viewId) : null;
     if (item) shareImage(item);
@@ -1204,24 +1209,62 @@ async function reuseImage() {
   toast('Đã nạp lại prompt và seed');
 }
 
-async function shareImage(image) {
+async function imageFile(image) {
+  const blob = image?.blob || await (await fetch(image?.dataUrl || image)).blob();
+  return new File([blob], image?.name || `anime3-${Date.now()}.png`, {
+    type: blob.type || 'image/png',
+  });
+}
+
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  // Chia nhỏ để không vượt giới hạn số argument của fromCharCode trên WebView.
+  for (let offset = 0; offset < bytes.length; offset += 32768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  }
+  return btoa(binary);
+}
+
+/** Lưu thật bằng MediaStore trong APK; trên web dùng download của trình duyệt. */
+async function saveImageToDevice(image) {
   if (!image) return;
   try {
-    const blob = image?.blob || await (await fetch(image?.dataUrl || image)).blob();
-    const file = new File([blob], image?.name || `anime3-${Date.now()}.png`, {
-      type: blob.type || 'image/png',
-    });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Anime3' });
-      return;
+    const file = await imageFile(image);
+    const plugin = window.Capacitor?.Plugins?.Anime3Media;
+    const native = window.Capacitor?.isNativePlatform?.() && plugin?.saveImage;
+    if (native) {
+      const saved = await plugin.saveImage({
+        data: await blobToBase64(file), name: file.name, mime: file.type,
+      });
+      toast(`Đã lưu: ${saved.path}`, { ms: 7000 });
+      return saved;
     }
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(file);
     const link = h('a', { href: url, download: file.name });
     document.body.append(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast('Đã tải ảnh về máy');
+    toast('Đã gửi lệnh tải — mở thông báo trình duyệt hoặc thư mục Download để xem nơi lưu.',
+      { ms: 6000 });
+    return { path: 'Download (tuỳ cài đặt trình duyệt)' };
+  } catch (error) {
+    toast(`Không lưu được ảnh: ${error.message}`, { error: true, ms: 6000 });
+    return null;
+  }
+}
+
+async function shareImage(image) {
+  if (!image) return;
+  try {
+    const file = await imageFile(image);
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Anime3' });
+      return;
+    }
+    // WebView không có share sheet/download Blob đáng tin cậy: dùng MediaStore của APK.
+    await saveImageToDevice(image);
   } catch (error) {
     toast(`Không chia sẻ được: ${error.message}`, { error: true });
   }

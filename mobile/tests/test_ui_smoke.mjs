@@ -171,6 +171,26 @@ const state_settings_api_url = () => {
   assert.match(generationPayloads[0].prompt, /smile/);
   assert.doesNotMatch(generationPayloads[0].prompt, /tóc dài|áo dài|nụ cười/);
 
+  // APK: nút Lưu vào máy phải gửi PNG thật tới MediaStore và hiện đúng thư mục.
+  const nativeSaves = [];
+  window.Capacitor = {
+    isNativePlatform: () => true,
+    Plugins: {
+      Anime3Media: {
+        saveImage: async (args) => {
+          nativeSaves.push(args);
+          return { path: `Pictures/Anime3/${args.name}`, uri: 'content://media/anime3' };
+        },
+      },
+    },
+  };
+  $('#saveBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => nativeSaves.length === 1, { label: 'lưu ảnh qua MediaStore' });
+  assert.match(nativeSaves[0].name, /^anime3-.*\.png$/);
+  assert.equal(nativeSaves[0].mime, 'image/png');
+  assert.equal(window.atob(nativeSaves[0].data).slice(1, 4), 'PNG', 'dữ liệu gửi native không phải PNG');
+  assert.match($('#toast').textContent, /Pictures\/Anime3\//);
+
   // --- thư viện: ảnh vừa tạo phải xuất hiện trong tab Thư viện
   $('.tab-btn[data-tab="gallery"]').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => $$('#gallery button').length > 0, { label: 'ảnh vào thư viện' });
