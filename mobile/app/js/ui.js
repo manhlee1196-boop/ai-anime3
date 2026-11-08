@@ -993,14 +993,23 @@ async function generate() {
         setProgress((Number(info.progress) || 0) * 100);
         setStatus(core.progressText(info, elapsed));
       },
+      onRecover: () => {
+        setProgress(95);
+        setStatus('⚠️ Đứt kết nối khi nhận ảnh. Đang chờ Forge và lấy lại kết quả, không tạo lại job…');
+      },
     });
     state.results = result.images;
     state.lastInfo = result.info;
     state.lastSeed = core.seedFromInfo(result.info);
     renderResult(result);
     setProgress(100);
-    setStatus(`✅ Xong sau ${core.formatDuration(result.elapsed)}`
-      + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
+    setStatus(result.recovered
+      ? `✅ Đã khôi phục ảnh từ tiến trình sau ${core.formatDuration(result.elapsed)}`
+      : `✅ Xong sau ${core.formatDuration(result.elapsed)}`
+        + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
+    if (result.recovered) {
+      toast('Kết nối bị đứt lúc tải kết quả; app đã lấy lại ảnh mà không tạo lại job.', { ms: 5000 });
+    }
     await saveResultImages(result);
     pingServer();
   } catch (error) {

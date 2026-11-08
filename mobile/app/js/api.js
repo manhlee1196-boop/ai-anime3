@@ -93,8 +93,18 @@ export class ForgeClient {
         { status: 0, body: String(error?.message || error) },
       );
     }
+    let text;
+    try {
+      text = await response.text();
+    } catch (error) {
+      clearTimeout(timer);
+      // Header có thể là 200 nhưng thân JSON chứa ảnh bị đứt giữa chừng.
+      throw new ForgeError(explainError(0), {
+        status: 0,
+        body: `Mất kết nối khi đọc nội dung phản hồi: ${String(error?.message || error)}`,
+      });
+    }
     clearTimeout(timer);
-    const text = await response.text();
     if (!response.ok) {
       throw new ForgeError(explainError(response.status, text),
         { status: response.status, body: text });
@@ -223,10 +233,19 @@ export class ForgeClient {
    * Sinh ảnh: POST txt2img + đọc tiến trình song song.
    * Trả về `{images, info}`; `images` là data URL dùng ngay được trong <img>.
    */
-  async txt2img(payload, { onProgress = null, interval = 1500, signal = null } = {}) {
+  async txt2img(payload, {
+    onProgress = null,
+    onRecover = null,
+    interval = 1500,
+    recoveryTimeout = 180000,
+    signal = null,
+  } = {}) {
     const controller = new AbortController();
     const merged = combineSignals([controller.signal, signal]);
     let finished = false;
+    let latestInfo = null;
+    let latestPreview = null;
+    let previewRequested = false;
     const started = Date.now();
     const poll = async () => {
       while (!finished) {
@@ -234,7 +253,14 @@ export class ForgeClient {
         if (finished) break;
         try {
           const info = await this.progress({ signal: merged, timeout: 6000 });
+          latestInfo = info;
           if (onProgress) onProgress(info, Math.round((Date.now() - started) / 1000));
+          // Chỉ tải preview một lần gần cuối, tránh gửi base64 lớn trong mọi lượt poll.
+          if (!previewRequested && info.progress >= 0.9) {
+            previewRequested = true;
+            const preview = await this.progressImage({ signal: merged });
+            if (preview?.image) latestPreview = preview;
+          }
         } catch (error) {
           if (finished) break;
         }
@@ -243,6 +269,7 @@ export class ForgeClient {
     const polling = poll();
 
     let data;
+    let requestError = null;
     try {
       data = await this.request('sdapi/v1/txt2img', {
         method: 'POST',
@@ -250,9 +277,52 @@ export class ForgeClient {
         timeout: 3600000,          // 60 phút: chỉ để không treo vô hạn, không phải "timeout ảnh"
         signal: merged,
       });
+    } catch (error) {
+      requestError = error;
     } finally {
       finished = true;
       await polling;
+    }
+
+    if (requestError) {
+      const recoverable = [0, 502, 503, 504].includes(Number(requestError?.status));
+      if (!recoverable) throw requestError;
+      if (onRecover) onRecover();
+      // Không POST lại: Forge có thể đã xong hoặc vẫn đang chạy, POST lại sẽ nhân đôi job.
+      const recovered = await this.recoverGeneratedImage({
+        previousInfo: latestInfo,
+        previousImage: latestPreview,
+        signal: merged,
+        timeout: recoveryTimeout,
+      });
+      if (recovered) {
+        const info = {
+          prompt: payload.prompt || '',
+          negative_prompt: payload.negative_prompt || '',
+          width: payload.width,
+          height: payload.height,
+          steps: payload.steps,
+          sampler_name: payload.sampler_name,
+          cfg_scale: payload.cfg_scale,
+          recovered_from_progress: true,
+        };
+        if (Number(payload.seed) >= 0) info.seed = Number(payload.seed);
+        return {
+          images: [toDataUrl(recovered.image)],
+          info,
+          elapsed: Math.round((Date.now() - started) / 1000),
+          recovered: true,
+        };
+      }
+      if (Number(requestError?.status) === 0) {
+        throw new ForgeError(
+          'Mất kết nối khi tải ảnh kết quả. API vẫn hoạt động nhưng gói ảnh lớn bị đứt. '
+          + 'Job có thể đã xong; không tạo lại ngay. Kiểm tra output của Forge, rồi tắt Hires '
+          + 'hoặc giảm kích thước trước khi thử lại.',
+          { status: 0, body: requestError.body || '' },
+        );
+      }
+      throw requestError;
     }
 
     const images = Array.isArray(data?.images) ? data.images.filter(Boolean) : [];
@@ -265,6 +335,58 @@ export class ForgeClient {
       elapsed: Math.round((Date.now() - started) / 1000),
     };
   }
+
+  /** Đọc preview cuối từ progress sau khi response txt2img bị đứt; không tạo job mới. */
+  async recoverGeneratedImage({
+    previousInfo = null, previousImage = null, signal = null, timeout = 180000,
+  } = {}) {
+    if (previousImage?.image && Number(previousInfo?.progress) >= 0.9) return previousImage;
+    const deadline = Date.now() + timeout;
+    let sawJob = Boolean(previousInfo && (previousInfo.jobCount > 0 || previousInfo.progress > 0));
+    let failedRounds = 0;
+    while (Date.now() < deadline && !signal?.aborted) {
+      const snapshot = await this.progressImage({ signal });
+      if (!snapshot) {
+        failedRounds += 1;
+        if (failedRounds >= 2) return null;
+      } else {
+        failedRounds = 0;
+        const { info, image } = snapshot;
+        sawJob = sawJob || info.jobCount > 0 || info.progress > 0;
+        const nearFinal = info.progress >= 0.85 || Number(previousInfo?.progress) >= 0.85;
+        const finished = sawJob && info.jobCount === 0 && info.progress === 0;
+        if (image && (nearFinal || finished)) return { image, info };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    return null;
+  }
+
+  /** Một lượt progress có current_image; lỗi trả null để còn thử endpoint/lượt khác. */
+  async progressImage({ signal = null } = {}) {
+    let withoutImage = null;
+    for (const endpoint of PROGRESS_PATHS) {
+      try {
+        const path = endpoint.method === 'GET'
+          ? `${endpoint.path}?skip_current_image=false`
+          : endpoint.path;
+        const data = await this.request(path, {
+          method: endpoint.method,
+          body: endpoint.method === 'POST' ? { skip_current_image: false } : null,
+          timeout: 8000,
+          signal,
+        });
+        const info = normaliseProgress(data, endpoint.path);
+        const image = typeof data?.current_image === 'string' ? data.current_image : '';
+        if (image) return { info, image };
+        withoutImage = { info, image: '' };
+      } catch (error) {
+        if (signal?.aborted) return null;
+      }
+    }
+    return withoutImage;
+  }
+
 }
 
 function toDataUrl(encoded) {

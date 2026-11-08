@@ -162,7 +162,7 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 
 ```bash
 node mobile/tests/test_core.mjs          # 37 test logic: prompt, payload, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
-node mobile/tests/test_api.mjs           # 10 test ForgeClient, gồm hồi quy POST internal/progress / HTTP 405
+node mobile/tests/test_api.mjs           # 17 test ForgeClient: POST progress, đứt body ảnh, khôi phục không tạo lại job
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
@@ -200,6 +200,7 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 | Hiện tượng | Nguyên nhân & cách sửa |
 |---|---|
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
+| Chẩn đoán đều xanh nhưng mất kết nối lúc trả ảnh | API nhỏ vẫn sống nhưng gói JSON chứa ảnh lớn bị đứt. Bản mới lưu preview gần cuối và khôi phục từ `current_image`, không tự tạo lại job. Nếu vẫn lỗi, tắt Hires/giảm kích thước và kiểm tra output Forge |
 | “Không thấy /sdapi” (404) | Forge chạy thiếu `--api`; bộ cài đã bật sẵn |
 | Không ghép dấu tiếng Việt được / Enter làm mất chữ | APK cũ có thể xử lý gợi ý giữa lúc IME ghép dấu. Bản mới chờ `compositionend`, không chặn Enter/keyCode 229 và hỗ trợ chuyển cụm Việt đã biết sang tag Anh |
 | Chẩn đoán báo `internal/progress` HTTP 405 | APK cũ gọi nhầm GET; bản mới dùng `POST` với `skip_current_image=true`. Cài lại APK build mới nhất |
@@ -216,6 +217,9 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 - **Không có timeout cứng cho việc sinh ảnh**: `POST /sdapi/v1/txt2img` là đồng bộ,
   Forge chỉ trả lời khi xong (Hires trên T4 mất 3–6 phút). App chạy POST và poll
   `/sdapi/v1/progress` song song, nên vẫn thấy tiến trình và huỷ được.
+- **Khôi phục khi đứt response ảnh**: app đọc `current_image` một lần lúc tiến trình ≥90%.
+  Nếu body `txt2img` bị đứt, app chờ/đọc lại preview gần cuối thay vì POST tạo job trùng;
+  không có bằng chứng job chạy thì không dùng ảnh cũ.
 - **Huỷ** gọi `/sdapi/v1/interrupt` rồi bỏ request — không để Forge chạy tiếp một job
   người dùng đã bỏ.
 - Ảnh Forge trả về là base64 PNG; app lưu **data URL** vào IndexedDB (không nhét vào

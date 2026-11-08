@@ -119,4 +119,94 @@ const idle = {
     result.hasProgress && !internal.ok && internal.optional && internal.status === 404);
 }
 
+// Response 200 nhưng body lớn bị đứt: lấy lại current_image, tuyệt đối không POST lại.
+{
+  let postCount = 0;
+  let recoveryCalled = false;
+  const progressCalls = [];
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/sdapi/v1/txt2img') {
+        postCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => { throw new TypeError('body stream lost'); },
+        };
+      }
+      if (parsed.pathname === '/sdapi/v1/progress') {
+        progressCalls.push(parsed.searchParams.get('skip_current_image'));
+        return jsonResponse({
+          progress: 0.96,
+          state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
+          current_image: 'aGVsbG8=',
+        });
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.txt2img(
+    { prompt: '1girl', negative_prompt: '', seed: 123, width: 1024, height: 1344 },
+    { interval: 1, recoveryTimeout: 50, onRecover: () => { recoveryCalled = true; } },
+  );
+  check('đứt body ảnh được khôi phục từ current_image', result.recovered
+    && result.images[0] === 'data:image/png;base64,aGVsbG8='
+    && result.info.recovered_from_progress && result.info.seed === 123);
+  check('khôi phục ảnh không POST tạo job lần hai', postCount === 1 && recoveryCalled);
+  check('chỉ request current_image khi cần khôi phục', progressCalls.includes('false'));
+}
+
+// Preview đã đọc lúc >=90% vẫn dùng được nếu response lớn bị đứt ngay sau đó.
+{
+  let postCount = 0;
+  let imageReads = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/sdapi/v1/txt2img') {
+        postCount += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        throw new TypeError('connection closed at final response');
+      }
+      if (parsed.searchParams.get('skip_current_image') === 'false') imageReads += 1;
+      return jsonResponse({
+        progress: 0.96,
+        state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
+        current_image: 'cHJldmlldw==',
+      });
+    },
+  });
+  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 20 });
+  check('dùng preview gần cuối đã cache khi response bị đứt', result.recovered
+    && result.images[0] === 'data:image/png;base64,cHJldmlldw==');
+  check('preview gần cuối chỉ được tải một lần và không tạo lại job', postCount === 1 && imageReads === 1);
+}
+
+// Không có bằng chứng job chạy thì không lấy ảnh cũ; lỗi phải nói đúng giai đoạn tải ảnh.
+{
+  let postCount = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      if (new URL(url).pathname === '/sdapi/v1/txt2img') {
+        postCount += 1;
+        throw new TypeError('fetch failed');
+      }
+      return jsonResponse({ progress: 0, state: { job_count: 0 }, current_image: 'anh-cu' });
+    },
+  });
+  let failure = null;
+  try {
+    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
+  } catch (error) {
+    failure = error;
+  }
+  check('không dùng ảnh cũ khi không xác nhận được job', failure?.status === 0
+    && /tải ảnh kết quả/.test(failure.message) && /không tạo lại ngay/i.test(failure.message));
+  check('request thất bại vẫn không tự tạo lại job', postCount === 1);
+}
+
 console.log(`\n✅ ${passed} kiểm tra ForgeClient đạt.`);
