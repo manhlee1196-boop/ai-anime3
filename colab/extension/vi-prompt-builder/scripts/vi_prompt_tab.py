@@ -475,7 +475,7 @@ def _result_dict(result):
             if isinstance(data, dict):
                 return data
     data = {}
-    for key in ("images", "parameters", "info"):
+    for key in ("images", "image", "parameters", "info", "html_info"):
         if hasattr(result, key):
             data[key] = getattr(result, key)
     return data

@@ -353,9 +353,13 @@ class MobileJobManager:
             model.save_images = False
         result = self.result_dict(endpoint(model))
         encoded_images = result.get("images") or []
+        # /extra-single-image trả ExtrasSingleImageResponse(image=..., html_info=...),
+        # khác txt2img/img2img trả images=[...]. Không đánh mất ảnh sau khi GPU đã upscale.
+        if operation == "extras" and not encoded_images and result.get("image"):
+            encoded_images = [result["image"]]
         if not encoded_images:
             raise RuntimeError("Forge không trả ảnh")
-        info = result.get("info") or {}
+        info = result.get("info") or result.get("html_info") or {}
         if isinstance(info, str):
             try:
                 info = json.loads(info)

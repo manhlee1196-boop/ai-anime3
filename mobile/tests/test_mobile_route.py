@@ -143,7 +143,8 @@ class MobileRoute(unittest.TestCase):
             buffer = io.BytesIO()
             image.save(buffer, format="PNG")
             encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-            return types.SimpleNamespace(images=[encoded], info="upscaled", parameters={})
+            # Đúng ExtrasSingleImageResponse của Forge: image số ít + html_info.
+            return types.SimpleNamespace(image=encoded, html_info="upscaled")
 
         def img2img_endpoint(payload: dict):
             self.img_calls.append(payload.model_dump())
