@@ -405,6 +405,29 @@ probe_host() {
   fi
   warn "  $name: chưa kết nối được sau 3 lượt (HTTP ${code:-000})"; return 1
 }
+probe_github() {
+  # Trang chủ github.com không phải điều kiện để tải repo. Kiểm tra endpoint Git
+  # thật rồi hai nguồn mà bootstrap notebook đã dùng: API và raw.githubusercontent.
+  local slug="${REPO_URL#https://github.com/}"
+  slug="${slug%.git}"; slug="${slug%/}"
+  if [[ "$slug" != "$REPO_URL" && -n "$slug" ]]; then
+    probe_host github-git "https://github.com/$slug/info/refs?service=git-upload-pack" && return 0
+    probe_host github-api "https://api.github.com/repos/$slug" && return 0
+    probe_host github-raw "https://raw.githubusercontent.com/$slug/$REPO_BRANCH/colab/install.sh" && return 0
+  else
+    probe_host github-git "$REPO_URL" && return 0
+  fi
+  return 1
+}
+network_gate() {
+  # Bản cài đủ repo + Forge + model vẫn phải mở được khi mạng đứt. Các stage
+  # thực sự cần tải/cập nhật vẫn tự báo lỗi; không biến cảnh báo thành cài thành công.
+  if [[ "${LOCAL_INSTALL_READY:-0}" == 1 ]]; then
+    warn "$1 Tiếp tục với bản cài hiện có; cập nhật/tải mới có thể không thành công."
+  else
+    problem "$1"
+  fi
+}
 stage_preflight() {
   step "Kiểm tra GPU, ổ đĩa và mạng"
   local t line drv_major free_kb need_gb free_gb
@@ -445,9 +468,16 @@ stage_preflight() {
   else
     ok "Ổ đĩa còn ${free_gb} GiB (cần ~${need_gb} GiB)."
   fi
-  probe_host github.com https://github.com/ || problem "Không kết nối được GitHub sau 3 lượt. Kiểm tra mạng Colab rồi chạy lại; chưa tải model hay xóa dữ liệu."
-  probe_host pypi.org https://pypi.org/simple/ || problem "Không kết nối được PyPI."
-  probe_host download.pytorch.org https://download.pytorch.org/whl/ || problem "Không kết nối được nguồn PyTorch CUDA."
+  LOCAL_INSTALL_READY=0
+  if repo_ready && [[ -s "$FORGE_DIR/launch.py" && -x "$FORGE_DIR/venv/bin/python" \
+      && -f "$MODEL_DIR/$(m_field "$MODEL_ID" file)" ]]; then
+    LOCAL_INSTALL_READY=1
+  fi
+  probe_github || network_gate "Không kết nối được GitHub qua Git/API/raw; chưa xóa dữ liệu hiện có."
+  probe_host pypi.org https://pypi.org/simple/ \
+    || network_gate "Không kết nối được PyPI."
+  probe_host download.pytorch.org https://download.pytorch.org/whl/ \
+    || network_gate "Không kết nối được nguồn PyTorch CUDA."
   probe_host huggingface.co https://huggingface.co/ || true
   # API 401/403 = host có phản hồi, KHÔNG có nghĩa là token/quyền tải hợp lệ.
   probe_host civitai.com "$CIVITAI_API_BASE/models/$(m_field "$MODEL_ID" civ)" || true

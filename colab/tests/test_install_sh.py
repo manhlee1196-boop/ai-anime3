@@ -721,6 +721,9 @@ def test_network_probe():
         executable(tools / "curl", '''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CURL_TRACE"
 if [[ "$*" == *" -I "* ]]; then exit 7; fi
+if [[ "${CURL_MODE:-}" == "api-only" && "$*" != *"api.github.com"* ]]; then
+  printf '000'; exit 0
+fi
 printf '%s' "${CURL_CODE:-200}"
 ''')
         env = {"PATH": str(tools) + os.pathsep + os.environ["PATH"],
@@ -737,6 +740,24 @@ printf '%s' "${CURL_CODE:-200}"
         check("Mất kết nối thật vẫn báo lỗi rõ sau các lượt thử", result.returncode == 1
               and "sau 3 lượt" in result.stdout and "HTTP 000" in result.stdout,
               result.stdout + result.stderr)
+
+        trace.write_text("")
+        result = source_call(INSTALL, "probe_github", {**env, "CURL_MODE": "api-only", "CURL_CODE": "200"})
+        args = trace.read_text()
+        check("github.com lỗi nhưng API GitHub sống thì preflight tiếp tục", result.returncode == 0
+              and "github-api: có phản hồi" in result.stdout
+              and "info/refs?service=git-upload-pack" in args, result.stdout + result.stderr)
+        result = source_call(INSTALL, "probe_github", {**env, "CURL_CODE": "000"})
+        check("Git/API/raw đều mất kết nối thì probe GitHub thất bại", result.returncode == 1
+              and "api.github.com/repos" in trace.read_text()
+              and "raw.githubusercontent.com" in trace.read_text(), result.stdout + result.stderr)
+
+        result = source_call(INSTALL, "LOCAL_INSTALL_READY=1; network_gate 'Mất mạng thật.'", env)
+        check("Bản cài đầy đủ vẫn được mở khi mạng đứt", result.returncode == 0
+              and "Tiếp tục với bản cài hiện có" in result.stdout, result.stdout + result.stderr)
+        result = source_call(INSTALL, "LOCAL_INSTALL_READY=0; network_gate 'Mất mạng thật.'", env)
+        check("Cài mới thiếu dữ liệu vẫn dừng khi mất mạng thật", result.returncode == 1
+              and "Mất mạng thật" in result.stderr, result.stdout + result.stderr)
 
 
 def main():

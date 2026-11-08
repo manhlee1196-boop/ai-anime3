@@ -58,9 +58,11 @@ notebook cũ vẫn có thể truyền `cloudflared`: chọn `share` trước khi
 
 Repo public nên **không cần GitHub token**. Notebook tự thử raw GitHub rồi API; script
 tải về được kiểm tra cú pháp và thay thế nguyên tử, không chạy bản tải dở. Preflight dùng
-GET có redirect và 3 lượt thử (không phụ thuộc HEAD `curl -I`). Nếu vẫn báo không kết nối
-GitHub, đó là lỗi mạng thật sau các lượt thử; chạy lại khi mạng ổn, không cần tạo token cho
-repo public và bộ cài không xóa model/dữ liệu hiện có.
+GET có redirect và 3 lượt thử (không phụ thuộc HEAD `curl -I`). Kiểm tra GitHub thử
+endpoint Git thật, API rồi raw; trang chủ `github.com` không phải điều kiện bắt buộc. Nếu
+Git/API/raw đều mất kết nối, bản cài mới vẫn dừng vì thiếu dữ liệu; bản đã có đủ repo, Forge
+và model chỉ cảnh báo để có thể mở lại bản hiện có. Các stage cần tải/cập nhật vẫn tự báo
+lỗi riêng. Không cần tạo token cho repo public và bộ cài không xóa model/dữ liệu hiện có.
 
 ## 3. Chọn model
 
