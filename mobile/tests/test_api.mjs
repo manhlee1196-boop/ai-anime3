@@ -209,4 +209,94 @@ const idle = {
   check('request thất bại vẫn không tự tạo lại job', postCount === 1);
 }
 
+// WebView có thể trả text JSON đã cắt thay vì reject stream: vẫn phải đi nhánh khôi phục.
+{
+  let postCount = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/sdapi/v1/txt2img') {
+        postCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            return '{"images":["aGVsbG8=';
+          },
+        };
+      }
+      if (parsed.pathname === '/sdapi/v1/progress') {
+        return jsonResponse({
+          progress: 0,
+          state: { sampling_step: 25, sampling_steps: 25, job_count: 0 },
+          current_image: 'aGVsbG8=',
+        });
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  // Đã có tiến trình trước lúc response kết thúc để không nhận nhầm current_image cũ.
+  let ticks = 0;
+  const originalProgress = api.progress.bind(api);
+  api.progress = async (...args) => {
+    ticks += 1;
+    if (ticks === 1) return { available: true, progress: 0.96, jobCount: 1 };
+    return originalProgress(...args);
+  };
+  const result = await api.txt2img(
+    { prompt: '1girl' },
+    { interval: 20, recoveryTimeout: 50 },
+  );
+  check('JSON ảnh cắt giữa chừng vẫn được khôi phục', result.recovered
+    && result.images[0] === 'data:image/png;base64,aGVsbG8=');
+  check('JSON ảnh cắt không bị báo nhầm HTML và không POST lại', postCount === 1);
+}
+
+// Huỷ gần cuối phải thoát ngay, không chạy recovery hay trả preview sau thao tác Huỷ.
+{
+  const controller = new AbortController();
+  let postCount = 0;
+  let recoveryCalled = false;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/sdapi/v1/txt2img') {
+        postCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: () => new Promise((resolve, reject) => {
+            const abort = () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
+            if (init.signal.aborted) abort();
+            else init.signal.addEventListener('abort', abort, { once: true });
+          }),
+        };
+      }
+      return jsonResponse({
+        progress: 0.96,
+        state: { sampling_step: 24, sampling_steps: 25, job_count: 1 },
+        current_image: 'cHJldmlldw==',
+      });
+    },
+  });
+  let failure = null;
+  try {
+    await api.txt2img({ prompt: '1girl' }, {
+      signal: controller.signal,
+      interval: 1,
+      recoveryTimeout: 50,
+      onProgress: () => controller.abort(),
+      onRecover: () => { recoveryCalled = true; },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  check('Huỷ job được giữ là AbortError, không báo mất máy chủ', failure?.name === 'AbortError'
+    && failure?.status === 0);
+  check('Huỷ gần cuối không khôi phục ảnh và không tạo lại job', postCount === 1 && !recoveryCalled);
+}
+
 console.log(`\n✅ ${passed} kiểm tra ForgeClient đạt.`);

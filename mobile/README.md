@@ -162,7 +162,7 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 
 ```bash
 node mobile/tests/test_core.mjs          # 37 test logic: prompt, payload, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
-node mobile/tests/test_api.mjs           # 17 test ForgeClient: POST progress, đứt body ảnh, khôi phục không tạo lại job
+node mobile/tests/test_api.mjs           # 21 test ForgeClient: progress, response ảnh đứt/cắt, huỷ job
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)

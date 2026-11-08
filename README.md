@@ -72,7 +72,7 @@ Tham số mặc định và payload lấy nguyên từ `prompt_lib` nên giống
 python3 mobile/build_data.py            # sinh dữ liệu tag từ CSV (95.939 tag, 1,4 MB gz)
 python3 mobile/serve.py --mock          # xem thử giao diện + Forge giả, không cần GPU
 node mobile/tests/test_core.mjs         # 37 test logic prompt/payload/tìm tag/gợi ý/dịch tag Việt
-node mobile/tests/test_api.mjs          # 17 test API, gồm hồi quy 405 và khôi phục ảnh khi đứt response
+node mobile/tests/test_api.mjs          # 21 test API: hồi quy 405, đứt/cắt response ảnh và huỷ job
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu + tài nguyên + nhập tiếng Việt
 ```
 

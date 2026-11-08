@@ -21,12 +21,19 @@ const PING_PATHS = ['sdapi/v1/options', 'sdapi/v1/cmd-flags'];
 
 /** Lỗi có thông điệp tiếng Việt + mã HTTP (0 = lỗi mạng). */
 export class ForgeError extends Error {
-  constructor(message, { status = 0, body = '' } = {}) {
+  constructor(message, { status = 0, body = '', incomplete = false } = {}) {
     super(message);
     this.name = 'ForgeError';
     this.status = status;
     this.body = body;
+    this.incomplete = incomplete;
   }
+}
+
+function cancelledError() {
+  const error = new ForgeError('Đã huỷ job.');
+  error.name = 'AbortError';
+  return error;
 }
 
 function encodeBasicAuth(user, pass) {
@@ -87,6 +94,7 @@ export class ForgeClient {
       });
     } catch (error) {
       clearTimeout(timer);
+      if (signal?.aborted) throw cancelledError();
       const aborted = error?.name === 'AbortError';
       throw new ForgeError(
         aborted ? 'Hết thời gian chờ máy chủ.' : explainError(0),
@@ -98,6 +106,7 @@ export class ForgeClient {
       text = await response.text();
     } catch (error) {
       clearTimeout(timer);
+      if (signal?.aborted) throw cancelledError();
       // Header có thể là 200 nhưng thân JSON chứa ảnh bị đứt giữa chừng.
       throw new ForgeError(explainError(0), {
         status: 0,
@@ -113,9 +122,21 @@ export class ForgeClient {
     try {
       return JSON.parse(text);
     } catch (error) {
+      // Một số WebView/proxy trả text đã cắt thay vì reject response.text(). Chỉ xem là
+      // response ảnh đứt khi đúng route txt2img và phần đầu đã có trường images; HTML
+      // của tunnel hết hạn vẫn phải báo lỗi ngay, không chờ khôi phục ba phút.
+      const incomplete = path === 'sdapi/v1/txt2img'
+        && /^\s*\{\s*"images"\s*:/.test(text);
       throw new ForgeError(
-        'Máy chủ trả về HTML thay vì JSON — thường là link tunnel đã hết hạn hoặc '
-        + 'Forge chưa bật --api.', { status: response.status, body: text.slice(0, 300) });
+        incomplete
+          ? 'Nội dung ảnh bị cắt giữa chừng — đang thử lấy lại kết quả từ Forge.'
+          : 'Máy chủ trả về HTML thay vì JSON — thường là link tunnel đã hết hạn hoặc '
+            + 'Forge chưa bật --api.',
+        {
+          status: incomplete ? 0 : response.status,
+          body: text.slice(0, 300),
+          incomplete,
+        });
     }
   }
 
@@ -285,7 +306,11 @@ export class ForgeClient {
     }
 
     if (requestError) {
-      const recoverable = [0, 502, 503, 504].includes(Number(requestError?.status));
+      // Huỷ là thao tác chủ động: không chờ khôi phục và không hiện ảnh sau Huỷ.
+      // (Kiểm tra cả signal vì WebView có thể gói AbortError thành lỗi mạng.)
+      if (merged.aborted || requestError?.name === 'AbortError') throw requestError;
+      const recoverable = requestError?.incomplete
+        || [0, 502, 503, 504].includes(Number(requestError?.status));
       if (!recoverable) throw requestError;
       if (onRecover) onRecover();
       // Không POST lại: Forge có thể đã xong hoặc vẫn đang chạy, POST lại sẽ nhân đôi job.
@@ -340,6 +365,7 @@ export class ForgeClient {
   async recoverGeneratedImage({
     previousInfo = null, previousImage = null, signal = null, timeout = 180000,
   } = {}) {
+    if (signal?.aborted) return null;
     if (previousImage?.image && Number(previousInfo?.progress) >= 0.9) return previousImage;
     const deadline = Date.now() + timeout;
     let sawJob = Boolean(previousInfo && (previousInfo.jobCount > 0 || previousInfo.progress > 0));
