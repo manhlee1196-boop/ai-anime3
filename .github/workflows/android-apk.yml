@@ -1,0 +1,93 @@
+name: Android APK
+
+# Build file APK để cài lên điện thoại Android.
+# Chạy tay ở tab Actions (nút "Run workflow") hoặc tự chạy khi push tag v* .
+on:
+  workflow_dispatch:
+    inputs:
+      min_count:
+        description: "Ngưỡng post_count tối thiểu cho dữ liệu tag (mặc định 200)"
+        required: false
+        default: "200"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sinh dữ liệu tag cho app (95.939 tag, ~1,4 MB gz)
+        run: |
+          python3 mobile/build_data.py --min-count "${{ github.event.inputs.min_count || '200' }}"
+          python3 mobile/build_data.py --check
+
+      - name: Kiểm thử logic app (Node, không cần GPU)
+        run: node mobile/tests/test_core.mjs
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Java 17 (Capacitor 6 + Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Kiểm tra Android SDK có sẵn trên runner
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: Cài Capacitor
+        working-directory: mobile/apk
+        run: npm install --no-audit --no-fund
+
+      - name: Tạo project Android và chép app vào assets
+        working-directory: mobile/apk
+        run: |
+          npx cap add android
+          npx cap sync android
+          ls -la android/app/src/main/assets/public | head
+
+      - name: Build APK (debug — cài được ngay, không cần keystore)
+        working-directory: mobile/apk/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Đặt tên file APK
+        run: |
+          cp mobile/apk/android/app/build/outputs/apk/debug/app-debug.apk anime3-mobile.apk
+          ls -lh anime3-mobile.apk
+
+      - name: Lưu APK vào Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime3-mobile-apk
+          path: anime3-mobile.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Gắn APK vào Release (chỉ khi push tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: anime3-mobile.apk
+          body: |
+            APK Anime3 cho Android — cài xong mở app, dán link Forge (gradio.live /
+            trycloudflare) trong **Cài đặt** là dùng được.

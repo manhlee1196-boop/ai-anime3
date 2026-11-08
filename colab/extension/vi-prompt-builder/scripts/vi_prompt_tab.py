@@ -306,6 +306,14 @@ def build_ui():
             "Không còn tab riêng và không còn nút sinh ảnh thứ hai."
         )
 
+        # App điện thoại do chính Forge phục vụ (cùng origin với /sdapi) — xem mobile/.
+        if mobile_app_dir():
+            gr.Markdown(
+                f"📱 **Trên điện thoại:** mở [{MOBILE_ROUTE}/]({MOBILE_ROUTE}/) — giao diện tối ưu "
+                "cho màn hình dọc: kho 95.939 tag tra tiếng Việt, dựng prompt, xem tiến trình, "
+                "huỷ job và lưu ảnh. Cùng trang đó bấm *Thêm vào màn hình chính* là thành app."
+            )
+
         # Tag đang chọn để ngoài tabs: bấm thêm ở tab nào cũng thấy ngay kết quả.
         selected = gr.Textbox(label="Tag đã chọn (sửa tay được)", lines=3,
                               elem_id="vi_prompt_selected")
@@ -446,3 +454,49 @@ class ViPromptInline(Script):
 
     def ui(self, is_img2img):
         return build_ui()
+
+
+# ------------------------------------------- app điện thoại: /vi-mobile trên Forge
+# App là trang tĩnh (mobile/app) do chính Forge phục vụ, nên nó **cùng origin** với
+# /sdapi: điện thoại mở `<link tunnel>/vi-mobile/` là dùng được ngay, không vướng
+# CORS và không cần cài APK. Nếu thư mục mobile/app chưa có (bản repo cũ) thì bỏ qua.
+MOBILE_ROUTE = "/vi-mobile"
+
+
+def mobile_app_dir():
+    """Đường dẫn `mobile/app` trong repo, hoặc "" nếu không có."""
+    if not CSV_ROOT:
+        return ""
+    candidate = os.path.join(CSV_ROOT, "mobile", "app")
+    return candidate if os.path.isfile(os.path.join(candidate, "index.html")) else ""
+
+
+def serve_mobile_app(demo, app):
+    """Gắn app điện thoại vào FastAPI của Forge (gọi qua `on_app_started`)."""
+    root = mobile_app_dir()
+    if not root:
+        return
+    try:
+        from fastapi.responses import RedirectResponse
+        from fastapi.staticfiles import StaticFiles
+    except Exception as exc:                      # noqa: BLE001 - thiếu fastapi thì thôi
+        print(f"[vi-prompt-builder] Không phục vụ được {MOBILE_ROUTE}: {exc}")
+        return
+    try:
+        @app.get(MOBILE_ROUTE, include_in_schema=False)
+        def _mobile_entry():
+            return RedirectResponse(f"{MOBILE_ROUTE}/", status_code=307)
+
+        app.mount(MOBILE_ROUTE, StaticFiles(directory=root, html=True), name="vi_mobile_app")
+        has_data = os.path.isfile(os.path.join(root, "data", "tags.json"))
+        print(f"[vi-prompt-builder] App điện thoại: <link public>{MOBILE_ROUTE}/ "
+              f"({root}{'' if has_data else ' — thiếu data/tags.json, chạy python3 mobile/build_data.py'})")
+    except Exception as exc:                      # noqa: BLE001 - không được làm hỏng Forge
+        print(f"[vi-prompt-builder] Không gắn được {MOBILE_ROUTE}: {exc}")
+
+
+try:
+    from modules import script_callbacks
+    script_callbacks.on_app_started(serve_mobile_app)
+except Exception:                                 # noqa: BLE001 - ngoài Forge (test) thì bỏ qua
+    pass

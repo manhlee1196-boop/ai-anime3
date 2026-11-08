@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="description" content="Tạo ảnh anime bằng Forge trên Colab — giao diện tối ưu cho điện thoại, prompt tiếng Việt.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Anime3 — Tạo ảnh</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="splash" class="splash">
+  <div class="splash-logo">A3</div>
+  <p id="splashText">Đang nạp kho tag…</p>
+  <div class="splash-bar"><span></span></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">A3</span>
+    <div class="brand-text">
+      <strong>Anime3</strong>
+      <button id="connBtn" class="conn" type="button">chưa kết nối</button>
+    </div>
+  </div>
+  <button id="settingsBtn" class="icon-btn" type="button" aria-label="Cài đặt">⚙</button>
+</header>
+
+<main>
+  <!-- ---------------------------------------------------------------- Tạo ảnh -->
+  <section id="tab-create" class="tab active">
+    <div class="card">
+      <div class="card-head">
+        <label class="label" for="prompt">Prompt (tiếng Anh)</label>
+        <span id="tokenInfo" class="token-info">0 tag · 0 token</span>
+      </div>
+      <textarea id="prompt" rows="5" spellcheck="false" autocapitalize="off"
+        placeholder="1girl, solo, long hair, ao dai, looking at viewer…"></textarea>
+      <div id="promptWarn" class="warn hidden"></div>
+      <div class="row gap wrap">
+        <button id="normaliseBtn" class="mini" type="button">🧩 Chuẩn hoá</button>
+        <button id="compactBtn" class="mini" type="button">✂️ Nén tag</button>
+        <button id="tagBtn" class="mini" type="button">🔎 Thêm tag</button>
+        <button id="styleBtn" class="mini" type="button">🎨 Phong cách</button>
+        <button id="clearPromptBtn" class="mini" type="button">🗑 Xoá</button>
+      </div>
+      <details class="details">
+        <summary>Negative prompt</summary>
+        <textarea id="negative" rows="3" spellcheck="false" autocapitalize="off"></textarea>
+        <div class="row gap"><button id="rebuildNegativeBtn" class="mini" type="button">↻ Dựng lại từ preset</button></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="chips" id="sizeChips"></div>
+      <div class="chips" id="ratingChips"></div>
+      <details class="details">
+        <summary>Tham số nâng cao</summary>
+        <div class="grid2">
+          <label class="field">Seed
+            <input id="seed" type="number" inputmode="numeric" step="1" value="-1">
+          </label>
+          <label class="field">Steps
+            <input id="steps" type="number" inputmode="numeric" min="4" max="80" step="1" value="25">
+          </label>
+          <label class="field">CFG
+            <input id="cfg" type="number" inputmode="decimal" min="1" max="30" step="0.5" value="6">
+          </label>
+          <label class="field">Batch
+            <input id="batch" type="number" inputmode="numeric" min="1" max="4" step="1" value="1">
+          </label>
+          <label class="field">Clip skip
+            <input id="clipSkip" type="number" inputmode="numeric" min="1" max="12" value="2">
+          </label>
+          <label class="field">Hires scale
+            <input id="hrScale" type="number" inputmode="decimal" min="1" max="2" step="0.1" value="1.5">
+          </label>
+          <label class="field">Denoise
+            <input id="denoise" type="number" inputmode="decimal" min="0.1" max="0.9" step="0.05" value="0.4">
+          </label>
+        </div>
+        <label class="switch"><input id="hires" type="checkbox" checked> Hires fix (nét hơn, chậm gấp đôi)</label>
+      </details>
+    </div>
+
+    <div id="resultCard" class="card hidden">
+      <div id="resultMeta" class="result-meta"></div>
+      <div id="resultImages" class="result-images"></div>
+      <div class="row gap wrap">
+        <button id="reuseSeedBtn" class="chip" type="button">🎲 Dùng lại seed</button>
+        <button id="shareBtn" class="chip" type="button">↗ Chia sẻ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- Kho tag -->
+  <section id="tab-tags" class="tab">
+    <div class="searchbar">
+      <input id="tagSearch" type="search" autocomplete="off" autocapitalize="off"
+        placeholder="Tìm tag: tóc dài, ao dai, smile, 1girl…">
+      <div id="tagFilters" class="chips"></div>
+    </div>
+    <div id="tagResults" class="tag-list"></div>
+    <div id="tagSelBar" class="selbar hidden">
+      <span id="tagSelText">Đã chọn 0 tag</span>
+      <div class="row gap">
+        <button id="tagClearBtn" class="mini" type="button">Bỏ chọn</button>
+        <button id="tagInsertBtn" class="primary small" type="button">Chèn vào prompt</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- Thư viện -->
+  <section id="tab-gallery" class="tab">
+    <div id="gallery" class="gallery"></div>
+    <p id="galleryEmpty" class="empty">Chưa có ảnh nào. Ảnh tạo xong tự lưu ở đây (trên máy bạn).</p>
+  </section>
+</main>
+
+<footer class="generate-bar">
+  <div id="progress" class="progress hidden"><div id="progressBar" class="progress-bar"></div></div>
+  <p id="status" class="status"></p>
+  <div class="row gap">
+    <button id="generateBtn" class="primary big" type="button">🖼️ Tạo ảnh</button>
+    <button id="cancelBtn" class="danger big hidden" type="button">⛔ Huỷ</button>
+  </div>
+</footer>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-tab="create" type="button"><span>🖼️</span>Tạo ảnh</button>
+  <button class="tab-btn" data-tab="tags" type="button"><span>🔎</span>Kho tag</button>
+  <button class="tab-btn" data-tab="gallery" type="button"><span>📚</span>Thư viện</button>
+</nav>
+
+<!-- ------------------------------------------------------------------ Cài đặt -->
+<div id="sheetSettings" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2>Cài đặt</h2>
+      <button class="icon-btn" data-close type="button" aria-label="Đóng">✕</button>
+    </div>
+    <div class="sheet-body">
+      <label class="label" for="apiUrl">Địa chỉ Forge</label>
+      <input id="apiUrl" type="url" inputmode="url" autocapitalize="off"
+        placeholder="https://xxxx.gradio.live">
+      <p class="hint">Để trống = dùng chính máy chủ đang mở app. Mở bằng link tunnel thì nên để trống.</p>
+      <div class="row gap"><button id="testBtn" class="chip" type="button">Kiểm tra kết nối</button></div>
+      <div id="connInfo" class="hint"></div>
+
+      <details class="details">
+        <summary>Tài khoản API (nếu Forge bật --api-auth)</summary>
+        <label class="field">Tên đăng nhập<input id="apiUser" type="text" autocapitalize="off"></label>
+        <label class="field">Mật khẩu<input id="apiPass" type="password"></label>
+      </details>
+
+      <details class="details" open>
+        <summary>Mặc định cho prompt</summary>
+        <label class="field">Tag chất lượng<select id="setQuality"></select></label>
+        <label class="field">Negative preset<select id="setNegativePreset"></select></label>
+        <label class="field">Sampler<select id="setSampler"></select></label>
+        <label class="field">Công thức phong cách<select id="setStylePreset"></select></label>
+      </details>
+
+      <button id="installBtn" class="primary hidden" type="button">📲 Cài app ra màn hình chính</button>
+      <div id="connectionHelp" class="help"></div>
+      <button id="clearGalleryBtn" class="mini danger-text" type="button">Xoá toàn bộ thư viện ảnh</button>
+      <p class="hint" id="aboutLine">Anime3 · app điện thoại cho Forge + WAI-Illustrious v17</p>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- Sheet phong cách -->
+<div id="sheetStyle" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2>Phong cách vẽ</h2>
+      <button class="icon-btn" data-close type="button" aria-label="Đóng">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div id="stylePresets" class="chips"></div>
+      <input id="styleSearch" type="search" autocomplete="off" placeholder="Tìm phong cách / chất liệu…">
+      <div id="styleGroups" class="chips scroll-x"></div>
+      <div id="styleList" class="tag-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------------- Xem ảnh -->
+<div id="sheetImage" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-panel image-panel">
+    <div class="sheet-head">
+      <h2>Ảnh đã tạo</h2>
+      <button class="icon-btn" data-close type="button" aria-label="Đóng">✕</button>
+    </div>
+    <div class="sheet-body">
+      <img id="imageView" class="image-view" alt="Ảnh đã tạo">
+      <p id="imageMeta" class="hint"></p>
+      <div class="row gap wrap">
+        <button id="imageReuseBtn" class="chip" type="button">♻️ Dùng lại prompt</button>
+        <button id="imageShareBtn" class="chip" type="button">↗ Chia sẻ</button>
+        <button id="imageDeleteBtn" class="chip danger-text" type="button">🗑 Xoá</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="js/ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,937 @@
+/**
+ * Giao diện app điện thoại: 3 tab (Tạo ảnh · Kho tag · Thư viện) + các sheet.
+ *
+ * Toàn bộ phần "nghĩ" nằm ở core.js / data.js / api.js; file này chỉ nối DOM.
+ * Nhờ vậy logic dựng prompt và payload vẫn test được bằng Node mà không cần
+ * trình duyệt (xem mobile/tests).
+ */
+
+import * as core from './core.js';
+import { loadTagData, TagData } from './data.js';
+import { ForgeClient, ForgeError } from './api.js';
+import * as store from './store.js';
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+const state = {
+  data: null,
+  settings: store.loadSettings(),
+  selected: [],            // tag đang chọn ở tab Kho tag
+  tagLimit: 60,
+  tagQuery: '',
+  tagGroup: null,
+  styleQuery: '',
+  styleGroup: null,
+  busy: false,
+  controller: null,
+  results: [],             // data URL của lần sinh gần nhất
+  lastInfo: null,
+  lastSeed: null,
+  viewId: null,
+  installEvent: null,
+};
+
+// ------------------------------------------------------------------ tiện ích DOM
+function h(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else if (key === 'html') node.innerHTML = value;
+    else if (key.startsWith('on') && typeof value === 'function') {
+      node.addEventListener(key.slice(2).toLowerCase(), value);
+    } else if (key in node && typeof value !== 'string') node[key] = value;
+    else node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+let toastTimer = null;
+function toast(message, { error = false, ms = 2600 } = {}) {
+  const node = $('#toast');
+  node.textContent = message;
+  node.classList.toggle('error', Boolean(error));
+  node.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.add('hidden'), ms);
+}
+
+function setStatus(text, { error = false } = {}) {
+  const node = $('#status');
+  node.textContent = text || '';
+  node.classList.toggle('error', Boolean(error));
+}
+
+function setProgress(percent) {
+  const box = $('#progress');
+  const bar = $('#progressBar');
+  if (percent === null) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  bar.style.width = `${Math.max(4, Math.min(100, percent))}%`;
+}
+
+function client() {
+  return new ForgeClient({
+    base: state.settings.apiUrl,
+    user: state.settings.user,
+    pass: state.settings.pass,
+  });
+}
+
+function groupOf(tag) {
+  return state.data ? state.data.groupIndexOf(tag) : core.OTHER_GROUP;
+}
+
+function presets() {
+  return state.data?.presets || {};
+}
+
+function ratingById(id) {
+  const list = presets().ratings || [];
+  return list.find((item) => item.id === id) || list[0] || { id: 'general', label: 'An toàn', positive: [], negative: [] };
+}
+
+function sizePresets() {
+  return presets().sizes || [['Chân dung 1024×1344 (khuyến nghị)', [1024, 1344]]];
+}
+
+function currentSize() {
+  const list = sizePresets();
+  return list[state.settings.sizeIndex] || list[0];
+}
+
+// ------------------------------------------------------------------ khởi động
+async function init() {
+  bindEvents();
+  try {
+    splash('Đang nạp kho tag…');
+    state.data = await loadTagData();
+  } catch (error) {
+    splash(`⚠️ ${error.message}`, true);
+    // vẫn cho dùng Cài đặt/Thư viện dù thiếu kho tag
+  }
+  if (state.data) {
+    fillSelects();
+    renderRatingChips();
+    renderStylePresets();
+    renderStyleGroups();
+    renderStyleList();
+    splash('Sẵn sàng');
+  }
+  renderSizeChips();
+  applySettingsToForm();
+  updatePromptMeta();
+  hideSplash();
+  pingServer();
+  firstRunHint();
+  renderGallery();
+  registerServiceWorker();
+}
+
+/** Trong APK (https://localhost) chưa có địa chỉ Forge thì chỉ thẳng vào Cài đặt. */
+function firstRunHint() {
+  const inApp = location.protocol === 'https:' && location.hostname === 'localhost';
+  if (!inApp || state.settings.apiUrl) return;
+  setConn('chưa có địa chỉ Forge', 'bad');
+  if (!$('#status').textContent) {
+    setStatus('⚙ Bấm nút ⚙ ở góc trên và dán địa chỉ Forge (link tunnel) để bắt đầu.');
+  }
+}
+
+function splash(text, error = false) {
+  const node = $('#splashText');
+  if (node) node.textContent = text;
+  if (error) {
+    const bar = document.querySelector('.splash-bar');
+    if (bar) bar.classList.add('hidden');
+  }
+}
+
+function hideSplash() {
+  const node = $('#splash');
+  if (!node) return;
+  node.classList.add('done');
+  setTimeout(() => node.remove(), 400);
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || location.protocol !== 'https:') return;
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch((error) => {
+    console.warn('Không đăng ký được service worker', error);
+  });
+}
+
+// ------------------------------------------------------------------ nối sự kiện
+function bindEvents() {
+  // tab bar
+  for (const button of $$('.tab-btn')) {
+    button.addEventListener('click', () => showTab(button.dataset.tab));
+  }
+
+  // sheet mở/đóng
+  $('#settingsBtn').addEventListener('click', () => openSheet('#sheetSettings'));
+  $('#styleBtn').addEventListener('click', () => openSheet('#sheetStyle'));
+  $('#tagBtn').addEventListener('click', () => { showTab('tags'); $('#tagSearch').focus(); });
+  $('#connBtn').addEventListener('click', () => openSheet('#sheetSettings'));
+  for (const sheet of $$('.sheet')) {
+    sheet.addEventListener('click', (event) => {
+      if (event.target === sheet) closeSheet(sheet);
+    });
+    for (const closer of sheet.querySelectorAll('[data-close]')) {
+      closer.addEventListener('click', () => closeSheet(sheet));
+    }
+  }
+
+  // prompt
+  $('#prompt').addEventListener('input', () => { updatePromptMeta(); scheduleSave(); });
+  $('#negative').addEventListener('input', scheduleSave);
+  $('#normaliseBtn').addEventListener('click', normalisePromptField);
+  $('#compactBtn').addEventListener('click', compactPromptField);
+  $('#clearPromptBtn').addEventListener('click', () => {
+    $('#prompt').value = '';
+    updatePromptMeta();
+    scheduleSave();
+  });
+  $('#rebuildNegativeBtn').addEventListener('click', rebuildNegative);
+
+  // tham số nâng cao
+  for (const id of ['seed', 'steps', 'cfg', 'batch', 'clipSkip', 'hrScale', 'denoise']) {
+    $(`#${id}`).addEventListener('change', () => { readAdvanced(); updatePromptMeta(); });
+  }
+  $('#hires').addEventListener('change', () => { readAdvanced(); updatePromptMeta(); });
+
+  // tạo ảnh
+  $('#generateBtn').addEventListener('click', generate);
+  $('#cancelBtn').addEventListener('click', cancelJob);
+  $('#reuseSeedBtn').addEventListener('click', () => {
+    if (state.lastSeed === null) return;
+    state.settings.seed = state.lastSeed;
+    $('#seed').value = String(state.lastSeed);
+    saveSettingsNow();
+    toast(`Đã khoá seed ${state.lastSeed}`);
+  });
+  $('#shareBtn').addEventListener('click', () => shareImage(state.results[0]));
+
+  // kho tag
+  let tagTimer = null;
+  $('#tagSearch').addEventListener('input', (event) => {
+    state.tagQuery = event.target.value;
+    state.tagLimit = 60;
+    clearTimeout(tagTimer);
+    tagTimer = setTimeout(renderTagResults, 120);
+  });
+  $('#tagInsertBtn').addEventListener('click', insertSelectedTags);
+  $('#tagClearBtn').addEventListener('click', () => {
+    state.selected = [];
+    renderTagResults();
+    updateSelectionBar();
+  });
+
+  // phong cách
+  let styleTimer = null;
+  $('#styleSearch').addEventListener('input', (event) => {
+    state.styleQuery = event.target.value;
+    clearTimeout(styleTimer);
+    styleTimer = setTimeout(renderStyleList, 120);
+  });
+
+  // cài đặt
+  $('#apiUrl').addEventListener('change', () => {
+    state.settings.apiUrl = core.normalizeBaseUrl($('#apiUrl').value);
+    $('#apiUrl').value = state.settings.apiUrl;
+    saveSettingsNow();
+    pingServer();
+  });
+  $('#apiUser').addEventListener('change', () => { state.settings.user = $('#apiUser').value.trim(); saveSettingsNow(); });
+  $('#apiPass').addEventListener('change', () => { state.settings.pass = $('#apiPass').value; saveSettingsNow(); });
+  $('#testBtn').addEventListener('click', testConnection);
+  $('#setQuality').addEventListener('change', () => { state.settings.qualityPreset = $('#setQuality').value; saveSettingsNow(); });
+  $('#setNegativePreset').addEventListener('change', () => {
+    state.settings.negativePreset = $('#setNegativePreset').value;
+    saveSettingsNow();
+    rebuildNegative();
+  });
+  $('#setSampler').addEventListener('change', () => { state.settings.sampler = $('#setSampler').value; saveSettingsNow(); });
+  $('#setStylePreset').addEventListener('change', () => {
+    const preset = (presets().style_presets || [])[Number($('#setStylePreset').value)];
+    if (preset) appendTags(preset[1], preset[0]);
+    $('#setStylePreset').value = '';
+  });
+  $('#installBtn').addEventListener('click', installApp);
+  $('#clearGalleryBtn').addEventListener('click', async () => {
+    if (!confirm('Xoá toàn bộ ảnh đã lưu trên máy?')) return;
+    await store.clearImages();
+    renderGallery();
+    toast('Đã xoá thư viện ảnh');
+  });
+
+  // ảnh
+  $('#imageReuseBtn').addEventListener('click', reuseImage);
+  $('#imageShareBtn').addEventListener('click', async () => {
+    const item = state.viewId ? await store.getImage(state.viewId) : null;
+    if (item) shareImage(item.dataUrl);
+  });
+  $('#imageDeleteBtn').addEventListener('click', async () => {
+    if (!state.viewId) return;
+    await store.deleteImage(state.viewId);
+    closeSheet($('#sheetImage'));
+    renderGallery();
+    toast('Đã xoá ảnh');
+  });
+
+  // PWA install prompt
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    state.installEvent = event;
+    $('#installBtn').classList.remove('hidden');
+  });
+
+  window.addEventListener('online', () => pingServer());
+  window.addEventListener('offline', () => setConn('mất mạng', 'bad'));
+}
+
+function showTab(name) {
+  for (const tab of $$('.tab')) tab.classList.toggle('active', tab.id === `tab-${name}`);
+  for (const button of $$('.tab-btn')) button.classList.toggle('active', button.dataset.tab === name);
+  if (name === 'gallery') renderGallery();
+  if (name === 'tags' && state.data) renderTagResults();
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+function openSheet(selector) {
+  const sheet = $(selector);
+  sheet.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  if (selector === '#sheetSettings') fillSettingsForm();
+}
+
+function closeSheet(sheet) {
+  sheet.classList.add('hidden');
+  if (!$$('.sheet').some((item) => !item.classList.contains('hidden'))) {
+    document.body.style.overflow = '';
+  }
+}
+
+// ------------------------------------------------------------------ cài đặt <-> form
+const ADVANCED_FIELDS = { seed: 'seed', steps: 'steps', cfg: 'cfg', batch: 'batch', clipSkip: 'clipSkip', hrScale: 'hrScale', denoise: 'denoise' };
+
+function applySettingsToForm() {
+  const settings = state.settings;
+  $('#apiUrl').value = settings.apiUrl || '';
+  $('#apiUser').value = settings.user || '';
+  $('#apiPass').value = settings.pass || '';
+  for (const [id, key] of Object.entries(ADVANCED_FIELDS)) {
+    const node = $(`#${id}`);
+    if (node) node.value = String(settings[key]);
+  }
+  $('#hires').checked = Boolean(settings.hires);
+  $('#prompt').value = settings.prompt || '';
+  $('#negative').value = settings.negative || buildNegativeFor(settings.rating);
+  updateSelectionBar();
+}
+
+function fillSettingsForm() {
+  if (!$('#setQuality').options.length && state.data) fillSelects();
+  $('#setQuality').value = state.settings.qualityPreset;
+  $('#setNegativePreset').value = state.settings.negativePreset;
+  $('#setSampler').value = state.settings.sampler;
+}
+
+function fillSelects() {
+  const quality = Object.keys(presets().quality || {});
+  const negative = Object.keys(presets().negative || {});
+  const samplers = presets().samplers || [];
+  const stylePresets = presets().style_presets || [];
+
+  $('#setQuality').replaceChildren(...quality.map((name) => h('option', { value: name }, name)));
+  $('#setNegativePreset').replaceChildren(...negative.map((name) => h('option', { value: name }, name)));
+  $('#setSampler').replaceChildren(...samplers.map((name) => h('option', { value: name }, name)));
+  $('#setStylePreset').replaceChildren(
+    h('option', { value: '' }, '— chọn công thức để thêm tag —'),
+    ...stylePresets.map((preset, index) => h('option', { value: index }, preset[0])),
+  );
+
+  if (!quality.includes(state.settings.qualityPreset) && quality.length) {
+    state.settings.qualityPreset = quality[0];
+  }
+  if (!negative.includes(state.settings.negativePreset) && negative.length) {
+    state.settings.negativePreset = negative.find((name) => name.includes('ngắn')) || negative[0];
+  }
+  if (!samplers.includes(state.settings.sampler) && samplers.length) {
+    state.settings.sampler = samplers[0];
+  }
+}
+
+function readAdvanced() {
+  const settings = state.settings;
+  for (const [id, key] of Object.entries(ADVANCED_FIELDS)) {
+    const node = $(`#${id}`);
+    if (!node) continue;
+    const value = Number(node.value);
+    if (Number.isFinite(value)) settings[key] = value;
+  }
+  settings.seed = Number.isFinite(Number($('#seed').value)) ? Number($('#seed').value) : -1;
+  settings.hires = $('#hires').checked;
+  saveSettingsNow();
+}
+
+function scheduleSave() {
+  clearTimeout(scheduleSave.timer);
+  scheduleSave.timer = setTimeout(saveSettingsNow, 600);
+}
+
+function saveSettingsNow() {
+  state.settings.prompt = $('#prompt').value;
+  state.settings.negative = $('#negative').value;
+  store.saveSettings(state.settings);
+}
+
+// ------------------------------------------------------------------ chips
+function renderSizeChips() {
+  const list = sizePresets();
+  const box = $('#sizeChips');
+  box.replaceChildren(...list.map(([label, size], index) => h('button', {
+    class: `chip${index === state.settings.sizeIndex ? ' active' : ''}`,
+    type: 'button',
+    text: `${label.split(' (')[0]} · ${size[0]}×${size[1]}`,
+    onclick: () => {
+      state.settings.sizeIndex = index;
+      renderSizeChips();
+      updatePromptMeta();
+      saveSettingsNow();
+    },
+  })));
+}
+
+function renderRatingChips() {
+  const list = presets().ratings || [];
+  const short = { general: 'An toàn', sensitive: 'Nhạy cảm', questionable: 'Đáng ngờ', explicit: '18+' };
+  const box = $('#ratingChips');
+  box.replaceChildren(...list.map((item) => h('button', {
+    class: `chip${item.id === state.settings.rating ? ' active' : ''}`,
+    type: 'button',
+    text: short[item.id] || item.label,
+    onclick: () => {
+      state.settings.rating = item.id;
+      renderRatingChips();
+      rebuildNegative();
+      updatePromptMeta();
+      saveSettingsNow();
+    },
+  })));
+}
+
+function renderStylePresets() {
+  const box = $('#stylePresets');
+  const list = presets().style_presets || [];
+  if (!list.length) {
+    box.replaceChildren(h('span', { class: 'hint' }, 'Chưa có dữ liệu phong cách.'));
+    return;
+  }
+  box.replaceChildren(...list.map(([name, tags, note]) => h('button', {
+    class: 'chip',
+    type: 'button',
+    text: name,
+    title: note,
+    onclick: () => {
+      appendTags(tags, name);
+      closeSheet($('#sheetStyle'));
+    },
+  })));
+}
+
+function renderStyleGroups() {
+  if (!state.data) return;
+  const groups = state.data.styleGroups();
+  const box = $('#styleGroups');
+  box.replaceChildren(h('button', {
+    class: `chip${state.styleGroup === null ? ' active' : ''}`,
+    type: 'button',
+    text: `Tất cả (${state.data.styles.length})`,
+    onclick: () => { state.styleGroup = null; renderStyleGroups(); renderStyleList(); },
+  }), ...groups.map((group) => h('button', {
+    class: `chip${state.styleGroup === group ? ' active' : ''}`,
+    type: 'button',
+    text: group,
+    onclick: () => { state.styleGroup = group; renderStyleGroups(); renderStyleList(); },
+  })));
+}
+
+function renderStyleList() {
+  if (!state.data) return;
+  const items = state.data.searchStyles(state.styleQuery, { limit: 120, group: state.styleGroup });
+  const box = $('#styleList');
+  if (!items.length) {
+    box.replaceChildren(h('p', { class: 'hint' }, 'Không tìm thấy phong cách phù hợp.'));
+    return;
+  }
+  box.replaceChildren(...items.map((item) => h('button', {
+    class: 'tag-row',
+    type: 'button',
+    onclick: () => {
+      appendTags([item.tag], item.tag);
+    },
+  }, h('span', { class: 'tag-main' },
+    h('span', { class: 'tag-en' }, item.tag),
+    h('span', { class: 'tag-vi' }, item.vi || '—'),
+  ), h('span', { class: 'tag-count' }, item.group))));
+}
+
+// ------------------------------------------------------------------ kho tag
+function renderTagResults() {
+  if (!state.data) {
+    $('#tagResults').replaceChildren(h('p', { class: 'hint' }, 'Chưa nạp được kho tag.'));
+    return;
+  }
+  renderTagFilters();
+  const rows = state.data.search(state.tagQuery, {
+    limit: state.tagLimit,
+    group: state.tagGroup === 'all' ? null : state.tagGroup,
+  });
+  const selectedKeys = new Set(state.selected.map((tag) => core.normKey(tag)));
+  const box = $('#tagResults');
+  const children = rows.map((row) => {
+    const isSelected = selectedKeys.has(core.normKey(row.tag));
+    return h('button', {
+      class: `tag-row${isSelected ? ' selected' : ''}`,
+      type: 'button',
+      onclick: () => toggleTag(row.tag),
+    },
+    h('span', { class: 'tag-main' },
+      h('span', { class: 'tag-en' }, row.tag),
+      h('span', { class: 'tag-vi' }, row.vi || '—'),
+    ),
+    h('span', { class: 'tag-count' },
+      TagData.formatCount(row.count),
+      h('span', { class: 'tag-badge' }, shortGroup(row.groupLabel))),
+    );
+  });
+  if (!rows.length) {
+    children.push(h('p', { class: 'hint' }, 'Không tìm thấy tag. Thử bỏ dấu hoặc dùng từ tiếng Anh.'));
+  }
+  if (rows.length === state.tagLimit) {
+    children.push(h('button', {
+      class: 'chip',
+      type: 'button',
+      text: 'Xem thêm',
+      onclick: () => { state.tagLimit += 60; renderTagResults(); },
+    }));
+  }
+  box.replaceChildren(...children);
+  updateSelectionBar();
+}
+
+function shortGroup(label) {
+  return String(label || '').split(' (')[0].replace('&', '/').slice(0, 14);
+}
+
+function renderTagFilters() {
+  if (!state.data) return;
+  const box = $('#tagFilters');
+  if (box.dataset.ready === '1') return;
+  const groups = state.data.browseGroups;
+  box.replaceChildren(h('button', {
+    class: `chip${state.tagGroup === 'all' || state.tagGroup === null ? ' active' : ''}`,
+    type: 'button',
+    text: 'Phổ biến',
+    onclick: () => { state.tagGroup = 'all'; markFilters(); renderTagResults(); },
+  }), ...groups.map((group) => h('button', {
+    class: 'chip',
+    type: 'button',
+    text: state.data.groupLabels[state.data.groups.indexOf(group)] || group,
+    'data-group': group,
+    onclick: () => { state.tagGroup = group; markFilters(); renderTagResults(); },
+  })));
+  box.dataset.ready = '1';
+  markFilters();
+}
+
+function markFilters() {
+  for (const chip of $$('#tagFilters .chip')) {
+    const group = chip.dataset.group;
+    const active = group ? group === state.tagGroup : (state.tagGroup === 'all' || state.tagGroup === null);
+    chip.classList.toggle('active', active);
+  }
+}
+
+function toggleTag(tag) {
+  const key = core.normKey(tag);
+  const index = state.selected.findIndex((item) => core.normKey(item) === key);
+  if (index >= 0) state.selected.splice(index, 1);
+  else state.selected.push(tag);
+  renderTagResults();
+}
+
+function updateSelectionBar() {
+  const bar = $('#tagSelBar');
+  if (!state.selected.length) {
+    bar.classList.add('hidden');
+    return;
+  }
+  bar.classList.remove('hidden');
+  $('#tagSelText').textContent = `Đã chọn ${state.selected.length} tag`;
+}
+
+function insertSelectedTags() {
+  if (!state.selected.length) return;
+  appendTags(state.selected, `${state.selected.length} tag`);
+  state.selected = [];
+  updateSelectionBar();
+  renderTagResults();
+  showTab('create');
+}
+
+// ------------------------------------------------------------------ prompt
+function appendTags(tags, label = '') {
+  const textarea = $('#prompt');
+  const existing = core.parseTags(textarea.value);
+  const present = new Set(existing.map((piece) => core.normKey(piece.tag)));
+  const added = [];
+  for (const tag of tags) {
+    const key = core.normKey(tag);
+    if (!key || present.has(key)) continue;
+    present.add(key);
+    added.push(tag);
+  }
+  if (!added.length) {
+    toast(`Tag đã có trong prompt${label ? ` (${label})` : ''}`);
+    return;
+  }
+  const prefix = textarea.value.trim() ? `${textarea.value.trim().replace(/,\s*$/, '')}, ` : '';
+  textarea.value = `${prefix}${added.join(', ')}`;
+  updatePromptMeta();
+  saveSettingsNow();
+  toast(`Đã thêm ${added.length} tag${label ? ` · ${label}` : ''}`);
+}
+
+function buildNegativeFor(ratingId) {
+  const rating = ratingById(ratingId);
+  return core.buildNegative({
+    preset: (presets().negative || {})[state.settings.negativePreset] || '',
+    ratingNegative: rating.negative || [],
+    extra: state.settings.negativeExtra || '',
+  });
+}
+
+function rebuildNegative() {
+  $('#negative').value = buildNegativeFor(state.settings.rating);
+  saveSettingsNow();
+}
+
+function normalisePromptField() {
+  const text = $('#prompt').value;
+  if (!text.trim()) {
+    toast('Chưa có prompt để chuẩn hoá', { error: true });
+    return;
+  }
+  $('#prompt').value = core.normalisePrompt(text, {
+    quality: (presets().quality || {})[state.settings.qualityPreset] || '',
+    ratingPositive: ratingById(state.settings.rating).positive || [],
+    groupOf,
+    dropDuplicates: true,
+  });
+  updatePromptMeta();
+  saveSettingsNow();
+  toast('Đã sắp xếp theo nhóm và thêm tag chất lượng');
+}
+
+function compactPromptField() {
+  const pieces = core.dedupePieces(core.parseTags($('#prompt').value));
+  $('#prompt').value = pieces.map((piece) => core.renderTag(piece.tag, piece.weight)).join(', ');
+  updatePromptMeta();
+  saveSettingsNow();
+  toast('Đã bỏ tag trùng nghĩa');
+}
+
+/** Prompt gửi đi: thêm tag chất lượng + phân loại nếu người dùng chưa có. */
+function finalPositive() {
+  const text = $('#prompt').value.trim();
+  if (!text) return '';
+  const present = new Set(core.parseTags(text).map((piece) => core.normKey(piece.tag)));
+  const wanted = [
+    (presets().quality || {})[state.settings.qualityPreset] || '',
+    ...(ratingById(state.settings.rating).positive || []),
+  ].filter(Boolean).join(', ');
+  const prefix = core.parseTags(wanted)
+    .filter((piece) => !present.has(core.normKey(piece.tag)))
+    .map((piece) => core.renderTag(piece.tag, piece.weight));
+  return [prefix.join(', '), text].filter(Boolean).join(', ');
+}
+
+function updatePromptMeta() {
+  const text = $('#prompt').value;
+  const pieces = core.parseTags(text);
+  const tokens = core.estimateTokens(text);
+  const advice = core.tokenAdvice(tokens);
+  const info = $('#tokenInfo');
+  info.textContent = `${pieces.length} tag · ${tokens} token · ${advice.label}`;
+  info.className = `token-info ${advice.level}`;
+  info.title = advice.text;
+
+  const warnings = core.payloadWarnings(currentOverrides());
+  const box = $('#promptWarn');
+  if (warnings.length) {
+    box.textContent = `⚠️ ${warnings.join(' · ')}`;
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+function currentOverrides() {
+  const settings = state.settings;
+  const [, size] = currentSize();
+  return {
+    steps: settings.steps,
+    cfg_scale: settings.cfg,
+    sampler_name: settings.sampler,
+    width: size[0],
+    height: size[1],
+    batch_size: settings.batch,
+    seed: settings.seed,
+    enable_hr: settings.hires,
+    hr_scale: settings.hrScale,
+    denoising_strength: settings.denoise,
+    clip_skip: settings.clipSkip,
+  };
+}
+
+// ------------------------------------------------------------------ sinh ảnh
+async function generate() {
+  if (state.busy) return;
+  const positive = finalPositive();
+  if (!positive) {
+    toast('Nhập prompt trước đã', { error: true });
+    $('#prompt').focus();
+    return;
+  }
+  const negative = $('#negative').value.trim() || buildNegativeFor(state.settings.rating);
+
+  const payload = core.buildPayload({
+    positive,
+    negative,
+    defaults: presets().defaults || {},
+    overrides: currentOverrides(),
+  });
+
+  state.busy = true;
+  state.controller = new AbortController();
+  $('#generateBtn').classList.add('hidden');
+  $('#cancelBtn').classList.remove('hidden');
+  setProgress(4);
+  setStatus('⏳ Đang gửi yêu cầu tới Forge…');
+  setConn('đang chạy…', '');
+
+  try {
+    const api = client();
+    const result = await api.txt2img(payload, {
+      signal: state.controller.signal,
+      onProgress: (info, elapsed) => {
+        setProgress((Number(info.progress) || 0) * 100);
+        setStatus(core.progressText(info, elapsed));
+      },
+    });
+    state.results = result.images;
+    state.lastInfo = result.info;
+    state.lastSeed = core.seedFromInfo(result.info);
+    renderResult(result);
+    setProgress(100);
+    setStatus(`✅ Xong sau ${core.formatDuration(result.elapsed)}`
+      + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
+    await saveResultImages(result);
+    pingServer();
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      setStatus('⛔ Đã huỷ job.');
+      setProgress(null);
+    } else {
+      const message = error instanceof ForgeError ? error.message : `Lỗi: ${error.message}`;
+      setStatus(message, { error: true });
+      setProgress(null);
+      toast(message, { error: true, ms: 5000 });
+      setConn('lỗi kết nối', 'bad');
+    }
+  } finally {
+    state.busy = false;
+    state.controller = null;
+    $('#generateBtn').classList.remove('hidden');
+    $('#cancelBtn').classList.add('hidden');
+  }
+}
+
+async function cancelJob() {
+  if (!state.busy) return;
+  setStatus('⛔ Đang huỷ…');
+  await client().interrupt();
+  state.controller?.abort();
+}
+
+function renderResult(result) {
+  const card = $('#resultCard');
+  card.classList.remove('hidden');
+  const info = result.info || {};
+  const seed = core.seedFromInfo(info);
+  $('#resultMeta').textContent = [
+    `seed ${seed ?? '?'}`,
+    `${info.width || '?'}×${info.height || '?'}`,
+    `${core.formatDuration(result.elapsed)}`,
+    info.sampler_name ? `${info.sampler_name} · ${info.steps || '?'} bước` : '',
+  ].filter(Boolean).join(' · ');
+  $('#resultImages').replaceChildren(...result.images.map((src) => h('img', {
+    src,
+    alt: 'Ảnh vừa tạo',
+    onclick: () => openImage(null, src, $('#resultMeta').textContent),
+  })));
+  $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function saveResultImages(result) {
+  const reuse = core.reuseFromInfo(result.info) || {};
+  for (const [index, dataUrl] of result.images.entries()) {
+    try {
+      await store.addImage({
+        dataUrl,
+        prompt: reuse.prompt || $('#prompt').value,
+        negative: reuse.negative || $('#negative').value,
+        seed: reuse.seed,
+        info: result.info,
+        params: currentOverrides(),
+        index,
+      });
+    } catch (error) {
+      console.warn('Không lưu được ảnh vào thư viện', error);
+    }
+  }
+  renderGallery();
+}
+
+// ------------------------------------------------------------------ thư viện
+async function renderGallery() {
+  const items = await store.listImages({ limit: 60 });
+  const box = $('#gallery');
+  $('#galleryEmpty').classList.toggle('hidden', items.length > 0);
+  box.replaceChildren(...items.map((item) => h('button', {
+    type: 'button',
+    onclick: () => openImage(item.id, item.dataUrl, describeItem(item)),
+  }, h('img', { src: item.dataUrl, alt: item.prompt || 'Ảnh đã tạo', loading: 'lazy' }))));
+}
+
+function describeItem(item) {
+  const when = item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : '';
+  return [
+    when,
+    item.seed !== null && item.seed !== undefined ? `seed ${item.seed}` : '',
+    (item.prompt || '').slice(0, 90) + ((item.prompt || '').length > 90 ? '…' : ''),
+  ].filter(Boolean).join(' · ');
+}
+
+async function openImage(id, dataUrl, meta) {
+  state.viewId = id;
+  $('#imageView').src = dataUrl;
+  $('#imageMeta').textContent = meta || '';
+  $('#imageReuseBtn').classList.toggle('hidden', !id);
+  $('#imageDeleteBtn').classList.toggle('hidden', !id);
+  openSheet('#sheetImage');
+}
+
+async function reuseImage() {
+  if (!state.viewId) return;
+  const item = await store.getImage(state.viewId);
+  if (!item) return;
+  $('#prompt').value = item.prompt || '';
+  $('#negative').value = item.negative || '';
+  if (item.seed !== null && item.seed !== undefined) {
+    state.settings.seed = item.seed;
+    $('#seed').value = String(item.seed);
+  }
+  updatePromptMeta();
+  saveSettingsNow();
+  closeSheet($('#sheetImage'));
+  showTab('create');
+  toast('Đã nạp lại prompt và seed');
+}
+
+async function shareImage(dataUrl) {
+  if (!dataUrl) return;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], `anime3-${Date.now()}.png`, { type: blob.type || 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Anime3' });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = h('a', { href: url, download: file.name });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Đã tải ảnh về máy');
+  } catch (error) {
+    toast(`Không chia sẻ được: ${error.message}`, { error: true });
+  }
+}
+
+// ------------------------------------------------------------------ kết nối
+function setConn(text, variant = '') {
+  const node = $('#connBtn');
+  node.textContent = variant === 'ok' ? `● ${text}` : text;
+  node.className = `conn ${variant}`;
+}
+
+let pingTimer = null;
+async function pingServer() {
+  clearTimeout(pingTimer);
+  setConn('đang kiểm tra…');
+  try {
+    const info = await client().ping();
+    const model = info.model ? info.model.split(/[\\/]/).pop().replace(/\.safetensors$/, '') : '';
+    setConn(model ? `● ${model}` : '● đã kết nối', 'ok');
+    $('#connInfo').textContent = model
+      ? `Đã kết nối Forge · model: ${model}`
+      : 'Đã kết nối Forge.';
+  } catch (error) {
+    setConn('chưa kết nối', 'bad');
+    $('#connInfo').textContent = error.message || 'Không kết nối được.';
+  }
+  // kiểm tra lại mỗi 60 giây để link tunnel hết hạn là biết ngay
+  pingTimer = setTimeout(pingServer, 60000);
+}
+
+async function testConnection() {
+  $('#connInfo').textContent = 'Đang kiểm tra…';
+  try {
+    const api = client();
+    const info = await api.ping();
+    const model = info.model || '(không rõ)';
+    $('#connInfo').textContent = `✅ Kết nối được: ${model}`;
+    setConn(`● ${String(model).split(/[\\/]/).pop()}`, 'ok');
+  } catch (error) {
+    $('#connInfo').textContent = `❌ ${error.message}`;
+    setConn('chưa kết nối', 'bad');
+  }
+}
+
+async function installApp() {
+  if (!state.installEvent) {
+    toast('Trình duyệt không hỗ trợ cài trực tiếp — dùng menu "Thêm vào màn hình chính".');
+    return;
+  }
+  state.installEvent.prompt();
+  const choice = await state.installEvent.userChoice.catch(() => null);
+  state.installEvent = null;
+  $('#installBtn').classList.add('hidden');
+  if (choice?.outcome === 'accepted') toast('Đã cài app ra màn hình chính');
+}
+
+// ------------------------------------------------------------------ khởi động
+init();

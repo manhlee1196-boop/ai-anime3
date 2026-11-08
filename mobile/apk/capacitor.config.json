@@ -1,0 +1,14 @@
+{
+  "appId": "vn.anime3.mobile",
+  "appName": "Anime3",
+  "webDir": "../app",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0b0d12",
+    "webContentsDebuggingEnabled": false
+  }
+}

@@ -465,6 +465,17 @@ stage_extras() {
   (cd "$REPO_DIR" && $PY colab/make_tagcomplete_assets.py) \
     || die "make_tagcomplete_assets.py chạy lỗi."
 
+  # 2b) dữ liệu gọn cho app điện thoại: trang /vi-mobile do extension phục vụ,
+  #     dùng chính kho CSV ở repo nên không phải tải thêm gì từ mạng.
+  if [[ -f "$REPO_DIR/mobile/build_data.py" ]]; then
+    info "Sinh dữ liệu cho app điện thoại (/vi-mobile)"
+    if (cd "$REPO_DIR" && $PY mobile/build_data.py); then
+      ok "App điện thoại sẵn sàng: mở <link public>/vi-mobile/"
+    else
+      warn "Chưa sinh được mobile/app/data/tags.json — trang /vi-mobile sẽ báo thiếu dữ liệu."
+    fi
+  fi
+
   # 3) cài tagcomplete
   local ext="$FORGE_DIR/extensions"
   mkdir -p "$ext"
@@ -562,7 +573,12 @@ PYSTY
 launch_args() {
   # Forge Neo dùng --ckpt-dirs cho checkpoint; không có --models-dir.
   # shlex.quote bảo toàn đường dẫn có khoảng trắng khi launch.py đọc biến môi trường.
+  # CORS: app cài riêng trên điện thoại (APK/PWA ở origin khác) gọi thẳng /sdapi cần
+  # header này. Mở /vi-mobile/ ngay trên Forge thì không cần. Tắt bằng
+  # CORS_ALLOW_ORIGINS=none; hoặc giới hạn: CORS_ALLOW_ORIGINS=https://a,https://b
+  local cors="${CORS_ALLOW_ORIGINS-*}"
   local args="--listen --port $PORT --api --expandable-segments"
+  [[ "$cors" == "none" ]] || args="$args --cors-allow-origins=$cors"
   local model_path
   model_path="$($PY -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "$MODEL_DIR")"
   args="$args --ckpt-dirs $model_path"

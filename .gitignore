@@ -14,3 +14,12 @@ tools/work/
 # hệ thống Colab: file sinh ra khi chạy (xem colab/README.md)
 colab/assets/
 colab/outputs/
+
+# app điện thoại: dữ liệu tag nén sinh từ CSV (python3 mobile/build_data.py)
+mobile/app/data/tags.json
+mobile/app/data/tags.json.gz
+
+# node_modules khi thử UI (jsdom) hoặc build APK
+node_modules/
+mobile/apk/node_modules/
+mobile/apk/android/

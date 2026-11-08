@@ -50,6 +50,33 @@ and delete runtime**; không có bước tự xóa dữ liệu/mount Drive.
 
 Chi tiết hệ thống/bộ dựng prompt: [`colab/README.md`](colab/README.md).
 
+## 📱 App điện thoại (PWA + APK)
+
+Thư mục [`mobile/`](mobile/) là **app cho điện thoại**: giao diện dọc, một tay với tới,
+điều khiển chính Forge đang chạy trên Colab (điện thoại không tự chạy SDXL — 6,5 GB model
+cần GPU 16 GB, nên app là bảng điều khiển từ xa).
+
+| Cách dùng | Làm gì |
+|---|---|
+| **Mở ngay** ⭐ | Bộ cài đã phục vụ app tại `<link Forge>/vi-mobile/` — mở bằng điện thoại là xong, không cài gì |
+| **Cài PWA** | Cùng trang đó → *Thêm vào màn hình chính* (icon riêng, toàn màn hình) |
+| **APK** | Workflow [Android APK](.github/workflows/android-apk.yml) build sẵn file `.apk` trong Artifacts, tải về cài |
+
+App có: kho **95.939 tag** tra **tiếng Việt không cần dấu** (`toc dai` → `long_hair`),
+**506 tag phong cách** + 12 công thức, 🧩 chuẩn hoá prompt theo 18 nhóm Illustrious/WAI,
+✂️ nén tag trùng nghĩa, đo token CLIP, tiến trình thật (`⏳ bước 9/25 · 36% · còn ~1m 20s`),
+**huỷ job**, và **thư viện ảnh lưu trên máy** (IndexedDB) để xem lại/chia sẻ/dùng lại seed.
+Tham số mặc định và payload lấy nguyên từ `prompt_lib` nên giống hệt app Gradio.
+
+```bash
+python3 mobile/build_data.py            # sinh dữ liệu tag từ CSV (95.939 tag, 1,4 MB gz)
+python3 mobile/serve.py --mock          # xem thử giao diện + Forge giả, không cần GPU
+node mobile/tests/test_core.mjs         # 28 test logic prompt/payload/tìm tag
+python3 mobile/tests/test_mobile_assets.py   # 17 test dữ liệu + tài nguyên + id HTML
+```
+
+Hướng dẫn đầy đủ (cài APK, CORS, lỗi thường gặp): [`mobile/README.md`](mobile/README.md).
+
 ## Các file đầu ra
 
 | File | Nội dung | Dùng để làm gì |

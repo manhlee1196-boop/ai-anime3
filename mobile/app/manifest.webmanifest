@@ -1,0 +1,19 @@
+{
+  "name": "Anime3 — Tạo ảnh anime",
+  "short_name": "Anime3",
+  "description": "Điều khiển Forge + WAI-Illustrious v17 từ điện thoại: prompt tiếng Việt, kho 95.939 tag, thư viện ảnh.",
+  "lang": "vi",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "categories": ["graphics", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
