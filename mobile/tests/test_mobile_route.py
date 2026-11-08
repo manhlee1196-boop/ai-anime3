@@ -104,6 +104,7 @@ class MobileRoute(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "colab"))
         cls.ext = load_module("vi_prompt_tab_route", EXT_PATH)
         cls.jobs = load_module("anime3_mobile_jobs_test", JOBS_PATH)
+        cls.real_txt2img_request = cls.ext._txt2img_request
         cls.ext._txt2img_request = lambda endpoint, payload: FakeRequest(payload)
 
     def setUp(self):
@@ -339,6 +340,33 @@ class MobileRoute(unittest.TestCase):
                                headers=self.auth_headers()).json()["files"][0]
         self.assertEqual(self.client.get(item["url"]).status_code, 401)
         self.assertEqual(self.client.get(item["url"], headers=self.auth_headers()).status_code, 200)
+
+    def test_10_hires_defaults_to_same_vae_and_text_encoders(self):
+        """Không để None đi vào modules_change() của Forge Neo ở pass Hires."""
+        captured = []
+
+        class FakeModel:
+            @classmethod
+            def model_validate(cls, payload):
+                captured.append(payload)
+                return payload
+
+        def endpoint(txt2imgreq: FakeModel):
+            return txt2imgreq
+
+        source = {"prompt": "1girl", "enable_hr": True}
+        request = type(self).real_txt2img_request(endpoint, source)
+        self.assertEqual(request["hr_additional_modules"], ["Use same choices"])
+        self.assertNotIn("hr_additional_modules", source, "không được sửa payload đầu vào")
+
+        explicit = type(self).real_txt2img_request(endpoint, {
+            "prompt": "1girl", "enable_hr": True, "hr_additional_modules": [],
+        })
+        self.assertEqual(explicit["hr_additional_modules"], [], "giữ lựa chọn Built-in của client")
+
+        disabled = type(self).real_txt2img_request(endpoint, {"prompt": "1girl", "enable_hr": False})
+        self.assertNotIn("hr_additional_modules", disabled)
+        self.assertEqual(len(captured), 3)
 
 
 if __name__ == "__main__":

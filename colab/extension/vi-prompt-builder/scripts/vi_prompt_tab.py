@@ -498,6 +498,13 @@ def _txt2img_request(endpoint, payload):
     """Dựng đúng TextToImageRequest mà route chuẩn đang nhận, không sao chép engine."""
     import inspect
 
+    # Forge Neo để hr_additional_modules=None trong API model nhưng modules_change()
+    # duyệt trực tiếp giá trị này ở pass Hires. UI của Forge mặc định dùng lại VAE/TE
+    # hiện tại; job API phải gửi cùng mặc định thay vì để None gây TypeError.
+    body = dict(payload)
+    if body.get("enable_hr") and body.get("hr_additional_modules") is None:
+        body["hr_additional_modules"] = ["Use same choices"]
+
     parameters = list(inspect.signature(endpoint).parameters.values())
     annotation = parameters[0].annotation if parameters else inspect.Signature.empty
     if annotation is inspect.Signature.empty or isinstance(annotation, str):
@@ -505,11 +512,11 @@ def _txt2img_request(endpoint, payload):
         annotation = models.TextToImageRequest
     validate = getattr(annotation, "model_validate", None)
     if callable(validate):
-        return validate(payload)
+        return validate(body)
     parse = getattr(annotation, "parse_obj", None)
     if callable(parse):
-        return parse(payload)
-    return annotation(**payload)
+        return parse(body)
+    return annotation(**body)
 
 
 def _standard_interrupt_endpoint(app):
