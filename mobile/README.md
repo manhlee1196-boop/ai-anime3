@@ -115,7 +115,7 @@ tunnel** khi bạn quay về.
 | **🔗 Kết nối** + ô địa chỉ | Dán tay `https://xxxx.gradio.live` hoặc `192.168.1.9:7860` (Forge trong LAN, tự hiểu là `http`) |
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link gradio.live hết hạn thì chạy lệnh này, link mới hiện ra, quay lại app là tự nhận |
-| **🩺 Chẩn đoán kết nối** | Gọi thử 5 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`) và nói rõ cái nào sống/chết + việc cần làm |
+| **🩺 Chẩn đoán kết nối** | Gọi song song 5 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`) bằng đúng GET/POST; tóm trạng thái, hiện mã lỗi và việc cần làm |
 | **Lịch sử link** | 6 link gần nhất kèm ✅/❌ lần dùng cuối; bấm là kết nối lại. Tự kiểm tra lại mỗi 60 giây |
 
 **Vì sao không nhúng thẳng Colab vào app (iframe/WebView)?** Google **chặn đăng nhập
@@ -162,6 +162,7 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 
 ```bash
 node mobile/tests/test_core.mjs          # 33 test logic: prompt, payload, token, tìm tag, bắt link Forge
+node mobile/tests/test_api.mjs           # 10 test ForgeClient, gồm hồi quy POST internal/progress / HTTP 405
 python3 mobile/tests/test_mobile_assets.py   # 19 test dữ liệu/tài nguyên/id trong HTML
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
@@ -200,6 +201,7 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 |---|---|
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
 | “Không thấy /sdapi” (404) | Forge chạy thiếu `--api`; bộ cài đã bật sẵn |
+| Chẩn đoán báo `internal/progress` HTTP 405 | APK cũ gọi nhầm GET; bản mới dùng `POST` với `skip_current_image=true`. Cài lại APK build mới nhất |
 | Forge trả 500 / ảnh trắng | Hết VRAM (Hires trên T4): tắt Hires, giảm kích thước, xem `forge.log` |
 | Trang `/vi-mobile/` báo thiếu dữ liệu | Chưa sinh dữ liệu: `python3 mobile/build_data.py` (bộ cài chạy tự động ở stage `extras`) |
 | Không thấy icon sau khi “Thêm vào MH chính” | Dùng Chrome/Safari (không dùng trình duyệt trong app Facebook/Zalo) |

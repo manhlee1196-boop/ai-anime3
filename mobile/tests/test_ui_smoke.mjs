@@ -182,6 +182,10 @@ const state_settings_api_url = () => {
       if (url.pathname.endsWith('/sdapi/v1/options')) {
         return Promise.resolve(jsonResponse({ sd_model_checkpoint: 'wai_v17_abc.safetensors' }));
       }
+      // Forge thật chỉ nhận POST ở route nội bộ; GET phải bị mô phỏng là 405.
+      if (url.pathname.endsWith('/internal/progress') && init?.method !== 'POST') {
+        return Promise.resolve(jsonResponse({ detail: 'Method Not Allowed' }, 405));
+      }
       if (url.pathname.includes('progress')) {
         return Promise.resolve(jsonResponse({ progress: 0, state: {}, current_image: null }));
       }
@@ -217,10 +221,14 @@ const state_settings_api_url = () => {
   await until(() => clipboard.writes.some((text) => text.includes('--restart')),
     { label: 'copy lệnh lấy link mới' });
 
-  // chẩn đoán: 5 endpoint, phải thấy endpoint OK
+  // chẩn đoán: đủ 5 endpoint, internal/progress phải POST và không còn HTTP 405
   $('#diagnoseBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
-  await until(() => $$('#diagnoseOut .diag-line').length >= 3, { label: 'kết quả chẩn đoán' });
-  assert.ok($$('#diagnoseOut .diag-line.ok').length >= 2, 'chẩn đoán không thấy endpoint nào OK');
+  await until(() => $$('#diagnoseOut .diag-line').length === 5, { label: 'kết quả chẩn đoán' });
+  assert.equal($$('#diagnoseOut .diag-line.ok').length, 5, 'chẩn đoán có endpoint lỗi');
+  assert.match($('#diagnoseOut').textContent, /POST \/internal\/progress/);
+  assert.doesNotMatch($('#diagnoseOut').textContent, /HTTP 405/);
+  assert.match($('#diagnoseOut .diag-summary').textContent, /Kết nối ổn/);
+  assert.equal($('#diagnoseBtn').disabled, false, 'nút chẩn đoán không được mở lại');
 
   globalThis.fetch = realGlobalFetch;
 

@@ -1,5 +1,5 @@
 /**
- * Giao diện app điện thoại: 3 tab (Tạo ảnh · Kho tag · Thư viện) + các sheet.
+ * Giao diện app điện thoại: 4 tab (Tạo ảnh · Kho tag · Thư viện · Máy chủ) + các sheet.
  *
  * Toàn bộ phần "nghĩ" nằm ở core.js / data.js / api.js; file này chỉ nối DOM.
  * Nhờ vậy logic dựng prompt và payload vẫn test được bằng Node mà không cần
@@ -338,8 +338,13 @@ function bindEvents() {
 }
 
 function showTab(name) {
+  document.body.dataset.tab = name;
   for (const tab of $$('.tab')) tab.classList.toggle('active', tab.id === `tab-${name}`);
-  for (const button of $$('.tab-btn')) button.classList.toggle('active', button.dataset.tab === name);
+  for (const button of $$('.tab-btn')) {
+    const active = button.dataset.tab === name;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-current', active ? 'page' : 'false');
+  }
   if (name === 'gallery') renderGallery();
   if (name === 'tags' && state.data) renderTagResults();
   if (name === 'server') renderServerTab();
@@ -1189,42 +1194,87 @@ async function checkClipboardForLink() {
 async function runDiagnose() {
   if (state.diagnoseBusy) return;
   state.diagnoseBusy = true;
+  const button = $('#diagnoseBtn');
   const out = $('#diagnoseOut');
-  out.textContent = 'Đang kiểm tra…';
+  button.disabled = true;
+  button.textContent = 'Đang kiểm tra…';
+  out.setAttribute('aria-busy', 'true');
+  out.replaceChildren(h('div', { class: 'diag-loading' },
+    h('span', { class: 'diag-spinner', 'aria-hidden': 'true' }),
+    h('span', { text: 'Đang kiểm tra 5 endpoint, vui lòng chờ…' }),
+  ));
   try {
     const result = await client().diagnose();
-    const lines = result.checks.map((item) => h('div', {
-      class: `diag-line ${item.ok ? 'ok' : 'bad'}`,
-    }, h('span', { text: item.ok ? '✅' : '❌' }),
-    h('span', { class: 'path', text: item.path }),
-    h('span', { text: item.detail })));
+    const healthy = result.hasApi && result.hasProgress;
+    const summary = !result.anyOk
+      ? 'Không kết nối được máy chủ'
+      : !result.hasApi
+        ? 'Máy chủ phản hồi nhưng thiếu API'
+        : !result.hasProgress
+          ? 'API hoạt động, chưa đọc được tiến trình'
+          : 'Kết nối ổn, sẵn sàng tạo ảnh';
+    const summaryVariant = healthy ? 'ok' : result.anyOk ? 'warn' : 'bad';
+
+    const lines = result.checks.map((item) => {
+      const optionalFailure = !item.ok && item.optional;
+      const variant = item.ok ? 'ok' : optionalFailure ? 'warn' : 'bad';
+      const status = item.ok ? 'OK' : item.status ? `HTTP ${item.status}` : 'Lỗi mạng';
+      const detail = optionalFailure
+        ? `${item.detail} Endpoint dự phòng này không bắt buộc.`
+        : item.detail;
+      return h('div', { class: `diag-line ${variant}` },
+        h('span', { class: 'diag-icon', 'aria-hidden': 'true', text: item.ok ? '✓' : '!' }),
+        h('div', { class: 'diag-copy' },
+          h('div', { class: 'diag-title' },
+            h('strong', { text: item.label }),
+            h('span', { class: `diag-status ${variant}`, text: status }),
+          ),
+          h('code', { class: 'path', text: `${item.method} /${item.path}` }),
+          h('span', { class: 'diag-detail', text: detail }),
+        ),
+      );
+    });
 
     const hints = [];
     if (!result.anyOk) {
-      hints.push('Không endpoint nào trả lời: link tunnel đã chết hoặc URL sai. '
-        + 'Lấy link mới bằng lệnh ở trên (hoặc mở lại Colab), rồi bấm “Dán link Forge”.');
+      hints.push('Kiểm tra link tunnel còn sống và đúng địa chỉ Forge. Lấy link mới bằng lệnh ở trên, rồi kết nối lại.');
     } else if (!result.hasApi) {
-      hints.push('Thiếu /sdapi → Forge chưa chạy với --api (bộ cài đã bật sẵn).');
+      hints.push('Forge cần chạy với cờ --api để app có thể gửi yêu cầu tạo ảnh. Bộ cài của Anime3 đã bật sẵn cờ này.');
     }
-    if (result.anyOk && !result.checks.find((item) => item.path.endsWith('progress') && item.ok)) {
-      hints.push('Không đọc được endpoint tiến trình: vẫn sinh ảnh được nhưng thanh % sẽ đứng.');
+    if (result.anyOk && !result.hasProgress) {
+      hints.push('Vẫn có thể tạo ảnh, nhưng thanh tiến trình sẽ không cập nhật. Hãy cập nhật Forge hoặc kiểm tra cờ --api.');
     }
-    if (result.anyOk && location.protocol === 'https:' && location.hostname === 'localhost') {
-      hints.push('Trong APK mà Forge ở domain khác: Forge phải bật --cors-allow-origins '
-        + '(bộ cài đã thêm). Mở app qua <link Forge>/vi-mobile/ thì không cần cờ này.');
+    const hasNetworkError = result.checks.some((item) => !item.ok && item.status === 0);
+    if (hasNetworkError && location.protocol === 'https:' && location.hostname === 'localhost') {
+      hints.push('Nếu chỉ APK gặp lỗi mạng còn trình duyệt dùng được, hãy bật --cors-allow-origins cho Forge.');
     }
     out.replaceChildren(
-      h('div', { class: 'hint' }, `Địa chỉ: ${result.base}`),
-      ...lines,
-      ...(hints.length ? [h('div', { class: 'warn', text: hints.join(' ') })] : []),
-      ...(result.anyOk && !hints.length
-        ? [h('div', { class: 'hint', text: 'Mọi endpoint cần thiết đều trả lời bình thường.' })]
-        : []),
+      h('div', { class: `diag-summary ${summaryVariant}` },
+        h('span', { class: 'diag-summary-icon', 'aria-hidden': 'true', text: healthy ? '✓' : '!' }),
+        h('div', {},
+          h('strong', { text: summary }),
+          h('span', { text: result.base }),
+        ),
+      ),
+      h('div', { class: 'diag-list' }, ...lines),
+      ...(hints.length ? [h('div', { class: 'diag-advice' },
+        h('strong', { text: 'Cách xử lý' }),
+        ...hints.map((hint) => h('p', { text: hint })),
+      )] : []),
     );
   } catch (error) {
-    out.textContent = `Không chẩn đoán được: ${error.message}`;
+    out.replaceChildren(h('div', { class: 'diag-summary bad' },
+      h('span', { class: 'diag-summary-icon', 'aria-hidden': 'true', text: '!' }),
+      h('div', {},
+        h('strong', { text: 'Không chẩn đoán được' }),
+        h('span', { text: error.message }),
+      ),
+    ));
   } finally {
     state.diagnoseBusy = false;
+    button.disabled = false;
+    button.textContent = '🩺 Chẩn đoán lại';
+    out.removeAttribute('aria-busy');
   }
 }
 

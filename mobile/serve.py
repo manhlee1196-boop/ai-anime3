@@ -219,6 +219,11 @@ class Handler(SimpleHTTPRequestHandler):
                                'sd_vae': 'Automatic', 'CLIP_stop_at_last_layers': 2})
         if path == '/sdapi/v1/cmd-flags':
             return self._json({'api': True, 'port': 7860, 'listen': True, 'mock': True})
+        # Giống Forge thật: API chuẩn đọc bằng GET, route nội bộ chỉ nhận POST.
+        if path == '/internal/progress' and method != 'POST':
+            return self._json({'detail': 'Method Not Allowed'}, 405)
+        if path == '/sdapi/v1/progress' and method != 'GET':
+            return self._json({'detail': 'Method Not Allowed'}, 405)
         if path in ('/sdapi/v1/progress', '/internal/progress'):
             return self._json(MOCK.progress())
         if path == '/sdapi/v1/interrupt':

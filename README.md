@@ -71,8 +71,9 @@ Tham số mặc định và payload lấy nguyên từ `prompt_lib` nên giống
 ```bash
 python3 mobile/build_data.py            # sinh dữ liệu tag từ CSV (95.939 tag, 1,4 MB gz)
 python3 mobile/serve.py --mock          # xem thử giao diện + Forge giả, không cần GPU
-node mobile/tests/test_core.mjs         # 28 test logic prompt/payload/tìm tag
-python3 mobile/tests/test_mobile_assets.py   # 17 test dữ liệu + tài nguyên + id HTML
+node mobile/tests/test_core.mjs         # 33 test logic prompt/payload/tìm tag
+node mobile/tests/test_api.mjs          # 10 test API, gồm hồi quy internal/progress HTTP 405
+python3 mobile/tests/test_mobile_assets.py   # 19 test dữ liệu + tài nguyên + id HTML
 ```
 
 Hướng dẫn đầy đủ (cài APK, CORS, lỗi thường gặp): [`mobile/README.md`](mobile/README.md).

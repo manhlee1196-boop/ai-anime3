@@ -42,8 +42,10 @@ jobs:
           python3 mobile/build_data.py --min-count "${{ inputs.min_count || '200' }}"
           python3 mobile/build_data.py --check
 
-      - name: Kiểm thử logic app (Node, không cần GPU)
-        run: node mobile/tests/test_core.mjs
+      - name: Kiểm thử logic app và API Forge (Node, không cần GPU)
+        run: |
+          node mobile/tests/test_core.mjs
+          node mobile/tests/test_api.mjs
 
       - name: Node 20
         uses: actions/setup-node@v4

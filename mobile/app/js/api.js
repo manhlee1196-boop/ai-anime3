@@ -11,7 +11,12 @@
 
 import { apiUrl, explainError, normalizeBaseUrl } from './core.js';
 
-const PROGRESS_PATHS = ['sdapi/v1/progress', 'internal/progress'];
+// `/internal/progress` là route POST của Forge (không phải GET như API A1111).
+// Dùng đúng method ngay từ đầu để tránh HTTP 405; body JSON báo không cần ảnh xem trước.
+const PROGRESS_PATHS = [
+  { path: 'sdapi/v1/progress', method: 'GET' },
+  { path: 'internal/progress', method: 'POST', body: { skip_current_image: true } },
+];
 const PING_PATHS = ['sdapi/v1/options', 'sdapi/v1/cmd-flags'];
 
 /** Lỗi có thông điệp tiếng Việt + mã HTTP (0 = lỗi mạng). */
@@ -133,13 +138,20 @@ export class ForgeClient {
     return Array.isArray(list) ? list.map((item) => item.name).filter(Boolean) : [];
   }
 
-  /** Tiến trình hiện tại; thử cả `/sdapi/v1/progress` và `/internal/progress`. */
+  /** Tiến trình hiện tại; thử API chuẩn rồi route POST nội bộ của Forge. */
   async progress({ signal = null, timeout = 6000 } = {}) {
-    for (const path of PROGRESS_PATHS) {
+    for (const endpoint of PROGRESS_PATHS) {
       try {
-        const data = await this.request(`${path}?skip_current_image=true`,
-          { timeout, signal });
-        return normaliseProgress(data, path);
+        const path = endpoint.method === 'GET'
+          ? `${endpoint.path}?skip_current_image=true`
+          : endpoint.path;
+        const data = await this.request(path, {
+          method: endpoint.method,
+          body: endpoint.body || null,
+          timeout,
+          signal,
+        });
+        return normaliseProgress(data, endpoint.path);
       } catch (error) {
         if (error?.name === 'AbortError') throw error;
       }
@@ -148,35 +160,51 @@ export class ForgeClient {
   }
 
   /**
-   * Chẩn đoán nhanh: gọi từng endpoint quan trọng và trả về kết quả có thể đọc được.
-   * Dùng cho tab "Máy chủ" khi link tunnel sống nhưng app vẫn không sinh ảnh được.
+   * Chẩn đoán nhanh: gọi song song các endpoint quan trọng, giữ nguyên thứ tự kết quả.
+   * `/internal/progress` là phương án dự phòng và bắt buộc POST trên Forge.
    */
   async diagnose() {
     const checks = [
-      ['sdapi/v1/options', 'tuỳ chọn + checkpoint'],
-      ['sdapi/v1/cmd-flags', 'cờ khởi động (có --api?)'],
-      ['sdapi/v1/sd-models', 'danh sách model'],
-      ['sdapi/v1/progress', 'tiến trình (cần cho thanh chạy)'],
-      ['internal/progress', 'tiến trình nội bộ của Forge'],
+      { path: 'sdapi/v1/options', method: 'GET', label: 'Cấu hình & checkpoint' },
+      { path: 'sdapi/v1/cmd-flags', method: 'GET', label: 'Cờ khởi động Forge' },
+      { path: 'sdapi/v1/sd-models', method: 'GET', label: 'Danh sách model' },
+      {
+        path: 'sdapi/v1/progress', method: 'GET', label: 'Tiến trình chuẩn',
+        query: '?skip_current_image=true',
+      },
+      {
+        path: 'internal/progress', method: 'POST', label: 'Tiến trình Forge (dự phòng)',
+        body: { skip_current_image: true }, optional: true,
+      },
     ];
-    const out = [];
-    for (const [path, label] of checks) {
+    const out = await Promise.all(checks.map(async (check) => {
       try {
-        const data = await this.request(path, { timeout: 7000 });
-        const detail = path.endsWith('options')
+        const data = await this.request(`${check.path}${check.query || ''}`, {
+          method: check.method,
+          body: check.body || null,
+          timeout: 7000,
+        });
+        const detail = check.path.endsWith('options')
           ? String(data?.sd_model_checkpoint || '(không rõ model)').split(/[\\/]/).pop()
-          : Array.isArray(data) ? `${data.length} mục` : 'OK';
-        out.push({ path, label, ok: true, detail });
+          : Array.isArray(data) ? `${data.length} mục` : 'Phản hồi JSON hợp lệ';
+        return { ...check, ok: true, status: 200, detail };
       } catch (error) {
-        out.push({ path, label, ok: false, detail: error.message });
+        return {
+          ...check,
+          ok: false,
+          status: Number(error?.status) || 0,
+          detail: error.message,
+        };
       }
-    }
+    }));
     const anyOk = out.some((item) => item.ok);
-    const hasApi = out.find((item) => item.path === 'sdapi/v1/options')?.ok;
+    const hasApi = Boolean(out.find((item) => item.path === 'sdapi/v1/options')?.ok);
+    const hasProgress = out.some((item) => item.path.endsWith('progress') && item.ok);
     return {
       base: this.base || '(cùng origin với trang)',
       anyOk,
       hasApi,
+      hasProgress,
       checks: out,
     };
   }

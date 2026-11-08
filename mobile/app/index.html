@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-tab="create">
 
 <div id="splash" class="splash">
   <div class="splash-logo">A3</div>
@@ -150,9 +150,9 @@
 
     <div class="card">
       <label class="label" for="serverUrl">Địa chỉ Forge</label>
-      <div class="row gap">
+      <div class="server-connect row gap">
         <input id="serverUrl" type="url" inputmode="url" autocapitalize="off" spellcheck="false"
-          placeholder="https://xxxx.gradio.live">
+          enterkeyhint="go" placeholder="https://xxxx.gradio.live">
         <button id="connectBtn" class="primary small" type="button">Kết nối</button>
       </div>
       <label class="switch"><input id="autoConnect" type="checkbox" checked> Tự nhận link khi quay lại app</label>
@@ -168,12 +168,17 @@
       <p id="linkEmpty" class="hint">Chưa có link nào. Link gradio.live hết hạn sau vài giờ nên app giữ lại để bạn thử lại nhanh.</p>
     </div>
 
-    <div class="card">
-      <div class="card-head">
-        <span class="label">Chẩn đoán kết nối</span>
-        <button id="diagnoseBtn" class="mini" type="button">🔎 Chạy</button>
+    <div class="card diagnose-card">
+      <div class="card-head diagnose-head">
+        <div>
+          <span class="label">Chẩn đoán kết nối</span>
+          <p class="hint">Kiểm tra API, model và tiến trình trong một lượt.</p>
+        </div>
+        <button id="diagnoseBtn" class="mini" type="button">🩺 Chẩn đoán</button>
       </div>
-      <div id="diagnoseOut" class="hint">Bấm “Chạy” khi app báo lỗi kết nối để biết hỏng ở đâu.</div>
+      <div id="diagnoseOut" class="diag-out" role="status" aria-live="polite">
+        Bấm “Chẩn đoán” khi app báo lỗi để xem nguyên nhân và cách xử lý.
+      </div>
     </div>
   </section>
 
@@ -272,7 +277,7 @@
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/ui.js"></script>
 </body>
