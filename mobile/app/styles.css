@@ -228,6 +228,51 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .danger-text { color: var(--bad); }
 .danger.big { padding: 15px 20px; font-size: 16px; justify-content: center; }
 
+/* Khu vực kích thước gọn trên màn hình hẹp: 9 preset nằm trong một hàng
+   vuốt ngang thay vì chiếm 4–5 hàng. Vùng chạm vẫn giữ tối thiểu 44 px. */
+.generation-options { padding: 10px 12px; }
+.option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.option-hint { font-size: 11px; white-space: nowrap; }
+.size-chips {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 5px;
+  padding: 0 2px 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.size-chips::-webkit-scrollbar { display: none; }
+.size-chips .chip {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.rating-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 5px;
+}
+.rating-chips .chip {
+  min-width: 0;
+  justify-content: center;
+  padding: 7px 4px;
+  font-size: 12px;
+}
+.generation-options .details { margin-top: 7px; padding-top: 5px; }
+.generation-options .details > summary { padding: 4px 0; font-size: 13px; }
+
 .switch {
   display: flex; align-items: center; gap: 10px;
   margin-top: 12px; font-size: 14px; color: var(--text);

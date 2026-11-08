@@ -149,11 +149,23 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v9", sw)
+        self.assertIn("anime3-shell-v10", sw)
         for name in files:
             if name in ("", "."):
                 continue
             self.assertTrue((APP / name).exists(), f"sw.js cache {name} nhưng không có")
+
+    def test_12b_compact_resolution_picker(self):
+        """Chín preset không được phép quay lại bố cục nhiều hàng chiếm màn hình."""
+        css = (APP / "styles.css").read_text(encoding="utf-8")
+        size_rule = re.search(r"\.size-chips\s*\{(.*?)\}", css, re.S)
+        rating_rule = re.search(r"\.rating-chips\s*\{(.*?)\}", css, re.S)
+        self.assertIsNotNone(size_rule)
+        self.assertIsNotNone(rating_rule)
+        self.assertIn("flex-wrap: nowrap", size_rule.group(1))
+        self.assertIn("overflow-x: auto", size_rule.group(1))
+        self.assertIn("grid-template-columns: repeat(4", rating_rule.group(1))
+        self.assertRegex(self.html, r'id="sizeChips" role="group" aria-label="Độ phân giải ảnh"')
 
     def test_13_ui_references_known_element_ids(self):
         """Bắt lỗi gõ sai id — thứ mà test Node không thấy vì không có DOM."""
