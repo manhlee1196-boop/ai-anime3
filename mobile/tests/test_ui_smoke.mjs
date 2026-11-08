@@ -111,6 +111,12 @@ async function main() {
   assert.equal(fetchCalls.filter((url) => url.includes('txt2img')).length, 1,
     'mỗi lần bấm chỉ được POST txt2img một lần');
 
+  // --- thư viện: ảnh vừa tạo phải xuất hiện trong tab Thư viện
+  $('.tab-btn[data-tab="gallery"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => $$('#gallery button').length > 0, { label: 'ảnh vào thư viện' });
+  assert.ok($('#galleryEmpty').classList.contains('hidden'),
+    'thư viện còn trống dù vừa tạo ảnh');
+
   // --- kho tag tiếng Việt
   $('.tab-btn[data-tab="tags"]').dispatchEvent(new window.Event('click', { bubbles: true }));
   await wait(200);
@@ -141,12 +147,14 @@ async function main() {
   console.log('✅ smoke test UI: khởi động · sinh ảnh · tra tag · chèn tag · phong cách · cài đặt');
 }
 
+// Không dùng `finally` + process.exit: exit() thoát ngay, bỏ lại server giả chiếm cổng.
+let exitCode = 0;
 try {
   await main();
-  process.exit(0);
 } catch (error) {
   console.error('❌ smoke test UI lỗi:', error.message);
-  process.exit(1);
-} finally {
-  server.kill('SIGTERM');
+  exitCode = 1;
 }
+server.kill('SIGTERM');
+await new Promise((resolve) => setTimeout(resolve, 200));
+process.exit(exitCode);

@@ -330,6 +330,11 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .gallery button { padding: 0; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid var(--line); }
 .gallery img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
+.gallery .thumb-placeholder {
+  width: 100%; aspect-ratio: 3 / 4;
+  display: grid; place-items: center;
+  font-size: 30px; background: var(--bg-soft); color: var(--muted);
+}
 .empty { text-align: center; color: var(--muted); font-size: 14px; margin-top: 40px; }
 
 /* ------------------------------------------------------------------ sheet */

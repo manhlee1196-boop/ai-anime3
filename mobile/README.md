@@ -56,11 +56,11 @@ Cũng có thể push tag `v1.0.0` để workflow gắn APK vào GitHub Release.
 ### C2. Build ở máy có Android SDK
 
 ```bash
+bash mobile/apk/build.sh                # một lệnh: sinh dữ liệu → cap add/sync → gradlew
+# hoặc làm tay:
 python3 mobile/build_data.py            # sinh dữ liệu tag (bắt buộc)
-cd mobile/apk
-npm install
-npx cap add android
-npx cap sync android
+cd mobile/apk && npm install
+npx cap add android && npx cap sync android
 cd android && ./gradlew assembleDebug
 # → mobile/apk/android/app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -68,6 +68,9 @@ cd android && ./gradlew assembleDebug
 Yêu cầu: JDK 17, Android SDK 34 (Capacitor 6). Bản `debug` đã được ký bằng keystore
 debug nên **cài được ngay**; muốn bản `release` ký chính thức thì tạo keystore và thêm
 `signingConfigs` theo hướng dẫn của Capacitor.
+
+APK **không** chứa model và không chứa bản sao của UI: nó đóng gói đúng `mobile/app`
+(nên sửa UI là APK nhận thay đổi ở lần build sau) và gọi Forge qua mạng.
 
 > **APK cần CORS.** Trong APK, trang chạy ở `https://localhost` còn API ở domain tunnel —
 > khác origin nên Forge phải trả header CORS. Bộ cài đã thêm

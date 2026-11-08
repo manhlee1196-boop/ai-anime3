@@ -46,7 +46,20 @@ colab/
   tests/test_data_integrity.py   4 nhóm toàn vẹn CSV (349.714 dòng)
   assets/                        file sinh ra khi chạy (không đưa vào git)
   outputs/                       ảnh sinh ra từ notebook (không đưa vào git)
+  ../mobile/                     app điện thoại (PWA + APK): xem ../mobile/README.md
 ```
+
+## App điện thoại (tùy chọn)
+
+Extension `vi-prompt-builder` phục vụ luôn một **app cho điện thoại** tại
+`<link public>/vi-mobile/` — cùng origin với `/sdapi` nên không vướng CORS và không cần
+cài gì. App có kho 95.939 tag tra tiếng Việt không cần dấu, 506 tag phong cách, dựng
+prompt theo 18 nhóm, tiến trình/huỷ job, thư viện ảnh trên máy; muốn có icon trong ngăn
+kéo ứng dụng thì *Thêm vào màn hình chính* (PWA) hoặc build APK bằng GitHub Actions
+(`.github/workflows/android-apk.yml`). Chi tiết: [`../mobile/README.md`](../mobile/README.md).
+
+`setup_forge.sh launch` đã thêm `--cors-allow-origins=*` (tắt bằng `CORS_ALLOW_ORIGINS=none`)
+để bản cài riêng/APK gọi được API.
 
 ## Bộ cài một lệnh / notebook một ô (khuyên dùng)
 

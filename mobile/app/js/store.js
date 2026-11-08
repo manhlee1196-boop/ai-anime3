@@ -111,17 +111,47 @@ export async function addImage(record) {
   return item;
 }
 
-/** Ảnh mới nhất trước. Chỉ trả metadata + data URL (đủ để vẽ lưới). */
+/**
+ * Ảnh mới nhất trước, **chỉ metadata + thumbnail**.
+ *
+ * Không trả data URL của ảnh gốc: 60 ảnh SDXL là ~100 MB base64, đủ làm treo WebView
+ * trên máy yếu. Ảnh gốc lấy riêng bằng `getImage(id)` khi người dùng mở ảnh.
+ */
 export async function listImages({ limit = 60, offset = 0 } = {}) {
-  const db = await openDb();
-  if (!db) return memoryFallback.slice(offset, offset + limit);
-  const items = await new Promise((resolve) => {
-    const request = tx(db, 'readonly').getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => resolve([]);
+  const light = (item) => ({
+    id: item.id,
+    createdAt: item.createdAt || 0,
+    seed: item.seed ?? null,
+    prompt: item.prompt || '',
+    thumb: item.thumb || '',
   });
-  items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return items.slice(offset, offset + limit);
+  const db = await openDb();
+  if (!db) {
+    return memoryFallback
+      .slice()
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(offset, offset + limit)
+      .map(light);
+  }
+  return new Promise((resolve) => {
+    const out = [];
+    let skipped = 0;
+    const request = tx(db, 'readonly').index('createdAt').openCursor(null, 'prev');
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor || out.length >= limit) {
+        resolve(out);
+        return;
+      }
+      if (skipped < offset) {
+        skipped += 1;
+      } else {
+        out.push(light(cursor.value));
+      }
+      cursor.continue();
+    };
+    request.onerror = () => resolve(out);
+  });
 }
 
 export async function countImages() {

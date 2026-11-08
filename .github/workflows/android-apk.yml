@@ -2,6 +2,7 @@ name: Android APK
 
 # Build file APK để cài lên điện thoại Android.
 # Chạy tay ở tab Actions (nút "Run workflow") hoặc tự chạy khi push tag v* .
+# APK là vỏ Capacitor bọc chính mobile/app — không có bản sao thứ hai của giao diện.
 on:
   workflow_dispatch:
     inputs:
@@ -28,9 +29,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Sinh dữ liệu tag cho app (95.939 tag, ~1,4 MB gz)
+      - name: Sinh dữ liệu tag cho app (95.939 tag · ~1,4 MB gz)
         run: |
-          python3 mobile/build_data.py --min-count "${{ github.event.inputs.min_count || '200' }}"
+          python3 mobile/build_data.py --min-count "${{ inputs.min_count || '200' }}"
           python3 mobile/build_data.py --check
 
       - name: Kiểm thử logic app (Node, không cần GPU)
@@ -47,11 +48,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Kiểm tra Android SDK có sẵn trên runner
+      - name: Bảo đảm có Android SDK 34
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls "$ANDROID_HOME/platforms" || true
-          ls "$ANDROID_HOME/build-tools" || true
+          if [ ! -d "$ANDROID_HOME/platforms/android-34" ]; then
+            SDKMANAGER=$(command -v sdkmanager || true)
+            [ -n "$SDKMANAGER" ] || SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | tail -1)
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          fi
 
       - name: Cài Capacitor
         working-directory: mobile/apk
@@ -62,9 +68,10 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
-          ls -la android/app/src/main/assets/public | head
+          test -f android/app/src/main/assets/public/index.html
+          test -f android/app/src/main/assets/public/data/tags.json
 
-      - name: Build APK (debug — cài được ngay, không cần keystore)
+      - name: Build APK (debug — ký sẵn bằng keystore debug, cài được ngay)
         working-directory: mobile/apk/android
         run: |
           chmod +x gradlew
@@ -89,5 +96,5 @@ jobs:
         with:
           files: anime3-mobile.apk
           body: |
-            APK Anime3 cho Android — cài xong mở app, dán link Forge (gradio.live /
-            trycloudflare) trong **Cài đặt** là dùng được.
+            APK Anime3 cho Android — cài xong mở app, bấm ⚙ và dán link Forge
+            (gradio.live / trycloudflare) là dùng được.

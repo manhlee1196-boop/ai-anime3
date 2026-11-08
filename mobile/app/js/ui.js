@@ -794,12 +794,41 @@ function renderResult(result) {
   $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/**
+ * Ảnh thu nhỏ cho lưới thư viện (JPEG ~420 px). Không có canvas/ảnh thì trả '' —
+ * thư viện vẫn mở được ảnh gốc, chỉ mất ảnh xem trước.
+ */
+async function makeThumb(dataUrl, max = 420) {
+  try {
+    let bitmap;
+    if (typeof createImageBitmap === 'function') {
+      bitmap = await Promise.race([
+        createImageBitmap(await (await fetch(dataUrl)).blob()),
+        new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+      ]);
+    }
+    if (!bitmap) return '';
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext && canvas.getContext('2d');
+    if (!context) return '';
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    if (bitmap.close) bitmap.close();
+    return canvas.toDataURL('image/jpeg', 0.72);
+  } catch (error) {
+    return '';
+  }
+}
+
 async function saveResultImages(result) {
   const reuse = core.reuseFromInfo(result.info) || {};
   for (const [index, dataUrl] of result.images.entries()) {
     try {
       await store.addImage({
         dataUrl,
+        thumb: await makeThumb(dataUrl),
         prompt: reuse.prompt || $('#prompt').value,
         negative: reuse.negative || $('#negative').value,
         seed: reuse.seed,
@@ -821,8 +850,10 @@ async function renderGallery() {
   $('#galleryEmpty').classList.toggle('hidden', items.length > 0);
   box.replaceChildren(...items.map((item) => h('button', {
     type: 'button',
-    onclick: () => openImage(item.id, item.dataUrl, describeItem(item)),
-  }, h('img', { src: item.dataUrl, alt: item.prompt || 'Ảnh đã tạo', loading: 'lazy' }))));
+    onclick: () => openItem(item),
+  }, item.thumb
+    ? h('img', { src: item.thumb, alt: item.prompt || 'Ảnh đã tạo', loading: 'lazy' })
+    : h('div', { class: 'thumb-placeholder', text: '🖼' }))));
 }
 
 function describeItem(item) {
@@ -832,6 +863,17 @@ function describeItem(item) {
     item.seed !== null && item.seed !== undefined ? `seed ${item.seed}` : '',
     (item.prompt || '').slice(0, 90) + ((item.prompt || '').length > 90 ? '…' : ''),
   ].filter(Boolean).join(' · ');
+}
+
+/** Mở một mục trong thư viện: nạp ảnh gốc (data URL) rồi mở sheet. */
+async function openItem(item) {
+  const full = await store.getImage(item.id);
+  if (!full) {
+    toast('Không đọc được ảnh này', { error: true });
+    renderGallery();
+    return;
+  }
+  openImage(item.id, full.dataUrl, describeItem(item));
 }
 
 async function openImage(id, dataUrl, meta) {
