@@ -156,10 +156,10 @@ app **không tạo lại ảnh**.
 
 | Màn hình | Nội dung |
 |---|---|
-| **Tạo ảnh** | Prompt + negative (gập lại), **nhập tiếng Việt có dấu an toàn theo IME**, tự chuyển cụm đã biết sang tag Anh (`tóc dài → long_hair`), gợi ý Anh–Việt ngay khi gõ và chip gợi ý nhanh từ kho offline, thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, **Hires scale/steps/upscaler/denoise**, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
+| **Tạo ảnh** | Hai chế độ gọn **Từ mô tả / Từ ảnh**. Img2img chọn PNG/JPEG/WebP từ máy hoặc Thư viện, xem trước ảnh init, denoise 0,05–1, ba chế độ resize; Hires chỉ hiện ở txt2img. Prompt + negative (gập lại), **nhập tiếng Việt có dấu an toàn theo IME**, tự chuyển cụm đã biết sang tag Anh (`tóc dài → long_hair`), gợi ý Anh–Việt ngay khi gõ và chip gợi ý nhanh từ kho offline, thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, **Hires scale/steps/upscaler/denoise**, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
-| **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed**, **Upscale ảnh đã có** 1.5–4× bằng RealESRGAN Anime/Lanczos/Nearest; bản mới lưu riêng, giữ ảnh gốc; chặn ảnh vào >20 MiB hoặc cạnh ra >4096 px |
+| **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed**, **Biến đổi bằng img2img**, **Upscale ảnh đã có** 1.5–4× bằng RealESRGAN Anime/Lanczos/Nearest; bản mới lưu riêng, giữ ảnh gốc; chặn ảnh vào >20 MiB hoặc cạnh ra >4096 px |
 | **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge + job API, công tắc tự nhận link |
 | **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
 
@@ -169,6 +169,11 @@ Hires tắt mặc định**. Khi tự bật Hires: 1.5×, 12 steps, denoise 0.35
 Bạn vẫn chỉnh tay; app chặn scale ngoài 1.1–2, Hires steps ngoài 1–60, denoise
 ngoài 0.1–0.75, kích thước không chia hết cho 8 và cảnh báo đầu ra trên 2,5 MP. Cấu hình
 đã lưu trên máy không bị reset khi cập nhật APK.
+
+**Dùng img2img:** chọn **Từ ảnh → Chọn ảnh từ máy**, hoặc mở ảnh trong Thư viện rồi bấm
+**Biến đổi bằng img2img**. Denoise thấp giữ nhiều nét gốc; 0,55 là mặc định, trên 0,8 app
+cảnh báo ảnh có thể thay gần như toàn bộ. Kích thước đầu ra vẫn do chip Độ phân giải quyết
+định. App gửi đúng một `init_images`, không gửi Hires và không trả ảnh init trong kết quả.
 
 ## Chạy thử ở máy tính (không cần GPU)
 
@@ -187,10 +192,10 @@ file PNG gradient có HTTP Range — đủ kiểm toàn bộ giao diện mà kh�
 ## Kiểm thử
 
 ```bash
-node mobile/tests/test_core.mjs          # 38 test logic: prompt, payload/Hires, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
-node mobile/tests/test_api.mjs           # 19 test ForgeClient: txt2img/extras job, manifest, Blob, retry status, Range, huỷ
-python3 mobile/tests/test_mobile_assets.py   # 22 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
-python3 mobile/tests/test_mobile_route.py    # 11 test job FastAPI/Extras, PNG gốc, S3 giả lập, Range, idempotency, API auth
+node mobile/tests/test_core.mjs          # 40 test logic: prompt, payload txt2img/img2img/Hires, token, tra tag, link Forge
+node mobile/tests/test_api.mjs           # 21 test ForgeClient: txt2img/img2img/extras job, manifest, Blob, retry, Range, huỷ
+python3 mobile/tests/test_mobile_assets.py   # 23 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
+python3 mobile/tests/test_mobile_route.py    # 12 test job FastAPI/img2img/Extras, PNG gốc, S3, Range, idempotency, auth
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
 ```
@@ -245,11 +250,12 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 ## Ghi chú kỹ thuật
 
 - **Job bất đồng bộ**: `POST /vi-mobile/api/jobs` validate payload rồi trả `202 {job_id}`.
-  Một worker gọi đúng handler txt2img hoặc `extra-single-image` theo `operation`; app poll
-  `GET /jobs/{id}` và đọc tiến trình
-  chuẩn song song. `/health` có `extras_available` và `active_jobs` để chặn restart khi bận. Request tạo job không bị giữ trong suốt thời gian GPU chạy.
-- **Idempotency**: client gửi một khoá ngẫu nhiên cho mỗi lần bấm; server lưu hash khoá cùng
-  `job.json`. Trùng khoá trả lại job cũ. Lỗi đọc trạng thái chỉ retry `GET`, không POST lại.
+  Một worker gọi đúng handler txt2img, img2img hoặc `extra-single-image` theo `operation`;
+  app poll `GET /jobs/{id}` và đọc tiến trình chuẩn song song. `/health` có
+  `img2img_available`, `extras_available` và `active_jobs` để chặn restart khi bận. Request tạo job không bị giữ trong suốt thời gian GPU chạy.
+- **Idempotency**: client gửi một khoá ngẫu nhiên cho mỗi lần bấm; server lưu hash của
+  operation + khoá cùng `job.json`, nên cùng khoá ở img2img/txt2img không trả nhầm ảnh.
+  Trùng khoá trong cùng operation trả lại job cũ. Lỗi đọc trạng thái chỉ retry `GET`, không POST lại.
 - **Manifest + file gốc**: khi xong, `GET /jobs/{id}/result` chỉ chứa metadata, MIME, kích
   thước và URL file. Worker giữ PNG/JPEG/WebP gốc, không đưa base64 vào response và không
   nén lại thành JPEG. S3/R2 trả signed URL; local fallback stream binary có một Range `bytes`.

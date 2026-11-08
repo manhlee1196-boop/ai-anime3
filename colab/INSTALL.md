@@ -137,7 +137,7 @@ notebook có output chứa thông tin riêng. Forge/extension không giữ các 
 | Đổi model đã chọn | `!bash /content/install.sh --model hswq --only model,launch,verify` (cần token nếu nhà cung cấp yêu cầu) |
 | Chọn mức VRAM | `!bash /content/install.sh --vram-level highvram --only launch,verify --restart`; các mức: `auto`, `balanced`, `highvram`, `lowvram`, `gpu-only` |
 | Cập nhật repo sạch + extension | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
-| Lên 1.0.8 từ runtime cũ | `!bash /content/install.sh --only repo` rồi `!bash /content/ai-anime3/colab/install.sh --only extras,launch,verify --vram-level auto --restart` (không tải lại model/Torch) |
+| Lên 1.0.9 từ runtime cũ (có img2img) | `!bash /content/install.sh --only repo` rồi `!bash /content/ai-anime3/colab/install.sh --only extras,launch,verify --vram-level auto --restart` (không tải lại model/Torch) |
 | Chạy lại các bước | `!bash /content/install.sh --force` |
 | Xóa lịch sử stage, không xóa dữ liệu | `!bash /content/install.sh --clean` |
 | Xem cờ khác | `!bash /content/install.sh --help` |

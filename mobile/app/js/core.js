@@ -343,6 +343,9 @@ export function payloadWarnings(payload) {
   }
   if (Number(payload.cfg_scale) > 10) out.push('CFG trên 10 dễ bết màu; WAI v17 khuyến nghị 5–7.');
   if (Number(payload.steps) > 40) out.push('Trên 40 bước gần như không đẹp thêm mà chậm gấp đôi.');
+  if (Array.isArray(payload.init_images) && Number(payload.denoising_strength) > 0.8) {
+    out.push('Denoise img2img trên 0,8 có thể thay gần như toàn bộ ảnh gốc.');
+  }
   if (payload.enable_hr) {
     const scale = Number(payload.hr_scale) || 0;
     const target = width * height * scale * scale;
@@ -378,6 +381,17 @@ export function payloadErrors(payload) {
     integer('hr_second_pass_steps', 'Hires steps', 1, 60);
     if (!Number.isFinite(denoise) || denoise < 0.1 || denoise > 0.75) out.push('Denoise phải trong 0,1–0,75.');
     if (!String(payload.hr_upscaler || '').trim()) out.push('Chọn Hires upscaler.');
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'init_images')) {
+    if (!Array.isArray(payload.init_images) || payload.init_images.length !== 1
+      || !String(payload.init_images[0] || '').trim()) {
+      out.push('Chọn đúng một ảnh gốc cho img2img.');
+    }
+    const denoise = Number(payload.denoising_strength);
+    if (!Number.isFinite(denoise) || denoise < 0.05 || denoise > 1) {
+      out.push('Denoise img2img phải trong 0,05–1.');
+    }
+    if (![0, 1, 2].includes(Number(payload.resize_mode))) out.push('Chế độ resize img2img không hợp lệ.');
   }
   return out;
 }

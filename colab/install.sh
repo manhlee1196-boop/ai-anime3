@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.8"
+INSTALLER_VERSION="1.0.9"
 # tunnel là stage phụ: chỉ chạy khi được nêu trong --only, không nằm trong cài đặt mặc định.
 DEFAULT_STAGES=(preflight repo forge torch model extras launch tunnel verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"

@@ -19,7 +19,7 @@ INTRO = """# ⚡ WAI-Illustrious v17 — Colab một ô
 
 - **FP16 + Gradio share** là mặc định khuyến nghị; chỉ đổi khi thật sự cần.
 - **VRAM auto:** HighVRAM từ 12 GB, Cân bằng 8–12 GB, Tiết kiệm dưới 8 GB; có thể chọn tay 4 mức. GPU only dễ hết VRAM khi Hires.
-- Tự cài Forge Neo, checkpoint, tag tiếng Việt, app `/vi-mobile/` và **job nền + file stream cho Android**.
+- Tự cài Forge Neo, checkpoint, tag tiếng Việt, app `/vi-mobile/` và **job nền txt2img/img2img/Upscale + file stream cho Android**.
 - Ảnh giữ PNG/JPEG/WebP gốc; có thể bật **S3/Cloudflare R2** bằng Colab Secrets để tải qua signed URL. Không cấu hình thì dùng file local có resume Range.
 - Model/ảnh nằm trong `/content`, **không mount Drive**, không tự xóa dữ liệu cũ.
 - Chạy lại ô sẽ cập nhật code/extension, giữ model đã có và khởi động lại Forge để nạp bản mới. **Đợi job hiện tại kết thúc trước khi chạy lại.**

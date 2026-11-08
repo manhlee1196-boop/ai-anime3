@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   apiUrl: '',                 // '' = cùng origin với trang đang mở
   user: '',
   pass: '',
+  generationMode: 'txt2img',    // txt2img | img2img
   sampler: 'Euler a',
   steps: 25,
   cfg: 6,
@@ -24,6 +25,8 @@ export const DEFAULT_SETTINGS = {
   hrSteps: 12,
   hrUpscaler: 'RealESRGAN_x4plus_anime_6B',
   denoise: 0.35,
+  img2imgDenoise: 0.55,
+  img2imgResizeMode: 1,         // 0 kéo giãn · 1 cắt giữa · 2 giữ tỉ lệ + nền
   clipSkip: 2,
   batch: 1,
   seed: -1,

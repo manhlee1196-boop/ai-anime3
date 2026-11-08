@@ -43,6 +43,23 @@ def _decode_image(encoded):
     raise ValueError("Định dạng ảnh không được hỗ trợ")
 
 
+def _validate_source_image(data, payload):
+    """Kiểm tra ảnh init img2img trước khi lưu base64 vào hàng đợi."""
+    import io
+    import math
+    from PIL import Image
+
+    denoise = float(payload.get("denoising_strength", -1))
+    if not math.isfinite(denoise) or not 0.05 <= denoise <= 1:
+        raise ValueError("Denoise img2img phải trong 0,05–1")
+    if int(payload.get("resize_mode", -1)) not in {0, 1, 2}:
+        raise ValueError("resize_mode img2img không hợp lệ")
+    with Image.open(io.BytesIO(data)) as image:
+        width, height = image.size
+    if width * height > 16_777_216 or max(width, height) > 8192:
+        raise ValueError("Ảnh init vượt giới hạn 16 MP/8192 px")
+
+
 def _validate_extras_image(data, payload):
     """Chặn kích thước nguy hiểm trước khi đưa ảnh vào hàng đợi GPU."""
     import io
@@ -128,13 +145,16 @@ class S3Storage:
 class MobileJobManager:
     def __init__(self, root, endpoint_provider, request_factory, result_dict,
                  interrupt_provider=None, storage=None, extras_endpoint_provider=None,
-                 extras_request_factory=None):
+                 extras_request_factory=None, img2img_endpoint_provider=None,
+                 img2img_request_factory=None):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.endpoint_provider = endpoint_provider
         self.request_factory = request_factory
         self.extras_endpoint_provider = extras_endpoint_provider
         self.extras_request_factory = extras_request_factory
+        self.img2img_endpoint_provider = img2img_endpoint_provider
+        self.img2img_request_factory = img2img_request_factory
         self.result_dict = result_dict
         self.interrupt_provider = interrupt_provider
         self.storage = storage or S3Storage()
@@ -177,9 +197,11 @@ class MobileJobManager:
         _atomic_json(self._path(job["job_id"]) / "job.json", job)
 
     def submit(self, payload, idempotency_key="", operation="txt2img"):
-        if operation not in {"txt2img", "extras"}:
+        if operation not in {"txt2img", "img2img", "extras"}:
             raise ValueError("operation không hợp lệ")
-        key_hash = hashlib.sha256((idempotency_key or "").encode("utf-8")).hexdigest() \
+        # Cùng khoá ở hai operation là hai intent khác nhau; không trả nhầm ảnh upscale/txt2img.
+        key_material = f"{operation}\0{idempotency_key or ''}"
+        key_hash = hashlib.sha256(key_material.encode("utf-8")).hexdigest() \
             if idempotency_key else ""
         with self.lock:
             if key_hash and key_hash in self.idempotency:
@@ -313,6 +335,13 @@ class MobileJobManager:
             if self.extras_request_factory is None:
                 raise RuntimeError("Extension thiếu extras request adapter")
             model = self.extras_request_factory(endpoint, payload)
+        elif operation == "img2img":
+            endpoint = self.img2img_endpoint_provider() if self.img2img_endpoint_provider else None
+            if endpoint is None:
+                raise RuntimeError("Forge chưa có /sdapi/v1/img2img")
+            if self.img2img_request_factory is None:
+                raise RuntimeError("Extension thiếu img2img request adapter")
+            model = self.img2img_request_factory(endpoint, payload)
         else:
             endpoint = self.endpoint_provider()
             if endpoint is None:
@@ -427,7 +456,8 @@ def _file_response(request, path, mime):
 
 def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
                         interrupt_provider=None, dependencies=None, job_root=None,
-                        extras_endpoint_provider=None, extras_request_factory=None):
+                        extras_endpoint_provider=None, extras_request_factory=None,
+                        img2img_endpoint_provider=None, img2img_request_factory=None):
     """Đăng ký job API trên FastAPI; dependencies là auth của route Forge chuẩn."""
     from fastapi import Request
     from fastapi.concurrency import run_in_threadpool
@@ -439,7 +469,9 @@ def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
     manager = MobileJobManager(root, endpoint_provider, request_factory, result_dict,
                                interrupt_provider=interrupt_provider,
                                extras_endpoint_provider=extras_endpoint_provider,
-                               extras_request_factory=extras_request_factory)
+                               extras_request_factory=extras_request_factory,
+                               img2img_endpoint_provider=img2img_endpoint_provider,
+                               img2img_request_factory=img2img_request_factory)
 
     @app.get(f"{API_ROOT}/health", include_in_schema=False, dependencies=dependencies)
     async def health():
@@ -448,6 +480,7 @@ def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
             "async_jobs": True,
             "active_jobs": manager.active_count(),
             "txt2img_available": endpoint_provider() is not None,
+            "img2img_available": bool(img2img_endpoint_provider and img2img_endpoint_provider()),
             "extras_available": bool(extras_endpoint_provider and extras_endpoint_provider()),
             "object_storage": {"configured": manager.storage.configured, "type": "s3"},
         }
@@ -469,6 +502,18 @@ def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
                 if endpoint is None:
                     return JSONResponse(status_code=503, content={"detail": "Thiếu API extras"})
                 extras_request_factory(endpoint, payload)
+            elif operation == "img2img":
+                images = payload.get("init_images")
+                if not isinstance(images, list) or len(images) != 1:
+                    raise ValueError("img2img cần đúng một ảnh init")
+                data, _extension, _mime = _decode_image(images[0])
+                if len(data) > 20 * 1024 * 1024:
+                    raise ValueError("ảnh init quá 20 MiB")
+                _validate_source_image(data, payload)
+                endpoint = img2img_endpoint_provider() if img2img_endpoint_provider else None
+                if endpoint is None:
+                    return JSONResponse(status_code=503, content={"detail": "Thiếu API img2img"})
+                img2img_request_factory(endpoint, payload)
             elif operation == "txt2img":
                 endpoint = endpoint_provider()
                 if endpoint is None:

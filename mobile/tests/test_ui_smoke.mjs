@@ -5,7 +5,7 @@
  *
  * Kiểm tra: app khởi động, nạp kho tag, dựng chip, gọi /sdapi/v1/txt2img tới Forge
  * giả (qua mobile/serve.py --mock), đọc tiến trình, hiện ảnh, tra tag tiếng Việt,
- * chèn tag vào prompt, mở sheet phong cách/cài đặt. Không cần GPU.
+ * chèn tag vào prompt, Upscale và img2img từ Thư viện, mở phong cách/cài đặt. Không cần GPU.
  */
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -214,7 +214,31 @@ const state_settings_api_url = () => {
   assert.equal(jobRequests[1].payload.upscaler_1, 'RealESRGAN_x4plus_anime_6B');
   assert.ok(jobRequests[1].payload.image.length > 100, 'phải gửi ảnh gốc base64 cho API extras');
   assert.match($('#imageMeta').textContent, /Upscale 2×/);
-  $('#sheetImage [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
+
+  // --- img2img từ ảnh trong Thư viện: Blob gốc -> init_images -> job nền riêng
+  $('#img2imgDenoise').value = '0.65';
+  $('#img2imgDenoise').dispatchEvent(new window.Event('input', { bubbles: true }));
+  $('#imageImg2ImgBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => $('#sheetImage').classList.contains('hidden')
+    && $('#modeImg2Img').classList.contains('active'), { label: 'nạp ảnh Thư viện vào img2img' });
+  assert.ok(!$('#img2imgSourceCard').classList.contains('hidden'));
+  assert.ok($('#img2imgPreview').src.startsWith('blob:'), 'ảnh init phải hiển thị bằng Object URL');
+  assert.equal($('#img2imgDenoiseValue').textContent, '65%');
+  prompt.value = '1girl, long_hair, anime style';
+  $('#generateBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => jobRequests.length === 3 && $('#cancelBtn').classList.contains('hidden')
+    && /xong/i.test($('#status').textContent), { timeout: 40000, label: 'job img2img hoàn tất' });
+  assert.equal(jobRequests[2].operation, 'img2img');
+  assert.equal(jobRequests[2].payload.denoising_strength, 0.65);
+  assert.equal(jobRequests[2].payload.resize_mode, 1);
+  assert.equal(jobRequests[2].payload.include_init_images, false);
+  assert.equal(jobRequests[2].payload.init_images.length, 1);
+  assert.ok(jobRequests[2].payload.init_images[0].length > 100);
+  assert.equal(jobRequests[2].payload.enable_hr, undefined, 'img2img không gửi Hires txt2img');
+  assert.match($('#resultMeta').textContent, /seed \d+/);
+  $('#modeTxt2Img').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.ok($('#img2imgSourceCard').classList.contains('hidden'));
+  assert.ok(!$('#hiresFields').classList.contains('hidden'));
 
   // --- kho tag tiếng Việt
   $('.tab-btn[data-tab="tags"]').dispatchEvent(new window.Event('click', { bubbles: true }));

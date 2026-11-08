@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v13", sw)
+        self.assertIn("anime3-shell-v14", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -195,6 +195,16 @@ class MobileAssets(unittest.TestCase):
         self.assertIn('operation: \'extras\'', self.ui)
         self.assertIn("APK chưa nạp được plugin lưu ảnh", self.ui)
         self.assertNotIn("toast('Đã tải ảnh về máy')", self.ui)
+
+    def test_12d_img2img_controls_are_wired(self):
+        needed = {"modeTxt2Img", "modeImg2Img", "img2imgSourceCard", "img2imgFile",
+                  "img2imgPickBtn", "img2imgClearBtn", "img2imgPreview", "img2imgDenoise",
+                  "img2imgResizeMode", "imageImg2ImgBtn", "hiresFields"}
+        self.assertEqual(sorted(needed - self.ids), [])
+        for name in sorted(needed - {"img2imgSourceCard", "img2imgPreview", "hiresFields"}):
+            self.assertIn(f"$('#{name}')", self.ui, f"ui.js không gắn {name}")
+        self.assertIn("api.img2img.bind(api)", self.ui)
+        self.assertIn("payload.init_images = [await blobToBase64(source)]", self.ui)
 
     def test_13_ui_references_known_element_ids(self):
         """Bắt lỗi gõ sai id — thứ mà test Node không thấy vì không có DOM."""

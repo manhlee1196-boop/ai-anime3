@@ -33,6 +33,10 @@ const state = {
   controller: null,
   activeClient: null,
   activeJobId: '',
+  source: null,             // Blob ảnh init img2img; chỉ giữ trong phiên, không lưu base64
+  sourceUrl: '',
+  sourceName: '',
+  sourceId: '',
   results: [],             // [{blob, url, name}] — không giữ base64
   lastInfo: null,
   lastSeed: null,
@@ -285,6 +289,27 @@ function bindEvents() {
   });
   $('#rebuildNegativeBtn').addEventListener('click', rebuildNegative);
 
+  // chế độ txt2img/img2img và ảnh init
+  $('#modeTxt2Img').addEventListener('click', () => setGenerationMode('txt2img'));
+  $('#modeImg2Img').addEventListener('click', () => setGenerationMode('img2img'));
+  $('#img2imgPickBtn').addEventListener('click', () => $('#img2imgFile').click());
+  $('#img2imgFile').addEventListener('change', async () => {
+    const file = $('#img2imgFile').files?.[0];
+    if (file) await setImg2ImgSource(file, { name: file.name });
+    $('#img2imgFile').value = '';
+  });
+  $('#img2imgClearBtn').addEventListener('click', () => setImg2ImgSource(null));
+  $('#img2imgDenoise').addEventListener('input', () => {
+    state.settings.img2imgDenoise = Number($('#img2imgDenoise').value);
+    updateImg2ImgControls();
+    updatePromptMeta();
+    scheduleSave();
+  });
+  $('#img2imgResizeMode').addEventListener('change', () => {
+    state.settings.img2imgResizeMode = Number($('#img2imgResizeMode').value);
+    saveSettingsNow();
+  });
+
   // tham số nâng cao
   for (const id of ['seed', 'steps', 'cfg', 'batch', 'clipSkip', 'hrScale', 'hrSteps', 'denoise', 'hrUpscaler']) {
     $(`#${id}`).addEventListener('change', () => { readAdvanced(); updatePromptMeta(); });
@@ -378,6 +403,7 @@ function bindEvents() {
 
   // ảnh
   $('#imageReuseBtn').addEventListener('click', reuseImage);
+  $('#imageImg2ImgBtn').addEventListener('click', useViewImageForImg2Img);
   $('#imageUpscaleBtn').addEventListener('click', upscaleCurrentImage);
   $('#upscaleCancelBtn').addEventListener('click', cancelUpscale);
   $('#imageSaveBtn').addEventListener('click', async () => {
@@ -456,7 +482,59 @@ function applySettingsToForm() {
   $('#hrUpscaler').value = settings.hrUpscaler || 'RealESRGAN_x4plus_anime_6B';
   $('#prompt').value = settings.prompt || '';
   $('#negative').value = settings.negative || buildNegativeFor(settings.rating);
+  setGenerationMode(settings.generationMode, { save: false });
+  updateImg2ImgControls();
   updateSelectionBar();
+}
+
+function setGenerationMode(mode, { save = true } = {}) {
+  const selected = mode === 'img2img' ? 'img2img' : 'txt2img';
+  state.settings.generationMode = selected;
+  const isImg2Img = selected === 'img2img';
+  for (const [id, active] of [['#modeTxt2Img', !isImg2Img], ['#modeImg2Img', isImg2Img]]) {
+    $(id).classList.toggle('active', active);
+    $(id).setAttribute('aria-selected', String(active));
+  }
+  $('#img2imgSourceCard').classList.toggle('hidden', !isImg2Img);
+  $('#hiresFields').classList.toggle('hidden', isImg2Img);
+  $('#generateBtn').textContent = isImg2Img ? '🎨 Tạo từ ảnh' : '🖼️ Tạo ảnh';
+  $('#prompt').placeholder = isImg2Img
+    ? 'Mô tả nét muốn giữ/thay đổi: tóc dài, áo dài, ánh sáng…'
+    : 'tóc dài, áo dài, ánh sáng… hoặc 1girl, long_hair, smile…';
+  if (save) saveSettingsNow();
+  updatePromptMeta();
+}
+
+function updateImg2ImgControls() {
+  const value = Number(state.settings.img2imgDenoise);
+  $('#img2imgDenoise').value = String(Number.isFinite(value) ? value : 0.55);
+  $('#img2imgDenoiseValue').textContent = `${Math.round(Number($('#img2imgDenoise').value) * 100)}%`;
+  $('#img2imgResizeMode').value = String(state.settings.img2imgResizeMode ?? 1);
+}
+
+async function setImg2ImgSource(blob, { name = '', sourceId = '' } = {}) {
+  if (blob) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(blob.type)) {
+      toast('Chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP.', { error: true });
+      return false;
+    }
+    if (blob.size > 20 * 1024 * 1024) {
+      toast('Ảnh gốc vượt 20 MiB; hãy chọn ảnh nhỏ hơn.', { error: true, ms: 5000 });
+      return false;
+    }
+  }
+  if (state.sourceUrl) URL.revokeObjectURL(state.sourceUrl);
+  state.source = blob || null;
+  state.sourceUrl = blob ? URL.createObjectURL(blob) : '';
+  state.sourceName = name || (blob ? 'Ảnh đã chọn' : '');
+  state.sourceId = sourceId || '';
+  $('#img2imgPreview').classList.toggle('hidden', !blob);
+  $('#img2imgEmpty').classList.toggle('hidden', Boolean(blob));
+  $('#img2imgClearBtn').classList.toggle('hidden', !blob);
+  if (blob) $('#img2imgPreview').src = state.sourceUrl;
+  else $('#img2imgPreview').removeAttribute('src');
+  $('#img2imgSourceName').textContent = blob ? `${state.sourceName} · ${formatBytes(blob.size)}` : '';
+  return true;
 }
 
 function fillSettingsForm() {
@@ -951,7 +1029,14 @@ function updatePromptMeta() {
   info.className = `token-info ${advice.level}`;
   info.title = advice.text;
 
-  const warnings = core.payloadWarnings(currentOverrides());
+  const overrides = currentOverrides();
+  const warnings = core.payloadWarnings(overrides);
+  if (state.settings.generationMode === 'img2img') {
+    warnings.push(...core.payloadWarnings({
+      ...overrides, init_images: state.source ? ['selected'] : [],
+      denoising_strength: state.settings.img2imgDenoise,
+    }));
+  }
   const box = $('#promptWarn');
   if (warnings.length) {
     box.textContent = `⚠️ ${warnings.join(' · ')}`;
@@ -972,7 +1057,7 @@ function currentOverrides() {
     height: size[1],
     batch_size: settings.batch,
     seed: settings.seed,
-    enable_hr: settings.hires,
+    enable_hr: settings.generationMode !== 'img2img' && settings.hires,
     hr_scale: settings.hrScale,
     hr_second_pass_steps: settings.hrSteps,
     hr_upscaler: settings.hrUpscaler,
@@ -984,6 +1069,15 @@ function currentOverrides() {
 // ------------------------------------------------------------------ sinh ảnh
 async function generate() {
   if (state.busy) return;
+  const isImg2Img = state.settings.generationMode === 'img2img';
+  const source = isImg2Img ? state.source : null;
+  const sourceId = state.sourceId;
+  if (isImg2Img && !source) {
+    setStatus('Chọn ảnh gốc từ máy hoặc Thư viện trước khi dùng img2img.', { error: true });
+    toast('Chưa chọn ảnh gốc img2img', { error: true });
+    $('#img2imgPickBtn').focus();
+    return;
+  }
   const positive = finalPositive();
   if (!positive) {
     toast('Nhập prompt trước đã', { error: true });
@@ -993,12 +1087,20 @@ async function generate() {
   const negative = translateKnownPrompt($('#negative').value.trim())
     || buildNegativeFor(state.settings.rating);
 
+  const submissionParams = currentOverrides();
   const payload = core.buildPayload({
     positive,
     negative,
     defaults: presets().defaults || {},
-    overrides: currentOverrides(),
+    overrides: submissionParams,
   });
+  if (isImg2Img) {
+    payload.init_images = ['pending-image-encoding'];
+    payload.denoising_strength = Number(state.settings.img2imgDenoise);
+    payload.resize_mode = Number(state.settings.img2imgResizeMode);
+    payload.include_init_images = false;
+    delete payload.enable_hr;
+  }
   const errors = core.payloadErrors(payload);
   if (errors.length) {
     setStatus(`⚠️ ${errors.join(' ')}`, { error: true });
@@ -1016,9 +1118,14 @@ async function generate() {
   setConn('đang chạy…', '');
 
   try {
+    if (isImg2Img) {
+      setStatus('⏳ Đang đọc ảnh gốc; không tải ảnh lại từ object URL…');
+      payload.init_images = [await blobToBase64(source)];
+    }
     const api = client();
     state.activeClient = api;
-    const result = await api.txt2img(payload, {
+    const run = isImg2Img ? api.img2img.bind(api) : api.txt2img.bind(api);
+    const result = await run(payload, {
       signal: state.controller.signal,
       onJob: (job) => { state.activeJobId = job.job_id; },
       onProgress: (info, elapsed) => {
@@ -1048,7 +1155,19 @@ async function generate() {
     setStatus(`✅ Job ${result.jobId.slice(0, 8)} · xong sau ${core.formatDuration(result.elapsed)}`
       + `${state.lastSeed !== null ? ` · seed ${state.lastSeed}` : ''}`);
     if (result.storageWarning) toast(result.storageWarning, { error: true, ms: 6000 });
-    await saveResultImages({ ...result, images: media });
+    await saveResultImages({
+      ...result,
+      images: media,
+      params: {
+        ...submissionParams,
+        operation: isImg2Img ? 'img2img' : 'txt2img',
+        ...(isImg2Img ? {
+          denoising_strength: payload.denoising_strength,
+          resize_mode: payload.resize_mode,
+          source_id: sourceId,
+        } : {}),
+      },
+    });
     pingServer();
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -1149,8 +1268,8 @@ async function saveResultImages(result) {
         prompt: reuse.prompt || $('#prompt').value,
         negative: reuse.negative || $('#negative').value,
         seed: reuse.seed,
-        info: result.info,
-        params: currentOverrides(),
+        info: { ...result.info, operation: result.params?.operation || 'txt2img' },
+        params: result.params || currentOverrides(),
         index,
       });
     } catch (error) {
@@ -1221,6 +1340,30 @@ async function reuseImage() {
   closeSheet($('#sheetImage'));
   showTab('create');
   toast('Đã nạp lại prompt và seed');
+}
+
+async function useViewImageForImg2Img() {
+  if (state.busy) {
+    toast('Đang có job chạy; chờ hoàn tất trước khi đổi ảnh init.', { error: true });
+    return;
+  }
+  const item = state.viewId ? await store.getImage(state.viewId) : null;
+  const blob = item?.blob || (!state.viewId ? state.results[0]?.blob : null)
+    || await (await fetch($('#imageView').src)).blob();
+  const accepted = await setImg2ImgSource(blob, {
+    name: item?.name || state.results[0]?.name || 'Ảnh từ Thư viện',
+    sourceId: state.viewId || '',
+  });
+  if (!accepted) return;
+  if (item) {
+    $('#prompt').value = item.prompt || $('#prompt').value;
+    $('#negative').value = item.negative || $('#negative').value;
+  }
+  setGenerationMode('img2img');
+  closeSheet($('#sheetImage'));
+  showTab('create');
+  $('#img2imgSourceCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('Đã chọn ảnh gốc; chỉnh denoise rồi bấm Tạo từ ảnh');
 }
 
 async function upscaleCurrentImage() {

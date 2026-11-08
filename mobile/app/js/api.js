@@ -259,6 +259,10 @@ export class ForgeClient {
     return this.runJob(payload, { ...options, operation: 'txt2img' });
   }
 
+  async img2img(payload, options = {}) {
+    return this.runJob(payload, { ...options, operation: 'img2img' });
+  }
+
   async extras(payload, options = {}) {
     return this.runJob(payload, { ...options, operation: 'extras' });
   }
@@ -298,10 +302,13 @@ export class ForgeClient {
       const health = await this.request(`${JOB_API_ROOT}/health`, {
         timeout: 8000, signal: merged,
       });
-      if (!health?.async_jobs || (operation === 'extras' && !health?.extras_available)) {
+      const missingOperation = (operation === 'extras' && !health?.extras_available)
+        || (operation === 'img2img' && !health?.img2img_available);
+      if (!health?.async_jobs || missingOperation) {
+        const label = operation === 'extras' ? 'Upscale' : operation === 'img2img' ? 'img2img' : '';
         throw new ForgeError(
-          operation === 'extras'
-            ? 'Colab chưa có Upscale job API. Cập nhật repo + extension rồi restart khi không còn job.'
+          label
+            ? `Colab chưa có ${label} job API. Cập nhật repo + extension rồi restart khi không còn job.`
             : 'Colab chưa có job API mới. Chạy lại notebook một ô để cập nhật extension; '
               + 'app sẽ không dùng lại API base64 cũ.', { status: 409 },
         );

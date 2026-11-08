@@ -191,6 +191,21 @@ check('payloadErrors chặn thông số Hires và kích thước không hợp l�
   assert.ok(core.payloadErrors({ ...safe, batch_size: 1.5 }).some((text) => text.includes('Batch')));
 });
 
+check('payloadErrors kiểm tra ảnh init, denoise và resize img2img', () => {
+  const safe = { ...DEFAULTS, enable_hr: false, width: 832, height: 1216,
+    init_images: ['ZmFrZQ=='], denoising_strength: 0.55, resize_mode: 1 };
+  assert.deepEqual(core.payloadErrors(safe), []);
+  assert.ok(core.payloadErrors({ ...safe, init_images: [] }).some((text) => text.includes('ảnh gốc')));
+  assert.ok(core.payloadErrors({ ...safe, denoising_strength: 0 }).some((text) => text.includes('0,05–1')));
+  assert.ok(core.payloadErrors({ ...safe, resize_mode: 3 }).some((text) => text.includes('resize')));
+});
+
+check('payloadWarnings cảnh báo denoise img2img làm mất nét gốc', () => {
+  const payload = { ...DEFAULTS, enable_hr: false, width: 832, height: 1216,
+    init_images: ['ZmFrZQ=='], denoising_strength: 0.9, resize_mode: 1 };
+  assert.ok(core.payloadWarnings(payload).some((text) => text.includes('toàn bộ ảnh gốc')));
+});
+
 // ------------------------------------------------------------------ URL & lỗi
 check('normalizeBaseUrl thêm https, bỏ / cuối', () => {
   assert.equal(core.normalizeBaseUrl('  abc.gradio.live/  '), 'https://abc.gradio.live');

@@ -519,6 +519,31 @@ def _txt2img_request(endpoint, payload):
     return annotation(**body)
 
 
+def _standard_img2img_endpoint(app):
+    for route in getattr(app, "routes", []):
+        methods = getattr(route, "methods", set()) or set()
+        if getattr(route, "path", "") == "/sdapi/v1/img2img" and "POST" in methods:
+            return getattr(route, "endpoint", None)
+    return None
+
+
+def _img2img_request(endpoint, payload):
+    """Dựng StableDiffusionImg2ImgProcessingAPI đúng như route Forge Neo."""
+    import inspect
+    parameters = list(inspect.signature(endpoint).parameters.values())
+    annotation = parameters[0].annotation if parameters else inspect.Signature.empty
+    if annotation is inspect.Signature.empty or isinstance(annotation, str):
+        from modules.api import models
+        annotation = models.StableDiffusionImg2ImgProcessingAPI
+    validate = getattr(annotation, "model_validate", None)
+    if callable(validate):
+        return validate(dict(payload))
+    parse = getattr(annotation, "parse_obj", None)
+    if callable(parse):
+        return parse(dict(payload))
+    return annotation(**dict(payload))
+
+
 def _standard_extras_endpoint(app):
     for route in getattr(app, "routes", []):
         methods = getattr(route, "methods", set()) or set()
@@ -571,6 +596,8 @@ def install_mobile_api(app):
         interrupt_provider=lambda: _standard_interrupt_endpoint(app),
         extras_endpoint_provider=lambda: _standard_extras_endpoint(app),
         extras_request_factory=_extras_request,
+        img2img_endpoint_provider=lambda: _standard_img2img_endpoint(app),
+        img2img_request_factory=_img2img_request,
         dependencies=dependencies,
     )
 

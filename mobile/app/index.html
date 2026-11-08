@@ -36,7 +36,44 @@
 <main>
   <!-- ---------------------------------------------------------------- Tạo ảnh -->
   <section id="tab-create" class="tab active">
-    <div class="card">
+    <div class="mode-switch" role="tablist" aria-label="Chế độ tạo ảnh">
+      <button id="modeTxt2Img" class="mode-btn active" type="button" role="tab" aria-selected="true">✍️ Từ mô tả</button>
+      <button id="modeImg2Img" class="mode-btn" type="button" role="tab" aria-selected="false">🎨 Từ ảnh</button>
+    </div>
+
+    <div id="img2imgSourceCard" class="card source-card hidden">
+      <div class="card-head">
+        <div>
+          <span class="label">Ảnh gốc img2img</span>
+          <p class="hint source-help">PNG/JPEG/WebP · tối đa 20 MiB · ảnh mới lưu riêng</p>
+        </div>
+        <button id="img2imgClearBtn" class="mini hidden" type="button">Bỏ ảnh</button>
+      </div>
+      <div id="img2imgEmpty" class="source-empty">
+        <span>Chưa chọn ảnh</span>
+        <small>Chọn từ máy hoặc mở một ảnh trong Thư viện</small>
+      </div>
+      <img id="img2imgPreview" class="source-preview hidden" alt="Ảnh gốc img2img">
+      <p id="img2imgSourceName" class="hint"></p>
+      <input id="img2imgFile" class="hidden" type="file" accept="image/png,image/jpeg,image/webp">
+      <div class="row gap wrap source-actions">
+        <button id="img2imgPickBtn" class="chip" type="button">📁 Chọn ảnh từ máy</button>
+      </div>
+      <div class="source-settings">
+        <label class="field" for="img2imgDenoise">Mức thay đổi <output id="img2imgDenoiseValue" for="img2imgDenoise">55%</output></label>
+        <input id="img2imgDenoise" class="range" type="range" min="0.05" max="1" step="0.05" value="0.55">
+        <div class="denoise-labels"><span>Ít · giữ nét gốc</span><span>Nhiều · sáng tạo lại</span></div>
+        <label class="field resize-field">Cách khớp kích thước đầu ra
+          <select id="img2imgResizeMode">
+            <option value="1" selected>Cắt giữa, không méo ảnh</option>
+            <option value="0">Kéo giãn vừa khung</option>
+            <option value="2">Giữ tỉ lệ, thêm nền</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card prompt-card">
       <div class="card-head">
         <label class="label" for="prompt">Prompt tiếng Việt hoặc tag tiếng Anh</label>
         <span id="tokenInfo" class="token-info">0 tag · 0 token</span>
@@ -97,6 +134,9 @@
           <label class="field">Clip skip
             <input id="clipSkip" type="number" inputmode="numeric" min="1" max="12" value="2">
           </label>
+        </div>
+        <div id="hiresFields" class="hires-fields">
+          <div class="grid2">
           <label class="field">Hires scale
             <input id="hrScale" type="number" inputmode="decimal" min="1.1" max="2" step="0.1" value="1.5">
           </label>
@@ -113,8 +153,9 @@
               <option value="Nearest">Nearest</option>
             </select>
           </label>
+          </div>
+          <label class="switch"><input id="hires" type="checkbox"> Hires fix (chủ động bật; tốn thêm VRAM)</label>
         </div>
-        <label class="switch"><input id="hires" type="checkbox"> Hires fix (chủ động bật; tốn thêm VRAM)</label>
       </details>
     </div>
 
@@ -334,6 +375,7 @@
         <p id="upscaleStatus" class="hint">Bản mới được lưu riêng trong Thư viện; không tạo lại ảnh bằng prompt.</p>
       </details>
       <div class="row gap wrap">
+        <button id="imageImg2ImgBtn" class="chip" type="button">🎨 Biến đổi bằng img2img</button>
         <button id="imageReuseBtn" class="chip" type="button">♻️ Dùng lại prompt</button>
         <button id="imageSaveBtn" class="chip" type="button">💾 Lưu vào máy</button>
         <button id="imageShareBtn" class="chip" type="button">↗ Chia sẻ</button>

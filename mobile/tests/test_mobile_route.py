@@ -107,14 +107,17 @@ class MobileRoute(unittest.TestCase):
         cls.jobs = load_module("anime3_mobile_jobs_test", JOBS_PATH)
         cls.real_txt2img_request = cls.ext._txt2img_request
         cls.real_extras_request = cls.ext._extras_request
+        cls.real_img2img_request = cls.ext._img2img_request
         cls.ext._txt2img_request = lambda endpoint, payload: FakeRequest(payload)
         cls.ext._extras_request = lambda endpoint, payload: FakeRequest(payload)
+        cls.ext._img2img_request = lambda endpoint, payload: FakeRequest(payload)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         os.environ["ANIME3_MOBILE_JOB_DIR"] = self.temp.name
         self.calls = []
         self.extra_calls = []
+        self.img_calls = []
         self.interrupts = 0
         self.started = threading.Event()
         self.release = threading.Event()
@@ -142,6 +145,16 @@ class MobileRoute(unittest.TestCase):
             encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
             return types.SimpleNamespace(images=[encoded], info="upscaled", parameters={})
 
+        def img2img_endpoint(payload: dict):
+            self.img_calls.append(payload.model_dump())
+            image = Image.new("RGB", (64, 64), (90, 180, 80))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            info = {"seed": 43, "prompt": getattr(payload, "prompt", ""),
+                    "width": 64, "height": 64}
+            return types.SimpleNamespace(images=[encoded], info=json.dumps(info), parameters={})
+
         def interrupt():
             self.interrupts += 1
 
@@ -150,6 +163,8 @@ class MobileRoute(unittest.TestCase):
         self.app.add_api_route("/sdapi/v1/txt2img", standard_endpoint,
                                methods=["POST"], dependencies=dependencies)
         self.app.add_api_route("/sdapi/v1/extra-single-image", extras_endpoint,
+                               methods=["POST"], dependencies=dependencies)
+        self.app.add_api_route("/sdapi/v1/img2img", img2img_endpoint,
                                methods=["POST"], dependencies=dependencies)
         self.app.add_api_route("/sdapi/v1/interrupt", interrupt, methods=["POST"])
         self.manager = self.ext.serve_mobile_app(None, self.app)
@@ -197,6 +212,7 @@ class MobileRoute(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertTrue(health.json()["async_jobs"])
         self.assertTrue(health.json()["extras_available"])
+        self.assertTrue(health.json()["img2img_available"])
         self.assertIn("object_storage", health.json())
 
     def test_02_job_idempotency_original_png_manifest_and_range(self):
@@ -422,6 +438,67 @@ class MobileRoute(unittest.TestCase):
         })
         self.assertEqual(oversized.status_code, 422)
         self.assertEqual(len(self.extra_calls), 1, "ảnh quá lớn không được đưa vào GPU")
+
+    def test_12_img2img_uses_init_image_and_binary_background_job(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (64, 64), "navy").save(buffer, format="PNG")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        body = {
+            "operation": "img2img",
+            "payload": {"prompt": "1girl, long_hair", "init_images": [encoded],
+                        "denoising_strength": 0.55, "resize_mode": 1,
+                        "width": 64, "height": 64, "steps": 25},
+            "idempotency_key": "img2img-one",
+        }
+        response = self.client.post("/vi-mobile/api/jobs", json=body)
+        self.assertEqual(response.status_code, 202, response.text)
+        job_id = response.json()["job_id"]
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.extra_calls, [])
+        self.assertEqual(len(self.img_calls), 1)
+        self.assertEqual(self.img_calls[0]["init_images"], [encoded])
+        self.assertEqual(self.img_calls[0]["denoising_strength"], 0.55)
+        self.assertTrue(self.img_calls[0]["send_images"])
+        duplicate = self.client.post("/vi-mobile/api/jobs", json=body)
+        self.assertEqual(duplicate.json()["job_id"], job_id)
+        self.assertEqual(len(self.img_calls), 1)
+        manifest = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").json()
+        image = self.client.get(manifest["files"][0]["url"])
+        self.assertEqual(image.status_code, 200)
+        self.assertTrue(image.content.startswith(b"\x89PNG"))
+        invalid = self.client.post("/vi-mobile/api/jobs", json={
+            "operation": "img2img", "payload": {"prompt": "1girl", "init_images": []},
+        })
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(len(self.img_calls), 1)
+
+        captured = []
+
+        class FakeImg2ImgModel:
+            @classmethod
+            def model_validate(cls, value):
+                captured.append(value)
+                return value
+
+        api_module = types.ModuleType("modules.api")
+        api_module.models = types.SimpleNamespace(
+            StableDiffusionImg2ImgProcessingAPI=FakeImg2ImgModel)
+        previous_api = sys.modules.get("modules.api")
+        sys.modules["modules.api"] = api_module
+        try:
+            def delayed_endpoint(img2imgreq: "StableDiffusionImg2ImgProcessingAPI"):
+                return img2imgreq
+
+            source = dict(body["payload"])
+            type(self).real_img2img_request(delayed_endpoint, source)
+        finally:
+            if previous_api is None:
+                sys.modules.pop("modules.api", None)
+            else:
+                sys.modules["modules.api"] = previous_api
+        self.assertEqual(captured, [source])
+        self.assertEqual(captured[0]["denoising_strength"], 0.55)
 
 
 if __name__ == "__main__":

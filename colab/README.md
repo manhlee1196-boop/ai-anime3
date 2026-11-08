@@ -78,8 +78,9 @@ chạy smoke test được đặt sẵn. Các tùy chọn nâng cao vẫn nằm 
 [**Mở notebook Colab tối giản**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F0f8a8365-ai-anime3/colab/WAI_v17_1click.ipynb)
 → chọn GPU T4 → **Run all**. Chạy lại ô sẽ cập nhật code/extension, giữ model và
 restart Forge để nạp job API mới cho Android; đợi job hiện tại kết thúc trước khi chạy.
-Ô cài từ chối cache cũ hơn 1.0.8. Bản 1.0.8 thêm chọn VRAM, guard không restart khi
-còn job Forge/mobile và Upscale ảnh đã có qua cùng job nền/file stream.
+Ô cài từ chối cache cũ hơn 1.0.9. Bản 1.0.9 bổ sung job nền img2img (ảnh init, denoise,
+resize) bên cạnh txt2img và Upscale; vẫn giữ VRAM auto, guard không restart khi còn job
+Forge/mobile và tải kết quả bằng manifest/file stream.
 **Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong app Gradio rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.

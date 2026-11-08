@@ -195,6 +195,61 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .field { display: block; font-size: 12px; color: var(--muted); }
 .field input, .field select { margin-top: 4px; }
 
+/* Chuyển txt2img/img2img trong một thanh gọn; không thêm tab dưới màn hình. */
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.mode-btn {
+  min-height: 46px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.mode-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 82%, #fff), var(--accent));
+  box-shadow: 0 6px 20px -14px var(--accent);
+}
+.source-card .card-head { align-items: flex-start; }
+.source-help { margin-top: -4px; }
+.source-empty {
+  min-height: 112px;
+  margin-top: 12px;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: 14px;
+  background: var(--bg-soft);
+}
+.source-empty small { font-size: 12px; }
+.source-preview {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  margin-top: 12px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #090b10;
+  border: 1px solid var(--line);
+}
+.source-actions { margin-top: 10px !important; }
+.source-settings { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.source-settings output { float: right; color: var(--text); font-weight: 700; }
+.range { width: 100%; min-height: 44px; margin: 4px 0 0; accent-color: var(--accent); }
+.denoise-labels { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; }
+.resize-field { margin-top: 10px; }
+.hires-fields { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 2px; }
+
 /* ------------------------------------------------------------------ nút & chip */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chips.scroll-x { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }

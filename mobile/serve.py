@@ -280,7 +280,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({'api': True, 'port': 7860, 'listen': True, 'mock': True})
         if path == '/vi-mobile/api/health':
             active = sum(job.get('status') in {'queued', 'running', 'uploading'} for job in MOCK_JOBS.values())
-            return self._json({'ok': True, 'txt2img_available': True, 'extras_available': True, 'async_jobs': True,
+            return self._json({'ok': True, 'txt2img_available': True, 'img2img_available': True,
+                               'extras_available': True, 'async_jobs': True,
                                'active_jobs': active, 'object_storage': {'configured': False, 'prefix': ''}, 'mock': True})
         if path == '/vi-mobile/api/jobs' and method == 'POST':
             key = str(payload.get('idempotency_key') or '')[:128]

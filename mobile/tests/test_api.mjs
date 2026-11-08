@@ -346,6 +346,60 @@ const idle = {
     && result.images[0].size === 1 && result.info.raw === 'upscaled');
 }
 
+// img2img dùng operation và capability riêng, vẫn nhận ảnh qua file binary.
+{
+  const JOB = 'f'.repeat(32);
+  let submitted = null;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: true, img2img_available: true });
+      }
+      if (path === '/vi-mobile/api/jobs' && init.method === 'POST') {
+        submitted = JSON.parse(init.body);
+        return jsonResponse({ job_id: JOB, status: 'queued' }, 202);
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}/result`) {
+        return jsonResponse({ info: { seed: 43 }, files: [{ name: '000.png', size: 1,
+          mime: 'image/png', url: 'https://cdn.example/img2img.png' }] });
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}`) return jsonResponse({ job_id: JOB, status: 'done' });
+      if (url === 'https://cdn.example/img2img.png') {
+        return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([7])],
+          { type: 'image/png' }), text: async () => '' };
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.img2img({ prompt: '1girl', init_images: ['ZmFrZQ=='],
+    denoising_strength: 0.55, resize_mode: 1 }, { interval: 1 });
+  check('img2img gửi operation riêng và tải Blob từ manifest', submitted.operation === 'img2img'
+    && submitted.payload.denoising_strength === 0.55 && result.info.seed === 43
+    && result.images[0] instanceof Blob && result.images[0].size === 1);
+}
+
+// Server cũ không có img2img_available: dừng trước POST thay vì gọi nhầm txt2img.
+{
+  let posts = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      if (new URL(url).pathname === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: true });
+      }
+      if (init.method === 'POST') posts += 1;
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try { await api.img2img({ prompt: '1girl', init_images: ['ZmFrZQ=='] }, { interval: 1 }); }
+  catch (error) { failure = error; }
+  check('thiếu img2img job API thì dừng trước khi POST', failure?.status === 409
+    && /img2img job API/.test(failure.message) && posts === 0);
+}
+
 // Server cũ không có extras_available: báo cập nhật, tuyệt đối không gửi job sai endpoint.
 {
   let posts = 0;
