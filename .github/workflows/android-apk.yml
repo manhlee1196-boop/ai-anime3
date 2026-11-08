@@ -74,6 +74,10 @@ jobs:
           npx cap sync android
           test -f android/app/src/main/assets/public/index.html
           test -f android/app/src/main/assets/public/data/tags.json
+          # AAPT coi *.gz là "bản nén của file cùng tên" nên tags.json.gz + tags.json bị
+          # báo "Duplicate resources". APK tự nén zip rồi, nên bỏ bản .gz ở đây.
+          rm -f android/app/src/main/assets/public/data/tags.json.gz
+          ls -la android/app/src/main/assets/public/data
 
       - name: Ghi đường dẫn SDK cho Gradle
         working-directory: mobile/apk/android

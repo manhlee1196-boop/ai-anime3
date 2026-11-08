@@ -23,6 +23,11 @@ bước trên trong runner có sẵn JDK 17 + Android SDK rồi đăng file APK 
 
 ## Điều cần biết
 
+- **Đừng đóng gói `data/tags.json.gz`**: AAPT coi `*.gz` là "bản nén của file cùng tên"
+  nên `tags.json.gz` + `tags.json` bị báo `Duplicate resources` ở task
+  `:app:mergeDebugAssets`. `build.sh` và workflow đã `rm` file `.gz` sau `cap sync`
+  (APK vốn đã nén zip, bản `.gz` chỉ cần cho đường web `/vi-mobile/`).
+
 - **Yêu cầu**: JDK 17 và Android SDK 34 (Capacitor 6). Capacitor 7+ cần JDK 21 — đừng
   nâng version nếu chưa đổi CI.
 - **`webDir` nằm ngoài thư mục project**: `../app`. Giữ nguyên đường dẫn này, nếu không

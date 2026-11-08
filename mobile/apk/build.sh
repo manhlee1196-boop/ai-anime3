@@ -33,6 +33,8 @@ say "Tạo project Android + chép app"
   || die "webDir chưa được chép — xem webDir trong capacitor.config.json."
 [ -f "$APK_DIR/android/app/src/main/assets/public/data/tags.json" ] \
   || die "Thiếu data/tags.json trong assets — chạy lại mobile/build_data.py."
+# AAPT coi *.gz là bản nén của file cùng tên -> "Duplicate resources" với tags.json.
+rm -f "$APK_DIR/android/app/src/main/assets/public/data/tags.json.gz"
 
 say "Build APK"
 (cd "$APK_DIR/android" && chmod +x gradlew && ./gradlew assembleDebug --no-daemon)
