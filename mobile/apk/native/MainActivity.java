@@ -7,7 +7,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        // Capacitor 4+ khởi tạo bridge trong super.onCreate; plugin phải đăng ký TRƯỚC.
         registerPlugin(Anime3MediaPlugin.class);
+        super.onCreate(savedInstanceState);
     }
 }

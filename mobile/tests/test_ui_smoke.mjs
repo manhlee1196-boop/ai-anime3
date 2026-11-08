@@ -199,6 +199,9 @@ const state_settings_api_url = () => {
   $('#gallery button').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => !$('#sheetImage').classList.contains('hidden'), { label: 'mở Blob từ thư viện' });
   assert.ok($('#imageView').src.startsWith('blob:'), 'ảnh lưu phải đọc lại bằng Object URL');
+  $('#imageSaveBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => nativeSaves.length === 2, { label: 'lưu từ thư viện qua MediaStore' });
+  assert.match($('#imageSaveLocation').textContent, /Đã lưu thành công: Pictures\/Anime3\//);
   $('#sheetImage [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
 
   // --- kho tag tiếng Việt

@@ -1187,6 +1187,7 @@ async function openImage(id, dataUrl, meta) {
   state.viewId = id;
   $('#imageView').src = dataUrl;
   $('#imageMeta').textContent = meta || '';
+  $('#imageSaveLocation').textContent = 'Nơi xuất trên Android 10+: Pictures/Anime3. Ảnh chưa xuất vẫn nằm trong bộ nhớ riêng của app.';
   $('#imageReuseBtn').classList.toggle('hidden', !id);
   $('#imageDeleteBtn').classList.toggle('hidden', !id);
   openSheet('#sheetImage');
@@ -1232,11 +1233,15 @@ async function saveImageToDevice(image) {
   try {
     const file = await imageFile(image);
     const plugin = window.Capacitor?.Plugins?.Anime3Media;
-    const native = window.Capacitor?.isNativePlatform?.() && plugin?.saveImage;
-    if (native) {
+    const isNative = window.Capacitor?.isNativePlatform?.();
+    if (isNative && !plugin?.saveImage) {
+      throw new Error('APK chưa nạp được plugin lưu ảnh. Hãy cài bản APK mới rồi đóng/mở lại app.');
+    }
+    if (isNative) {
       const saved = await plugin.saveImage({
         data: await blobToBase64(file), name: file.name, mime: file.type,
       });
+      $('#imageSaveLocation').textContent = `Đã lưu thành công: ${saved.path}`;
       toast(`Đã lưu: ${saved.path}`, { ms: 7000 });
       return saved;
     }
@@ -1246,6 +1251,7 @@ async function saveImageToDevice(image) {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+    $('#imageSaveLocation').textContent = 'Trình duyệt đã nhận lệnh tải; kiểm tra thông báo tải xuống hoặc thư mục Download.';
     toast('Đã gửi lệnh tải — mở thông báo trình duyệt hoặc thư mục Download để xem nơi lưu.',
       { ms: 6000 });
     return { path: 'Download (tuỳ cài đặt trình duyệt)' };

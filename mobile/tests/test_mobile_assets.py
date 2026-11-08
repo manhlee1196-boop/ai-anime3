@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v11", sw)
+        self.assertIn("anime3-shell-v12", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -177,6 +177,9 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("MediaStore.Images.Media.IS_PENDING", plugin)
         self.assertIn('result.put("path", "Pictures/Anime3/" + name)', plugin)
         self.assertIn("registerPlugin(Anime3MediaPlugin.class)", activity)
+        self.assertLess(activity.index("registerPlugin(Anime3MediaPlugin.class)"),
+                        activity.index("super.onCreate(savedInstanceState)"),
+                        "Capacitor 4+ yêu cầu đăng ký plugin trước super.onCreate")
         self.assertIn("Anime3MediaPlugin.java", installer)
         build = (MOBILE / "apk" / "build.sh").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
@@ -184,6 +187,8 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("native/install.sh", workflow)
         self.assertIn('id="saveBtn"', self.html)
         self.assertIn('id="imageSaveBtn"', self.html)
+        self.assertIn('id="imageSaveLocation"', self.html)
+        self.assertIn("APK chưa nạp được plugin lưu ảnh", self.ui)
         self.assertNotIn("toast('Đã tải ảnh về máy')", self.ui)
 
     def test_13_ui_references_known_element_ids(self):

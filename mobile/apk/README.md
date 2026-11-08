@@ -56,7 +56,9 @@ thư mục. Android 9 trở xuống dùng `Android/data/vn.anime3.mobile/files/P
 không xin quyền ghi toàn bộ bộ nhớ. Nút **Chia sẻ** vẫn dùng share sheet khi hệ thống hỗ trợ.
 
 `native/install.sh` chép `MainActivity.java` và `Anime3MediaPlugin.java` vào project do
-Capacitor sinh ra; cả `build.sh` và workflow đều gọi script này trước khi build. Trên PWA,
+Capacitor sinh ra; cả `build.sh` và workflow đều gọi script này trước khi build. Plugin phải
+`registerPlugin(...)` **trước** `super.onCreate(...)` (yêu cầu từ Capacitor 4), nếu không JS
+không thấy `Anime3Media` và app phải báo lỗi rõ thay vì giả vờ tải qua WebView. Trên PWA,
 download vẫn do trình duyệt quản lý nên app hướng dẫn kiểm tra thông báo/Download thay vì
 khẳng định một đường dẫn cố định.
 
