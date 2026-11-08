@@ -175,7 +175,20 @@ check('buildPayload không nhận giá trị rỗng từ form', () => {
 check('payloadWarnings cảnh báo kích thước/CFG/Hires', () => {
   const warnings = core.payloadWarnings({ width: 1024, height: 2000, cfg_scale: 12, steps: 50, enable_hr: true, hr_scale: 2.5, batch_size: 4 });
   assert.ok(warnings.length >= 4, warnings.join(' | '));
-  assert.equal(core.payloadWarnings({ ...DEFAULTS }).length, 0);
+  assert.equal(core.payloadWarnings({ ...DEFAULTS, width: 832, height: 1216,
+    hr_second_pass_steps: 12, denoising_strength: 0.35 }).length, 0);
+});
+
+check('payloadErrors chặn thông số Hires và kích thước không hợp lệ', () => {
+  const safe = { ...DEFAULTS, width: 832, height: 1216, hr_second_pass_steps: 12,
+    denoising_strength: 0.35 };
+  assert.deepEqual(core.payloadErrors(safe), []);
+  assert.deepEqual(core.payloadErrors({ ...safe, enable_hr: false }), []);
+  assert.ok(core.payloadErrors({ ...safe, width: 833 }).some((text) => text.includes('chia hết')));
+  assert.ok(core.payloadErrors({ ...safe, hr_scale: 1 }).some((text) => text.includes('1,1–2')));
+  assert.ok(core.payloadErrors({ ...safe, hr_second_pass_steps: 0 }).some((text) => text.includes('Hires steps')));
+  assert.ok(core.payloadErrors({ ...safe, denoising_strength: 0.9 }).some((text) => text.includes('Denoise')));
+  assert.ok(core.payloadErrors({ ...safe, batch_size: 1.5 }).some((text) => text.includes('Batch')));
 });
 
 // ------------------------------------------------------------------ URL & lỗi

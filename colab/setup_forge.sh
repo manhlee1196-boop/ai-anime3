@@ -31,7 +31,8 @@ REPO_BRANCH="${REPO_BRANCH:-arena/ec9855a4-ai-anime3}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"          # chỉ cần nếu repo để private
 PORT="${PORT:-7860}"
 TUNNEL="${TUNNEL:-share}"                 # share | cloudflared | none
-VRAM_FLAG="${VRAM_FLAG:-}"                # ví dụ: --lowvram  (T4 16GB thường để trống)
+VRAM_LEVEL="${VRAM_LEVEL:-auto}"          # auto | balanced | highvram | lowvram | gpu-only
+VRAM_FLAG="${VRAM_FLAG:-}"                # cờ tùy chỉnh; install.sh truyền flag đã resolve
 RUNTIME_DIR="${WAI_RUNTIME_DIR:-/content}"
 TORCH_ENV_FILE="${TORCH_ENV_FILE:-$RUNTIME_DIR/.wai_torch_env}"
 FORGE_LOG="$RUNTIME_DIR/forge.log"
@@ -594,10 +595,25 @@ launch_args() {
   local cors="${CORS_ALLOW_ORIGINS-*}"
   local args="--listen --port $PORT --api --expandable-segments"
   [[ "$cors" == "none" ]] || args="$args --cors-allow-origins=$cors"
+  local vram_flag="$VRAM_FLAG" level="$VRAM_LEVEL" total_mb=0
+  if [[ -z "$vram_flag" ]]; then
+    if [[ "$level" == auto ]]; then
+      total_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs || true)
+      [[ "$total_mb" =~ ^[0-9]+$ ]] || total_mb=0
+      if (( total_mb >= 12000 )); then level="highvram"
+      elif (( total_mb > 0 && total_mb < 8000 )); then level="lowvram"
+      else level="balanced"; fi
+    fi
+    case "$level" in
+      highvram) vram_flag="--highvram" ;; lowvram) vram_flag="--lowvram" ;;
+      gpu-only) vram_flag="--gpu-only" ;; balanced|custom) : ;;
+      *) die "VRAM_LEVEL không hợp lệ: $level" ;;
+    esac
+  fi
   local model_path
   model_path="$($PY -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "$MODEL_DIR")"
   args="$args --ckpt-dirs $model_path"
-  [[ -z "$VRAM_FLAG" ]] || args="$args $VRAM_FLAG"
+  [[ -z "$vram_flag" ]] || args="$args $vram_flag"
   [[ "$TUNNEL" != "share" ]] || args="$args --share"
   [[ -z "$EXTRA_FORGE_ARGS" ]] || args="$args $EXTRA_FORGE_ARGS"
   echo "$args"

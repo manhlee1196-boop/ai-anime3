@@ -519,6 +519,32 @@ def _txt2img_request(endpoint, payload):
     return annotation(**body)
 
 
+def _standard_extras_endpoint(app):
+    for route in getattr(app, "routes", []):
+        methods = getattr(route, "methods", set()) or set()
+        if getattr(route, "path", "") == "/sdapi/v1/extra-single-image" and "POST" in methods:
+            return getattr(route, "endpoint", None)
+    return None
+
+
+def _extras_request(endpoint, payload):
+    """Dựng đúng ExtrasSingleImageRequest của Forge, không sao chép engine upscale."""
+    import inspect
+    body = dict(payload)
+    parameters = list(inspect.signature(endpoint).parameters.values())
+    annotation = parameters[0].annotation if parameters else inspect.Signature.empty
+    if annotation is inspect.Signature.empty or isinstance(annotation, str):
+        from modules.api import models
+        annotation = models.ExtrasSingleImageRequest
+    validate = getattr(annotation, "model_validate", None)
+    if callable(validate):
+        return validate(body)
+    parse = getattr(annotation, "parse_obj", None)
+    if callable(parse):
+        return parse(body)
+    return annotation(**body)
+
+
 def _standard_interrupt_endpoint(app):
     for route in getattr(app, "routes", []):
         methods = getattr(route, "methods", set()) or set()
@@ -543,6 +569,8 @@ def install_mobile_api(app):
         request_factory=_txt2img_request,
         result_dict=_result_dict,
         interrupt_provider=lambda: _standard_interrupt_endpoint(app),
+        extras_endpoint_provider=lambda: _standard_extras_endpoint(app),
+        extras_request_factory=_extras_request,
         dependencies=dependencies,
     )
 

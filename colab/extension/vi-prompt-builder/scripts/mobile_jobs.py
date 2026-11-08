@@ -43,6 +43,25 @@ def _decode_image(encoded):
     raise ValueError("Định dạng ảnh không được hỗ trợ")
 
 
+def _validate_extras_image(data, payload):
+    """Chặn kích thước nguy hiểm trước khi đưa ảnh vào hàng đợi GPU."""
+    import io
+    import math
+    from PIL import Image
+
+    scale = float(payload.get("upscaling_resize", 0))
+    if not math.isfinite(scale) or not 1 <= scale <= 4:
+        raise ValueError("Tỉ lệ upscale phải trong 1–4")
+    if int(payload.get("resize_mode", 0)) != 0:
+        raise ValueError("Job mobile chỉ hỗ trợ upscale theo tỉ lệ")
+    if not str(payload.get("upscaler_1") or "").strip():
+        raise ValueError("Thiếu upscaler")
+    with Image.open(io.BytesIO(data)) as image:
+        width, height = image.size
+    if width * scale > 4096 or height * scale > 4096:
+        raise ValueError("Đầu ra upscale vượt 4096 px")
+
+
 def _public_job(job):
     return {
         "job_id": job["job_id"],
@@ -108,11 +127,14 @@ class S3Storage:
 
 class MobileJobManager:
     def __init__(self, root, endpoint_provider, request_factory, result_dict,
-                 interrupt_provider=None, storage=None):
+                 interrupt_provider=None, storage=None, extras_endpoint_provider=None,
+                 extras_request_factory=None):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.endpoint_provider = endpoint_provider
         self.request_factory = request_factory
+        self.extras_endpoint_provider = extras_endpoint_provider
+        self.extras_request_factory = extras_request_factory
         self.result_dict = result_dict
         self.interrupt_provider = interrupt_provider
         self.storage = storage or S3Storage()
@@ -145,6 +167,7 @@ class MobileJobManager:
                 job["updated_at"] = time.time()
                 job["payload"] = {}
                 _atomic_json(directory / "job.json", job)
+            job.setdefault("operation", "txt2img")
             self.jobs[job["job_id"]] = job
             if job.get("idempotency_hash"):
                 self.idempotency[job["idempotency_hash"]] = job["job_id"]
@@ -153,7 +176,9 @@ class MobileJobManager:
         job["updated_at"] = time.time()
         _atomic_json(self._path(job["job_id"]) / "job.json", job)
 
-    def submit(self, payload, idempotency_key=""):
+    def submit(self, payload, idempotency_key="", operation="txt2img"):
+        if operation not in {"txt2img", "extras"}:
+            raise ValueError("operation không hợp lệ")
         key_hash = hashlib.sha256((idempotency_key or "").encode("utf-8")).hexdigest() \
             if idempotency_key else ""
         with self.lock:
@@ -168,6 +193,7 @@ class MobileJobManager:
                 "created_at": now,
                 "updated_at": now,
                 "payload": payload,
+                "operation": operation,
                 "idempotency_hash": key_hash,
                 "info": {},
                 "files": [],
@@ -182,6 +208,11 @@ class MobileJobManager:
             _atomic_json(directory / "job.json", job)
             self.waiting.put(job_id)
             return dict(_public_job(job), deduplicated=False)
+
+    def active_count(self):
+        with self.lock:
+            return sum(job.get("status") in {"queued", "running", "uploading"}
+                       for job in self.jobs.values())
 
     def get(self, job_id):
         with self.lock:
@@ -274,10 +305,19 @@ class MobileJobManager:
         self._set_status(job_id, "running")
         with self.lock:
             payload = self.jobs[job_id]["payload"]
-        endpoint = self.endpoint_provider()
-        if endpoint is None:
-            raise RuntimeError("Forge chưa có /sdapi/v1/txt2img")
-        model = self.request_factory(endpoint, payload)
+            operation = self.jobs[job_id].get("operation", "txt2img")
+        if operation == "extras":
+            endpoint = self.extras_endpoint_provider() if self.extras_endpoint_provider else None
+            if endpoint is None:
+                raise RuntimeError("Forge chưa có /sdapi/v1/extra-single-image")
+            if self.extras_request_factory is None:
+                raise RuntimeError("Extension thiếu extras request adapter")
+            model = self.extras_request_factory(endpoint, payload)
+        else:
+            endpoint = self.endpoint_provider()
+            if endpoint is None:
+                raise RuntimeError("Forge chưa có /sdapi/v1/txt2img")
+            model = self.request_factory(endpoint, payload)
         if hasattr(model, "send_images"):
             model.send_images = True
         if hasattr(model, "save_images"):
@@ -386,7 +426,8 @@ def _file_response(request, path, mime):
 
 
 def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
-                        interrupt_provider=None, dependencies=None, job_root=None):
+                        interrupt_provider=None, dependencies=None, job_root=None,
+                        extras_endpoint_provider=None, extras_request_factory=None):
     """Đăng ký job API trên FastAPI; dependencies là auth của route Forge chuẩn."""
     from fastapi import Request
     from fastapi.concurrency import run_in_threadpool
@@ -396,14 +437,18 @@ def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
     root = job_root or os.environ.get("ANIME3_MOBILE_JOB_DIR") or \
         Path(__file__).resolve().parents[4] / "colab" / "outputs" / "mobile-jobs"
     manager = MobileJobManager(root, endpoint_provider, request_factory, result_dict,
-                               interrupt_provider=interrupt_provider)
+                               interrupt_provider=interrupt_provider,
+                               extras_endpoint_provider=extras_endpoint_provider,
+                               extras_request_factory=extras_request_factory)
 
     @app.get(f"{API_ROOT}/health", include_in_schema=False, dependencies=dependencies)
     async def health():
         return {
             "ok": True,
             "async_jobs": True,
+            "active_jobs": manager.active_count(),
             "txt2img_available": endpoint_provider() is not None,
+            "extras_available": bool(extras_endpoint_provider and extras_endpoint_provider()),
             "object_storage": {"configured": manager.storage.configured, "type": "s3"},
         }
 
@@ -414,16 +459,29 @@ def install_mobile_jobs(app, endpoint_provider, request_factory, result_dict,
             payload = body.get("payload") if isinstance(body, dict) else None
             if not isinstance(payload, dict):
                 raise ValueError("payload")
-            endpoint = endpoint_provider()
-            if endpoint is None:
-                return JSONResponse(status_code=503, content={"detail": "Thiếu API txt2img"})
+            operation = str(body.get("operation") or "txt2img")
+            if operation == "extras":
+                data, _extension, _mime = _decode_image(payload.get("image"))
+                if len(data) > 20 * 1024 * 1024:
+                    raise ValueError("ảnh đầu vào quá 20 MiB")
+                _validate_extras_image(data, payload)
+                endpoint = extras_endpoint_provider() if extras_endpoint_provider else None
+                if endpoint is None:
+                    return JSONResponse(status_code=503, content={"detail": "Thiếu API extras"})
+                extras_request_factory(endpoint, payload)
+            elif operation == "txt2img":
+                endpoint = endpoint_provider()
+                if endpoint is None:
+                    return JSONResponse(status_code=503, content={"detail": "Thiếu API txt2img"})
+                request_factory(endpoint, payload)
+            else:
+                raise ValueError("operation")
             # Validation trước khi đưa vào queue để client nhận 422 ngay.
-            request_factory(endpoint, payload)
             key = str(body.get("idempotency_key") or "")[:160]
-            job = await run_in_threadpool(manager.submit, payload, key)
+            job = await run_in_threadpool(manager.submit, payload, key, operation)
             return JSONResponse(status_code=202, content=job)
         except Exception:
-            return JSONResponse(status_code=422, content={"detail": "Payload txt2img không hợp lệ"})
+            return JSONResponse(status_code=422, content={"detail": "Payload xử lý ảnh không hợp lệ"})
 
     @app.get(f"{API_ROOT}/jobs/{{job_id}}", include_in_schema=False, dependencies=dependencies)
     async def status(job_id: str):

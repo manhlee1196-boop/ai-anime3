@@ -135,13 +135,23 @@ notebook có output chứa thông tin riêng. Forge/extension không giữ các 
 | Đổi sang Gradio share | `!bash /content/install.sh --tunnel share --only launch,verify --restart` (đợi sinh xong, mở link mới) |
 | Khởi động lại + kiểm tra | `!bash /content/install.sh --only launch,verify --restart` |
 | Đổi model đã chọn | `!bash /content/install.sh --model hswq --only model,launch,verify` (cần token nếu nhà cung cấp yêu cầu) |
+| Chọn mức VRAM | `!bash /content/install.sh --vram-level highvram --only launch,verify --restart`; các mức: `auto`, `balanced`, `highvram`, `lowvram`, `gpu-only` |
 | Cập nhật repo sạch + extension | `!bash /content/install.sh --only repo,extras,launch,verify --restart` |
+| Lên 1.0.8 từ runtime cũ | `!bash /content/install.sh --only repo` rồi `!bash /content/ai-anime3/colab/install.sh --only extras,launch,verify --vram-level auto --restart` (không tải lại model/Torch) |
 | Chạy lại các bước | `!bash /content/install.sh --force` |
 | Xóa lịch sử stage, không xóa dữ liệu | `!bash /content/install.sh --clean` |
 | Xem cờ khác | `!bash /content/install.sh --help` |
 
 `--only` buộc chạy lại các stage được chỉ định, kể cả đã có marker. `--skip torch`
 bỏ qua bước torch. `--force` không xóa model đã khớp SHA256 và **không gỡ/xóa ảnh**.
+
+Từ 1.0.8, `auto` là mặc định: HighVRAM từ 12 GB, Cân bằng 8–12 GB và Tiết kiệm dưới
+8 GB. HighVRAM giữ diffusion model trên VRAM nhưng vẫn cho phép text encoder/VAE offload;
+GPU only đưa tất cả lên GPU, không nên bật cùng Hires lớn trên T4. Cấu hình cũ dùng
+`--vram-flag` vẫn được giữ. Trước restart, installer đọc `/sdapi/v1/progress` và
+`active_jobs` của mobile; nếu còn job running/queued/uploading thì dừng lệnh, không kill
+Forge và không tự chạy lại job. Nếu endpoint tiến trình không phản hồi, chỉ tiếp tục sau
+khi bạn đã kiểm tra chắc chắn không còn job.
 
 ### Cách bộ cài bảo đảm chạy lại an toàn
 

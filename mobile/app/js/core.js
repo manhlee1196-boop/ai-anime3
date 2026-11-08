@@ -343,8 +343,42 @@ export function payloadWarnings(payload) {
   }
   if (Number(payload.cfg_scale) > 10) out.push('CFG trên 10 dễ bết màu; WAI v17 khuyến nghị 5–7.');
   if (Number(payload.steps) > 40) out.push('Trên 40 bước gần như không đẹp thêm mà chậm gấp đôi.');
-  if (payload.enable_hr && payload.hr_scale > 2) out.push('Hires trên 2× rất dễ hết VRAM trên T4 (16 GB).');
+  if (payload.enable_hr) {
+    const scale = Number(payload.hr_scale) || 0;
+    const target = width * height * scale * scale;
+    if (scale > 2) out.push('Hires trên 2× rất dễ hết VRAM trên T4 (16 GB).');
+    if (target > 2500000) out.push(`Hires tạo khoảng ${(target / 1000000).toFixed(1)} MP; trên 2,5 MP dễ hết VRAM.`);
+    if (Number(payload.hr_second_pass_steps) > 30) out.push('Hires steps trên 30 thường chỉ làm chậm thêm.');
+    if (Number(payload.denoising_strength) > 0.6) out.push('Denoise trên 0,6 có thể đổi mạnh bố cục ảnh gốc.');
+  }
   if (Number(payload.batch_size) > 1) out.push('Batch > 1 nhân thời gian và VRAM; nên để 1 trên Colab.');
+  return out;
+}
+
+/** Chặn payload sai mà không tự thay lựa chọn thủ công. */
+export function payloadErrors(payload) {
+  const out = [];
+  const integer = (key, label, min, max) => {
+    const value = Number(payload[key]);
+    if (!Number.isInteger(value) || value < min || value > max) out.push(`${label} phải là số nguyên ${min}–${max}.`);
+  };
+  integer('width', 'Chiều rộng', 256, 2048);
+  integer('height', 'Chiều cao', 256, 2048);
+  integer('steps', 'Steps', 4, 80);
+  integer('batch_size', 'Batch', 1, 4);
+  if ((Number(payload.width) % 8) || (Number(payload.height) % 8)) out.push('Kích thước phải chia hết cho 8.');
+  const cfg = Number(payload.cfg_scale);
+  if (!Number.isFinite(cfg) || cfg < 1 || cfg > 30) out.push('CFG phải trong 1–30.');
+  const seed = Number(payload.seed);
+  if (!Number.isInteger(seed) || seed < -1) out.push('Seed phải là số nguyên từ -1 trở lên.');
+  if (payload.enable_hr) {
+    const scale = Number(payload.hr_scale);
+    const denoise = Number(payload.denoising_strength);
+    if (!Number.isFinite(scale) || scale < 1.1 || scale > 2) out.push('Hires scale phải trong 1,1–2.');
+    integer('hr_second_pass_steps', 'Hires steps', 1, 60);
+    if (!Number.isFinite(denoise) || denoise < 0.1 || denoise > 0.75) out.push('Denoise phải trong 0,1–0,75.');
+    if (!String(payload.hr_upscaler || '').trim()) out.push('Chọn Hires upscaler.');
+  }
   return out;
 }
 

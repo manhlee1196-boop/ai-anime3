@@ -64,11 +64,14 @@ async function main() {
   const realFetch = globalThis.fetch;
   const fetchCalls = [];
   const generationPayloads = [];
+  const jobRequests = [];
   globalThis.fetch = (input, init) => {
     const url = new URL(String(input), BASE).href;
     fetchCalls.push(url);
     if (url.endsWith('/vi-mobile/api/jobs') && init?.body) {
-      generationPayloads.push(JSON.parse(init.body).payload);
+      const request = JSON.parse(init.body);
+      jobRequests.push(request);
+      generationPayloads.push(request.payload);
     }
     return realFetch(url, init);
   };
@@ -202,6 +205,15 @@ const state_settings_api_url = () => {
   $('#imageSaveBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => nativeSaves.length === 2, { label: 'lưu từ thư viện qua MediaStore' });
   assert.match($('#imageSaveLocation').textContent, /Đã lưu thành công: Pictures\/Anime3\//);
+  $('#upscaleScale').value = '2';
+  $('#imageUpscaleBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => jobRequests.length === 2 && /Đã lưu bản upscale/.test($('#upscaleStatus').textContent),
+    { label: 'upscale ảnh thư viện qua job nền' });
+  assert.equal(jobRequests[1].operation, 'extras');
+  assert.equal(jobRequests[1].payload.upscaling_resize, 2);
+  assert.equal(jobRequests[1].payload.upscaler_1, 'RealESRGAN_x4plus_anime_6B');
+  assert.ok(jobRequests[1].payload.image.length > 100, 'phải gửi ảnh gốc base64 cho API extras');
+  assert.match($('#imageMeta').textContent, /Upscale 2×/);
   $('#sheetImage [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
 
   // --- kho tag tiếng Việt

@@ -148,7 +148,7 @@ def test_cli():
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True)
         check(f"{script.name}: cú pháp hợp lệ", r.returncode == 0, r.stderr)
     check("install.sh có quyền thực thi", os.access(INSTALL, os.X_OK))
-    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.7")
+    check("--version", cli(["--version"]).stdout.strip() == "install.sh 1.0.8")
     r = cli(["--help"])
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
@@ -156,7 +156,7 @@ def test_cli():
           ["preflight", "repo", "forge", "torch", "model", "extras", "launch", "tunnel", "verify"])
     for args in (["--unknown"], ["--model"], ["--only"], ["--model", "--no-launch"],
                  ["--model", "gguf"], ["--only", "bogus"], ["--tunnel", "bad"],
-                 ["--port", "99999"], ["--port", "x"], ["--cuda", "cu999"],
+                 ["--port", "99999"], ["--port", "x"], ["--cuda", "cu999"], ["--vram-level", "ultra"],
                  ["--model-file", "../model.safetensors"], ["--model-sha", "wrong"]):
         r = cli(args, timeout=5)
         check(f"Từ chối input sai: {' '.join(args)}", r.returncode == 2, r.stdout + r.stderr)
@@ -718,7 +718,9 @@ def test_notebook():
           and "pip install --quiet --disable-pip-version-check boto3" in setup_source
           and not any(name in (ROOT / "colab/install.sh").read_text().split("CONFIG_KEYS=(", 1)[1].split(")", 1)[0]
                       for name in s3_names))
-    check("Form tối giản chỉ có model và tunnel", source.count("#@param") == 2 and "NO_LAUNCH" not in source and "SMOKE_TEST" not in source)
+    check("Form tối giản có model, tunnel và mức VRAM", source.count("#@param") == 3
+          and "VRAM_LEVEL" in source and "--vram-level" in source
+          and "NO_LAUNCH" not in source and "SMOKE_TEST" not in source)
     check("Không mount Drive", "drive.mount" not in source)
     check("Bootstrap có raw GitHub và API dự phòng", "raw.githubusercontent.com" in source and "api.github.com" in source)
     check("Metadata notebook chọn GPU T4", nb["metadata"]["accelerator"] == "GPU" and nb["metadata"]["colab"]["gpuType"] == "T4")
@@ -771,6 +773,32 @@ printf '%s' "${CURL_CODE:-200}"
               and "Mất mạng thật" in result.stderr, result.stdout + result.stderr)
 
 
+def test_vram_levels_and_restart_guard(tmp):
+    print("8) Bốn mức VRAM và guard không restart khi có job")
+    for total, flag, label in ((15360, "--highvram", "HighVRAM mặc định từ 12 GB"),
+                               (8192, "", "Cân bằng ở 8–12 GB"),
+                               (4096, "--lowvram", "Tiết kiệm dưới 8 GB")):
+        result = source_call(INSTALL,
+            f'VRAM_LEVEL=auto; GPU_VRAM_MB={total}; resolve_vram_level; printf "FLAG=%s\\n" "$VRAM_FLAG"')
+        check(f"Auto VRAM {total} MiB → {label}", result.returncode == 0
+              and f"FLAG={flag}" in result.stdout, result.stdout + result.stderr)
+    for level, flag in (("balanced", ""), ("highvram", "--highvram"),
+                        ("lowvram", "--lowvram"), ("gpu-only", "--gpu-only")):
+        result = source_call(SETUP, 'launch_args', {"VRAM_LEVEL": level, "VRAM_FLAG": "",
+                                                   "TUNNEL": "none", "PY": sys.executable})
+        check(f"Mức {level} truyền đúng cờ Forge", result.returncode == 0
+              and ((flag in result.stdout) if flag else not any(x in result.stdout for x in
+                  ("--highvram", "--lowvram", "--gpu-only"))), result.stdout + result.stderr)
+    busy_python = tmp / "busy-python"
+    executable(busy_python, "#!/usr/bin/env bash\nexit 10\n")
+    result = source_call(INSTALL, 'api_ready() { return 0; }; guard_active_job_before_restart',
+                         {"PY": str(busy_python)})
+    check("Job đang chạy chặn restart/đổi VRAM", result.returncode != 0
+          and "Không restart/đổi VRAM" in result.stderr, result.stdout + result.stderr)
+    source = INSTALL.read_text()
+    check("Guard chạy trước run_setup stop", "guard_active_job_before_restart\n    run_setup stop" in source)
+
+
 def main():
     test_cli()
     test_metadata()
@@ -783,6 +811,8 @@ def main():
     test_notebook()
     test_public_link_verification()
     test_network_probe()
+    with tempfile.TemporaryDirectory(prefix="wai-vram-test-") as directory:
+        test_vram_levels_and_restart_guard(Path(directory))
     print("\n" + "=" * 68)
     if FAIL:
         print(f"HỎNG {len(FAIL)}/{len(PASS) + len(FAIL)} kiểm tra:", "; ".join(FAIL))

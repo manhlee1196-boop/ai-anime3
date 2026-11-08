@@ -286,7 +286,7 @@ function bindEvents() {
   $('#rebuildNegativeBtn').addEventListener('click', rebuildNegative);
 
   // tham số nâng cao
-  for (const id of ['seed', 'steps', 'cfg', 'batch', 'clipSkip', 'hrScale', 'denoise']) {
+  for (const id of ['seed', 'steps', 'cfg', 'batch', 'clipSkip', 'hrScale', 'hrSteps', 'denoise', 'hrUpscaler']) {
     $(`#${id}`).addEventListener('change', () => { readAdvanced(); updatePromptMeta(); });
   }
   $('#hires').addEventListener('change', () => { readAdvanced(); updatePromptMeta(); });
@@ -378,6 +378,8 @@ function bindEvents() {
 
   // ảnh
   $('#imageReuseBtn').addEventListener('click', reuseImage);
+  $('#imageUpscaleBtn').addEventListener('click', upscaleCurrentImage);
+  $('#upscaleCancelBtn').addEventListener('click', cancelUpscale);
   $('#imageSaveBtn').addEventListener('click', async () => {
     const item = state.viewId ? await store.getImage(state.viewId) : null;
     if (item) saveImageToDevice(item);
@@ -439,7 +441,7 @@ function closeSheet(sheet) {
 }
 
 // ------------------------------------------------------------------ cài đặt <-> form
-const ADVANCED_FIELDS = { seed: 'seed', steps: 'steps', cfg: 'cfg', batch: 'batch', clipSkip: 'clipSkip', hrScale: 'hrScale', denoise: 'denoise' };
+const ADVANCED_FIELDS = { seed: 'seed', steps: 'steps', cfg: 'cfg', batch: 'batch', clipSkip: 'clipSkip', hrScale: 'hrScale', hrSteps: 'hrSteps', denoise: 'denoise' };
 
 function applySettingsToForm() {
   const settings = state.settings;
@@ -451,6 +453,7 @@ function applySettingsToForm() {
     if (node) node.value = String(settings[key]);
   }
   $('#hires').checked = Boolean(settings.hires);
+  $('#hrUpscaler').value = settings.hrUpscaler || 'RealESRGAN_x4plus_anime_6B';
   $('#prompt').value = settings.prompt || '';
   $('#negative').value = settings.negative || buildNegativeFor(settings.rating);
   updateSelectionBar();
@@ -498,6 +501,7 @@ function readAdvanced() {
   }
   settings.seed = Number.isFinite(Number($('#seed').value)) ? Number($('#seed').value) : -1;
   settings.hires = $('#hires').checked;
+  settings.hrUpscaler = $('#hrUpscaler').value;
   saveSettingsNow();
 }
 
@@ -970,6 +974,8 @@ function currentOverrides() {
     seed: settings.seed,
     enable_hr: settings.hires,
     hr_scale: settings.hrScale,
+    hr_second_pass_steps: settings.hrSteps,
+    hr_upscaler: settings.hrUpscaler,
     denoising_strength: settings.denoise,
     clip_skip: settings.clipSkip,
   };
@@ -993,6 +999,12 @@ async function generate() {
     defaults: presets().defaults || {},
     overrides: currentOverrides(),
   });
+  const errors = core.payloadErrors(payload);
+  if (errors.length) {
+    setStatus(`⚠️ ${errors.join(' ')}`, { error: true });
+    toast(errors[0], { error: true, ms: 5000 });
+    return;
+  }
 
   state.busy = true;
   state.controller = new AbortController();
@@ -1188,6 +1200,7 @@ async function openImage(id, dataUrl, meta) {
   $('#imageView').src = dataUrl;
   $('#imageMeta').textContent = meta || '';
   $('#imageSaveLocation').textContent = 'Nơi xuất trên Android 10+: Pictures/Anime3. Ảnh chưa xuất vẫn nằm trong bộ nhớ riêng của app.';
+  if (!state.busy) $('#upscaleStatus').textContent = 'Bản mới được lưu riêng trong Thư viện; không tạo lại ảnh bằng prompt.';
   $('#imageReuseBtn').classList.toggle('hidden', !id);
   $('#imageDeleteBtn').classList.toggle('hidden', !id);
   openSheet('#sheetImage');
@@ -1208,6 +1221,111 @@ async function reuseImage() {
   closeSheet($('#sheetImage'));
   showTab('create');
   toast('Đã nạp lại prompt và seed');
+}
+
+async function upscaleCurrentImage() {
+  if (state.busy) {
+    toast('Đang có job chạy; chờ hoàn tất trước khi upscale.', { error: true });
+    return;
+  }
+  const sourceId = state.viewId;
+  const sourceUrl = $('#imageView').src;
+  if (!sourceUrl) return;
+  const scale = Number($('#upscaleScale').value);
+  const upscaler = $('#upscaleName').value;
+  if (![1.5, 2, 3, 4].includes(scale) || !upscaler) {
+    $('#upscaleStatus').textContent = 'Tỉ lệ hoặc upscaler không hợp lệ.';
+    return;
+  }
+  const width = Number($('#imageView').naturalWidth) || 0;
+  const height = Number($('#imageView').naturalHeight) || 0;
+  if (width && height && (width * scale > 4096 || height * scale > 4096)) {
+    $('#upscaleStatus').textContent = 'Kích thước đầu ra vượt 4096×4096; giảm tỉ lệ để tránh hết RAM/VRAM.';
+    toast('Ảnh upscale quá lớn; hãy giảm tỉ lệ.', { error: true, ms: 5000 });
+    return;
+  }
+
+  const source = sourceId ? await store.getImage(sourceId) : null;
+  state.busy = true;
+  state.controller = new AbortController();
+  $('#imageUpscaleBtn').disabled = true;
+  $('#upscaleCancelBtn').classList.remove('hidden');
+  $('#upscaleStatus').textContent = '⏳ Đang chuẩn bị ảnh và gửi job upscale…';
+  try {
+    const blob = source?.blob || await (await fetch(sourceUrl)).blob();
+    if (blob.size > 20 * 1024 * 1024) throw new Error('Ảnh đầu vào vượt 20 MiB.');
+    const encoded = await blobToBase64(blob);
+    const api = client();
+    state.activeClient = api;
+    const result = await api.extras({
+      image: encoded,
+      resize_mode: 0,
+      show_extras_results: true,
+      gfpgan_visibility: 0,
+      codeformer_visibility: 0,
+      codeformer_weight: 0,
+      upscaling_resize: scale,
+      upscaler_1: upscaler,
+      upscaler_2: 'None',
+      extras_upscaler_2_visibility: 0,
+      upscale_first: false,
+    }, {
+      signal: state.controller.signal,
+      onJob: (job) => { state.activeJobId = job.job_id; },
+      onProgress: (info) => {
+        const percent = Math.round((Number(info.progress) || 0) * 100);
+        $('#upscaleStatus').textContent = `⏳ Job ${state.activeJobId.slice(0, 8)} · ${percent}% · không tạo lại ảnh bằng prompt`;
+      },
+      onDownload: ({ loaded, total }) => {
+        $('#upscaleStatus').textContent = `⬇️ Đang tải bản upscale: ${formatBytes(loaded)}/${formatBytes(total)}`;
+      },
+    });
+    const output = result.images[0];
+    const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp' })[output.type] || 'png';
+    const info = { ...(result.info || {}), operation: 'extras', scale, upscaler, source_id: sourceId || '' };
+    const saved = await store.addImage({
+      blob: output,
+      name: `anime3-upscale-${Date.now()}.${extension}`,
+      mime: output.type || 'image/png',
+      thumb: await makeThumb({ blob: output }),
+      prompt: source?.prompt || '',
+      negative: source?.negative || '',
+      seed: source?.seed ?? null,
+      info,
+      params: { operation: 'extras', scale, upscaler },
+      index: 0,
+    });
+    if (state.viewUrl) URL.revokeObjectURL(state.viewUrl);
+    state.viewUrl = URL.createObjectURL(output);
+    openImage(saved.id, state.viewUrl, `Upscale ${scale}× · ${upscaler} · ảnh gốc được giữ nguyên`);
+    $('#upscaleStatus').textContent = `✅ Đã lưu bản upscale vào Thư viện · job ${result.jobId.slice(0, 8)}`;
+    toast('Đã upscale và lưu ảnh mới vào Thư viện');
+    renderGallery();
+  } catch (error) {
+    const message = error?.name === 'AbortError'
+      ? '⛔ Đã huỷ job upscale.'
+      : (error instanceof ForgeError ? error.message : `Lỗi upscale: ${error.message}`);
+    $('#upscaleStatus').textContent = message;
+    if (error?.name !== 'AbortError') toast(message, { error: true, ms: 6000 });
+  } finally {
+    state.busy = false;
+    state.controller = null;
+    state.activeClient = null;
+    state.activeJobId = '';
+    $('#imageUpscaleBtn').disabled = false;
+    $('#upscaleCancelBtn').classList.add('hidden');
+  }
+}
+
+async function cancelUpscale() {
+  if (!state.busy) return;
+  $('#upscaleStatus').textContent = '⛔ Đang huỷ job upscale…';
+  if (state.activeClient && state.activeJobId) {
+    await state.activeClient.cancelJob(state.activeJobId);
+  } else {
+    await client().interrupt();
+  }
+  state.controller?.abort();
 }
 
 async function imageFile(image) {

@@ -1,4 +1,4 @@
-"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.7.
+"""Sinh notebook Colab từng bước đồng bộ bộ cài >=1.0.8.
 
 Chạy: python3 colab/make_notebook.py. Notebook xuất ra không cần import generator.
 """
@@ -26,7 +26,7 @@ def code(text):
                   "outputs": [], "source": text.splitlines(True)})
 
 
-md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.7
+md("""# 🎨 WAI-Illustrious v17 — Google Colab · 1.0.8
 ### Forge Neo + tagcomplete + khối prompt Việt trong txt2img + 349.714 tag / 45.557 bản dịch
 
 Notebook này dùng **cùng bộ cài đã kiểm tra** với notebook một ô, nhưng chia từng
@@ -83,6 +83,7 @@ MODEL_DIR = "/content/models" #@param {type:"string"}
 TUNNEL = "share" #@param ["share", "cloudflared", "none"]
 PORT = 7860 #@param {type:"integer"}
 CUDA_INDEX = "auto" #@param ["auto", "cu130", "cu128", "cu126"]
+VRAM_LEVEL = "auto" #@param ["auto", "balanced", "highvram", "lowvram", "gpu-only"]
 RESTART = False #@param {type:"boolean"}
 FALLBACK_FP16 = False #@param {type:"boolean"}
 USE_CIVITAI_SECRET = False #@param {type:"boolean"}
@@ -97,7 +98,7 @@ os.environ.update({
     "FORGE_REPO": "https://github.com/Haoming02/sd-webui-forge-classic",
     "FORGE_BRANCH": "neo",
     "MODEL_ID": MODEL, "MODEL_DIR": MODEL_DIR, "TUNNEL": TUNNEL,
-    "PORT": str(PORT), "CUDA_INDEX": CUDA_INDEX,
+    "PORT": str(PORT), "CUDA_INDEX": CUDA_INDEX, "VRAM_LEVEL": VRAM_LEVEL,
     "VI_PROMPT_ROOT": "/content/ai-anime3",
 })
 # Không giữ MODEL_FILE/SHA/URL từ ô cấu hình FP16 của notebook cũ khi chọn FP8/HSWQ.
@@ -116,8 +117,8 @@ print(f"✔ {MODEL} · model {MODEL_DIR} · Forge {os.environ['FORGE_DIR']} · {
 
 md("""## Ô 2 — Lấy bộ cài mới và repo đúng nhánh
 
-Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.7** và cú pháp trước khi
-chạy. Không chạy cache <1.0.7. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
+Bootstrap thử raw GitHub rồi API, kiểm **phiên bản ≥1.0.8** và cú pháp trước khi
+chạy. Không chạy cache <1.0.8. Bộ cài clone đầy đủ kho prompt + thư viện mới + JS
 thay Việt → Anh; repo sẵn có được fast-forward khi sạch/cùng nhánh, không reset hard.
 Không đổi sang main/master hoặc xóa repo có thay đổi của bạn.
 """)
@@ -130,7 +131,8 @@ download_installer(INSTALLER, os.environ["REPO_BRANCH"], dict(os.environ))
 def run_install(stages, launch=False, restart=False, smoke=False):
     args = ["bash", str(INSTALLER), "--only", stages, "--model", MODEL,
             "--model-dir", MODEL_DIR, "--branch", os.environ["REPO_BRANCH"],
-            "--port", str(PORT), "--tunnel", TUNNEL, "--cuda", CUDA_INDEX]
+            "--port", str(PORT), "--tunnel", TUNNEL, "--cuda", CUDA_INDEX,
+            "--vram-level", VRAM_LEVEL]
     if not launch:
         args.append("--no-launch")
     if restart:
@@ -263,7 +265,7 @@ md("""---
 | Triệu chứng | Xử lý |
 |---|---|
 | Không có GPU | Runtime → Change runtime type → GPU T4 rồi chạy lại từ Ô 1 |
-| Không lấy được bộ cài ≥1.0.7 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.7 |
+| Không lấy được bộ cài ≥1.0.8 | Kiểm mạng/mở notebook mới; không dùng cache <1.0.8 |
 | Checkpoint trống / lỗi CUDA | Chạy `!bash /content/install.sh --diagnostics`; gửi phần lỗi đã che secret, không dump config/log riêng |
 | Model SHA/header sai | Chạy lại Ô 6 để tải tiếp/thử đúng nguồn; không đổi MODEL_FILE thủ công |
 | Tag Việt còn sau chọn | Kiểm accordion Prompt tiếng Việt (tab txt2img) có nút Thay mục Việt; chạy lại Ô 2 + Ô 7, bật RESTART rồi Ô 8 và reload cứng UI |
@@ -283,7 +285,7 @@ file dịch 2 cột, **old 3-column format tắt**. Mọi dữ liệu `/content`
 notebook = {
     "nbformat": 4, "nbformat_minor": 0,
     "metadata": {
-        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.7",
+        "colab": {"provenance": [], "gpuType": "T4", "name": "WAI v17 — Colab từng bước 1.0.8",
                   "collapsed_sections": []},
         "kernelspec": {"name": "python3", "display_name": "Python 3"},
         "language_info": {"name": "python"}, "accelerator": "GPU",
@@ -294,4 +296,4 @@ notebook = {
 # để "Run all" tải đúng mã nguồn thay vì một nhánh cũ.
 text = json.dumps(notebook, ensure_ascii=False, indent=1).replace(LEGACY_BRANCH, BRANCH)
 OUT.write_text(text + "\n", encoding="utf-8")
-print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.7")
+print(f"Đã sinh {OUT.name}: {sum(c['cell_type'] == 'code' for c in cells)} ô code, dùng bộ cài >=1.0.8")

@@ -312,4 +312,58 @@ const idle = {
     && bytes.join(',') === '1,2,3,4' && blob.type === 'image/png');
 }
 
+// Upscale dùng cùng job nền nhưng operation riêng; ảnh kết quả vẫn tải bằng binary.
+{
+  const JOB = 'e'.repeat(32);
+  let submitted = null;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: true, extras_available: true });
+      }
+      if (path === '/vi-mobile/api/jobs' && init.method === 'POST') {
+        submitted = JSON.parse(init.body);
+        return jsonResponse({ job_id: JOB, status: 'queued' }, 202);
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}/result`) {
+        return jsonResponse({ info: { raw: 'upscaled' }, files: [{ name: '000.png', size: 1,
+          mime: 'image/png', url: 'https://cdn.example/upscaled.png' }] });
+      }
+      if (path === `/vi-mobile/api/jobs/${JOB}`) return jsonResponse({ job_id: JOB, status: 'done' });
+      if (url === 'https://cdn.example/upscaled.png') {
+        return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([8])],
+          { type: 'image/png' }), text: async () => '' };
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.extras({ image: 'ZmFrZQ==', upscaling_resize: 2,
+    upscaler_1: 'RealESRGAN_x4plus_anime_6B' }, { interval: 1 });
+  check('extras gửi operation riêng và nhận Blob qua manifest', submitted.operation === 'extras'
+    && submitted.payload.upscaling_resize === 2 && result.images[0] instanceof Blob
+    && result.images[0].size === 1 && result.info.raw === 'upscaled');
+}
+
+// Server cũ không có extras_available: báo cập nhật, tuyệt đối không gửi job sai endpoint.
+{
+  let posts = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url, init) => {
+      if (new URL(url).pathname === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, async_jobs: true });
+      }
+      if (init.method === 'POST') posts += 1;
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try { await api.extras({ image: 'ZmFrZQ==' }, { interval: 1 }); }
+  catch (error) { failure = error; }
+  check('thiếu extras job API thì dừng trước khi POST', failure?.status === 409
+    && /Upscale job API/.test(failure.message) && posts === 0);
+}
+
 console.log(`\n✅ ${passed} kiểm tra ForgeClient đạt.`);

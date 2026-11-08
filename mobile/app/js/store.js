@@ -18,10 +18,12 @@ export const DEFAULT_SETTINGS = {
   sampler: 'Euler a',
   steps: 25,
   cfg: 6,
-  sizeIndex: 0,               // chỉ số trong presets.sizes
-  hires: true,
+  sizeIndex: 5,               // 832×1216: mặc định an toàn cho T4
+  hires: false,               // opt-in to avoid unexpected VRAM and render time
   hrScale: 1.5,
-  denoise: 0.4,
+  hrSteps: 12,
+  hrUpscaler: 'RealESRGAN_x4plus_anime_6B',
+  denoise: 0.35,
   clipSkip: 2,
   batch: 1,
   seed: -1,

@@ -1,6 +1,6 @@
 """Nội dung dùng chung khi sinh notebook; các ô đã xuất không cần import file này."""
 
-MIN_INSTALLER_VERSION = "1.0.7"
+MIN_INSTALLER_VERSION = "1.0.8"
 
 BOOTSTRAP_SOURCE = r'''import re
 import subprocess
@@ -33,7 +33,7 @@ def download_installer(dest, branch, env):
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".sh.tmp")
     for url in (raw, api):
-        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.7"}
+        headers = {"Accept": "application/vnd.github.raw", "User-Agent": "wai-colab-installer/1.0.8"}
         if env.get("GITHUB_TOKEN"):
             headers["Authorization"] = f"Bearer {env['GITHUB_TOKEN']}"
         try:
@@ -51,7 +51,7 @@ def download_installer(dest, branch, env):
         finally:
             if tmp.exists():
                 tmp.unlink()  # chỉ file tạm do ô này tạo; không đụng model/repo/ảnh
-    # Mất mạng chỉ dùng cache đủ mới/hợp lệ; bản 1.0.7 cần source bảng ảnh đã tạo.
+    # Mất mạng chỉ dùng cache đủ mới/hợp lệ; bản 1.0.8 cần source bảng ảnh đã tạo.
     try:
         version = checked_installer_version(dest.read_bytes())
         subprocess.run(["bash", "-n", str(dest)], check=True, capture_output=True)
@@ -87,7 +87,7 @@ prompt trong txt2img của Forge) chỉ chuyển
 prompt, không chuyển sampling. Điền txt2img mặc định ghép/thay mục tương ứng;
 **Thay toàn bộ** phải bật rõ ràng và có **Hoàn tác** trong phiên trình duyệt.
 
-### 🗂️ Bảng ảnh đã tạo (1.0.7)
+### 🗂️ Bảng ảnh đã tạo (1.0.8)
 
 Trong app Gradio, tab **Ảnh đã tạo** → **Làm mới** để xem ảnh cũ từ output của
 Forge (txt2img/img2img) và ví dụ notebook. Có thumbnail,

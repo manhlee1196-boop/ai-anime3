@@ -34,11 +34,11 @@ colab/
     scripts/mobile_jobs.py         job nền, idempotency, S3/R2, manifest, Range stream
     javascript/vi_prompt.js        điền prompt vào ô txt2img ngay trong trình duyệt
   tests/test_prompt_lib.py       bộ kiểm tra hồi quy (16 nhóm kiểm tra)
-  tests/test_install_sh.py       98 kiểm tra bộ cài (không cần GPU/mạng)
+  tests/test_install_sh.py       147 kiểm tra bộ cài/VRAM/restart guard (không cần GPU/mạng)
   tests/test_prompt_ui.py        smoke test app + khối txt2img, API/Forge host giả lập
   tests/test_generate_guard.py   chống treo: timeout/progress/huỷ job/chẩn đoán/log
   tests/test_prompt_workflow.py  10 nhóm thay tag/tham số/seed/quy trình
-  tests/test_notebooks.py        13 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
+  tests/test_notebooks.py        14 nhóm bootstrap/Run all/API (requests/Pillow, CPU)
   tests/test_vi_prompt_js.cjs    bridge + TAC đa từ, có tùy chọn mã upstream thật
   tests/test_headless_backend.py  4 nhóm Agg/Matplotlib/Dataframe/callback Gradio (CPU)
   tests/test_ui_diagnostics.py    13 nhóm HTTP/log/env + trang relay + transport queue + CPU
@@ -69,14 +69,17 @@ Web `/sdapi/v1/txt2img` và ảnh gốc trong outputs không đổi. Cấu hình
 ## Bộ cài một lệnh / notebook một ô (khuyên dùng)
 
 Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU rồi **Run all**.
-Form tối giản chỉ còn **model** và **tunnel**; mặc định FP16 + Gradio share. Cổng 7860,
-CUDA auto, `/content/models`, không mount Drive và không chạy smoke test được đặt sẵn.
-Các tùy chọn nâng cao vẫn nằm trong `install.sh`/notebook chi tiết.
+Form có **model**, **tunnel** và **mức VRAM**; mặc định FP16 + Gradio share + VRAM auto.
+Auto chọn **HighVRAM ≥12 GB**, **Cân bằng 8–12 GB**, **Tiết kiệm <8 GB**. Có thể chọn tay
+`balanced`, `highvram`, `lowvram`, `gpu-only`; GPU only đưa cả text encoder/VAE lên GPU nên
+dễ hết VRAM khi Hires. Cổng 7860, CUDA auto, `/content/models`, không mount Drive và không
+chạy smoke test được đặt sẵn. Các tùy chọn nâng cao vẫn nằm trong `install.sh`/notebook chi tiết.
 
 [**Mở notebook Colab tối giản**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F0f8a8365-ai-anime3/colab/WAI_v17_1click.ipynb)
 → chọn GPU T4 → **Run all**. Chạy lại ô sẽ cập nhật code/extension, giữ model và
 restart Forge để nạp job API mới cho Android; đợi job hiện tại kết thúc trước khi chạy.
-Ô cài vẫn từ chối cache cũ hơn 1.0.7.
+Ô cài từ chối cache cũ hơn 1.0.8. Bản 1.0.8 thêm chọn VRAM, guard không restart khi
+còn job Forge/mobile và Upscale ảnh đã có qua cùng job nền/file stream.
 **Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong app Gradio rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.

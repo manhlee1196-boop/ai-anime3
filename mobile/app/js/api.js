@@ -255,8 +255,17 @@ export class ForgeClient {
     }
   }
 
-  /** Tạo job nền và trả Blob tải từ manifest; không gửi/nhận ảnh base64. */
-  async txt2img(payload, {
+  async txt2img(payload, options = {}) {
+    return this.runJob(payload, { ...options, operation: 'txt2img' });
+  }
+
+  async extras(payload, options = {}) {
+    return this.runJob(payload, { ...options, operation: 'extras' });
+  }
+
+  /** Job nền dùng chung; response ảnh luôn là file binary qua manifest. */
+  async runJob(payload, {
+    operation = 'txt2img',
     onProgress = null,
     onJob = null,
     onDownload = null,
@@ -289,16 +298,18 @@ export class ForgeClient {
       const health = await this.request(`${JOB_API_ROOT}/health`, {
         timeout: 8000, signal: merged,
       });
-      if (!health?.async_jobs) {
+      if (!health?.async_jobs || (operation === 'extras' && !health?.extras_available)) {
         throw new ForgeError(
-          'Colab chưa có job API mới. Chạy lại notebook một ô để cập nhật extension; '
-          + 'app sẽ không dùng lại API base64 cũ.', { status: 409 },
+          operation === 'extras'
+            ? 'Colab chưa có Upscale job API. Cập nhật repo + extension rồi restart khi không còn job.'
+            : 'Colab chưa có job API mới. Chạy lại notebook một ô để cập nhật extension; '
+              + 'app sẽ không dùng lại API base64 cũ.', { status: 409 },
         );
       }
       const key = idempotencyKey || makeIdempotencyKey();
       const created = await this.request(`${JOB_API_ROOT}/jobs`, {
         method: 'POST',
-        body: { payload, idempotency_key: key },
+        body: { payload, operation, idempotency_key: key },
         timeout: 20000,
         signal: merged,
       });

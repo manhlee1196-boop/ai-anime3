@@ -98,13 +98,23 @@
             <input id="clipSkip" type="number" inputmode="numeric" min="1" max="12" value="2">
           </label>
           <label class="field">Hires scale
-            <input id="hrScale" type="number" inputmode="decimal" min="1" max="2" step="0.1" value="1.5">
+            <input id="hrScale" type="number" inputmode="decimal" min="1.1" max="2" step="0.1" value="1.5">
+          </label>
+          <label class="field">Hires steps
+            <input id="hrSteps" type="number" inputmode="numeric" min="1" max="60" step="1" value="12">
           </label>
           <label class="field">Denoise
-            <input id="denoise" type="number" inputmode="decimal" min="0.1" max="0.9" step="0.05" value="0.4">
+            <input id="denoise" type="number" inputmode="decimal" min="0.1" max="0.75" step="0.05" value="0.35">
+          </label>
+          <label class="field">Hires upscaler
+            <select id="hrUpscaler">
+              <option value="RealESRGAN_x4plus_anime_6B">RealESRGAN Anime 6B</option>
+              <option value="Lanczos">Lanczos</option>
+              <option value="Nearest">Nearest</option>
+            </select>
           </label>
         </div>
-        <label class="switch"><input id="hires" type="checkbox" checked> Hires fix (nét hơn, chậm gấp đôi)</label>
+        <label class="switch"><input id="hires" type="checkbox"> Hires fix (chủ động bật; tốn thêm VRAM)</label>
       </details>
     </div>
 
@@ -298,6 +308,31 @@
       <img id="imageView" class="image-view" alt="Ảnh đã tạo">
       <p id="imageMeta" class="hint"></p>
       <p id="imageSaveLocation" class="hint">Nơi xuất trên Android 10+: Pictures/Anime3. Ảnh chưa xuất vẫn nằm trong bộ nhớ riêng của app.</p>
+      <details class="details upscale-box">
+        <summary>✨ Upscale ảnh này — giữ nguyên ảnh gốc</summary>
+        <div class="grid2">
+          <label class="field">Tỉ lệ
+            <select id="upscaleScale">
+              <option value="1.5">1.5×</option>
+              <option value="2" selected>2×</option>
+              <option value="3">3×</option>
+              <option value="4">4×</option>
+            </select>
+          </label>
+          <label class="field">Upscaler
+            <select id="upscaleName">
+              <option value="RealESRGAN_x4plus_anime_6B">RealESRGAN Anime 6B</option>
+              <option value="Lanczos">Lanczos</option>
+              <option value="Nearest">Nearest</option>
+            </select>
+          </label>
+        </div>
+        <div class="row gap wrap">
+          <button id="imageUpscaleBtn" class="chip" type="button">✨ Tạo bản upscale</button>
+          <button id="upscaleCancelBtn" class="chip hidden" type="button">⛔ Huỷ</button>
+        </div>
+        <p id="upscaleStatus" class="hint">Bản mới được lưu riêng trong Thư viện; không tạo lại ảnh bằng prompt.</p>
+      </details>
       <div class="row gap wrap">
         <button id="imageReuseBtn" class="chip" type="button">♻️ Dùng lại prompt</button>
         <button id="imageSaveBtn" class="chip" type="button">💾 Lưu vào máy</button>

@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v12", sw)
+        self.assertIn("anime3-shell-v13", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -188,6 +188,11 @@ class MobileAssets(unittest.TestCase):
         self.assertIn('id="saveBtn"', self.html)
         self.assertIn('id="imageSaveBtn"', self.html)
         self.assertIn('id="imageSaveLocation"', self.html)
+        self.assertIn('id="hrSteps"', self.html)
+        self.assertIn('id="hrUpscaler"', self.html)
+        self.assertIn('id="imageUpscaleBtn"', self.html)
+        self.assertIn('id="upscaleCancelBtn"', self.html)
+        self.assertIn('operation: \'extras\'', self.ui)
         self.assertIn("APK chưa nạp được plugin lưu ảnh", self.ui)
         self.assertNotIn("toast('Đã tải ảnh về máy')", self.ui)
 

@@ -4,7 +4,7 @@
 # Xem hướng dẫn: colab/INSTALL.md. Notebook một ô: colab/WAI_v17_1click.ipynb.
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.7"
+INSTALLER_VERSION="1.0.8"
 # tunnel là stage phụ: chỉ chạy khi được nêu trong --only, không nằm trong cài đặt mặc định.
 DEFAULT_STAGES=(preflight repo forge torch model extras launch tunnel verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
@@ -12,7 +12,7 @@ LOG="${WAI_LOG:-/content/wai_install.log}"
 RUNTIME_DIR="${WAI_RUNTIME_DIR:-/content}"
 PY_BIN="${PY:-python3}"
 CONFIG_KEYS=(REPO_URL REPO_BRANCH REPO_DIR FORGE_DIR FORGE_REPO FORGE_BRANCH
-             MODEL_ID MODEL_DIR PORT TUNNEL VRAM_FLAG EXTRA_FORGE_ARGS CUDA_INDEX)
+             MODEL_ID MODEL_DIR PORT TUNNEL VRAM_LEVEL VRAM_FLAG EXTRA_FORGE_ARGS CUDA_INDEX)
 # Nhớ cấu hình đã chọn ở lần trước, nhưng biến môi trường/cờ lần này luôn thắng.
 # File JSON chỉ chứa cấu hình công khai, không lưu token hoặc URL tải riêng.
 declare -A ENV_GIVEN=()
@@ -36,6 +36,8 @@ CIVITAI_TOKEN="${CIVITAI_TOKEN:-}"
 CIVITAI_API_BASE="${CIVITAI_API_BASE:-https://civitai.com/api/v1}"
 PORT="${PORT:-7860}"
 TUNNEL="${TUNNEL:-share}"
+# Trống = tương thích config cũ: có VRAM_FLAG thì giữ flag, nếu không dùng auto.
+VRAM_LEVEL="${VRAM_LEVEL:-}"
 VRAM_FLAG="${VRAM_FLAG:-}"
 EXTRA_FORGE_ARGS="${EXTRA_FORGE_ARGS:-}"
 CUDA_INDEX="${CUDA_INDEX:-auto}"
@@ -97,7 +99,9 @@ BỘ CÀI WAI-Illustrious v17 + Forge Neo + kho prompt tiếng Việt
   --port SỐ              cổng Forge (mặc định 7860)
   --tunnel LOẠI          share | cloudflared | none (cài mới mặc định share)
   --cuda IDX             auto | cu130 | cu128 | cu126
-  --vram-flag CỜ         ví dụ "--lowvram"
+  --vram-level MỨC       auto | balanced | highvram | lowvram | gpu-only
+                         auto: HighVRAM ≥12 GB; Cân bằng 8–12; Tiết kiệm <8 GB
+  --vram-flag CỜ         cờ VRAM tùy chỉnh (tương thích bản cũ)
   --forge-args CỜ        cờ Neo bổ sung, đặt trong ngoặc kép
   --only DS              chỉ chạy stage trong DS, phân cách dấu phẩy; buộc chạy lại
   --skip DS              bỏ qua stage trong DS
@@ -146,7 +150,7 @@ PYSET
 parse_args() {
   while (( $# )); do
     case "$1" in
-      --model|--model-dir|--model-url|--model-file|--model-sha|--repo|--branch|--forge-dir|--port|--tunnel|--cuda|--vram-flag|--forge-args|--only|--skip)
+      --model|--model-dir|--model-url|--model-file|--model-sha|--repo|--branch|--forge-dir|--port|--tunnel|--cuda|--vram-level|--vram-flag|--forge-args|--only|--skip)
         if (( $# < 2 )) || [[ "$2" == --* && "$1" != --vram-flag && "$1" != --forge-args ]]; then
           bad "Thiếu giá trị cho $1"; exit 2
         fi
@@ -156,7 +160,9 @@ parse_args() {
           --model-sha) MODEL_SHA_OVERRIDE="$2" ;; --repo) REPO_URL="$2" ;;
           --branch) REPO_BRANCH="$2" ;; --forge-dir) FORGE_DIR="$2" ;;
           --port) PORT="$2" ;; --tunnel) TUNNEL="$2" ;; --cuda) CUDA_INDEX="$2" ;;
-          --vram-flag) VRAM_FLAG="$2" ;; --forge-args) EXTRA_FORGE_ARGS="$2" ;;
+          --vram-level) VRAM_LEVEL="$2"; VRAM_FLAG="" ;;
+          --vram-flag) VRAM_FLAG="$2"; if [[ -n "$2" ]]; then VRAM_LEVEL="custom"; else VRAM_LEVEL="balanced"; fi ;;
+          --forge-args) EXTRA_FORGE_ARGS="$2" ;;
           --only) ONLY_STAGES="$2" ;; --skip) SKIP_STAGES="$2" ;;
         esac
         shift 2 ;;
@@ -190,6 +196,12 @@ validate_args() {
   if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$PORT <= 0 || 10#$PORT >= 65536 )); then
     bad "--port phải trong 1–65535."; exit 2
   fi
+  if [[ -z "$VRAM_LEVEL" ]]; then
+    if [[ -n "$VRAM_FLAG" ]]; then VRAM_LEVEL="custom"; else VRAM_LEVEL="auto"; fi
+  fi
+  case "$VRAM_LEVEL" in auto|balanced|highvram|lowvram|gpu-only|custom) ;;
+    *) bad "--vram-level không hợp lệ. Chọn auto, balanced, highvram, lowvram hoặc gpu-only."; exit 2 ;;
+  esac
   case "$TUNNEL" in cloudflared|share|none) ;; *) bad "--tunnel không hợp lệ."; exit 2 ;; esac
   case "$CUDA_INDEX" in auto|cu130|cu128|cu126) ;; *) bad "--cuda không hợp lệ."; exit 2 ;; esac
   local list st key
@@ -339,7 +351,7 @@ fingerprint() {
       forge) printf '%s\0' "$FORGE_DIR" "$FORGE_REPO" "$FORGE_BRANCH" ;;
       torch) printf '%s\0' "$FORGE_DIR" "$CUDA_INDEX" "$DRIVER" ;;
       extras) printf '%s\0' "$FORGE_DIR" "$REPO_DIR" "$repo_sha" ;;
-      model|launch|verify) printf '%s\0' "$FORGE_DIR" "$MODEL_ID" "$MODEL_DIR" "$MODEL_FILE" "$MODEL_SHA256" "$PORT" "$TUNNEL" "$VRAM_FLAG" "$EXTRA_FORGE_ARGS" ;;
+      model|launch|verify) printf '%s\0' "$FORGE_DIR" "$MODEL_ID" "$MODEL_DIR" "$MODEL_FILE" "$MODEL_SHA256" "$PORT" "$TUNNEL" "$VRAM_LEVEL" "$VRAM_FLAG" "$EXTRA_FORGE_ARGS" ;;
     esac
   } | sha256sum | cut -d' ' -f1
 }
@@ -430,6 +442,28 @@ network_gate() {
     problem "$1"
   fi
 }
+resolve_vram_level() {
+  local level="$VRAM_LEVEL"
+  if [[ "$level" == auto ]]; then
+    if [[ ! "$GPU_VRAM_MB" =~ ^[0-9]+$ ]] || (( GPU_VRAM_MB <= 0 )); then
+      GPU_VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs || true)
+      [[ "$GPU_VRAM_MB" =~ ^[0-9]+$ ]] || GPU_VRAM_MB=0
+    fi
+    if (( GPU_VRAM_MB >= 12000 )); then level="highvram"
+    elif (( GPU_VRAM_MB > 0 && GPU_VRAM_MB < 8000 )); then level="lowvram"
+    else level="balanced"; fi
+  fi
+  case "$level" in
+    highvram) VRAM_FLAG="--highvram" ;;
+    lowvram) VRAM_FLAG="--lowvram" ;;
+    gpu-only) VRAM_FLAG="--gpu-only" ;;
+    balanced) VRAM_FLAG="" ;;
+    custom|auto) : ;; # auto không có GPU: để preflight xử lý; custom giữ cờ tương thích
+    *) die "Mức VRAM không hợp lệ: $level" ;;
+  esac
+  info "Mức VRAM: $VRAM_LEVEL → ${VRAM_FLAG:-Cân bằng (mặc định Forge)}"
+}
+
 stage_preflight() {
   step "Kiểm tra GPU, ổ đĩa và mạng"
   local t line drv_major free_kb need_gb free_gb
@@ -447,6 +481,7 @@ stage_preflight() {
     problem "Không có GPU. Colab → Runtime → Change runtime type → GPU T4."
   fi
   [[ "$GPU_VRAM_MB" =~ ^[0-9]+$ ]] || GPU_VRAM_MB=0
+  resolve_vram_level
   if (( GPU_VRAM_MB > 0 && GPU_VRAM_MB < 8000 )); then
     warn "VRAM <8 GB; model có thể thiếu bộ nhớ."
     [[ -n "$VRAM_FLAG" ]] || VRAM_FLAG="--lowvram"
@@ -565,7 +600,7 @@ run_setup() {
   MODEL_DIR="$MODEL_DIR" MODEL_FILE="$MODEL_FILE" MODEL_SHA256="$MODEL_SHA256" \
   MODEL_MIN_BYTES="$MODEL_MIN_BYTES" MODEL_LABEL="$MODEL_LABEL" MODEL_URL="$MODEL_URLS_STR" \
   CIVITAI_TOKEN="$CIVITAI_TOKEN" CIVITAI_VERSION_ID="$CIVITAI_VERSION_ID" \
-  PORT="$PORT" TUNNEL="$TUNNEL" VRAM_FLAG="$VRAM_FLAG" PY="$PY_BIN" \
+  PORT="$PORT" TUNNEL="$TUNNEL" VRAM_LEVEL="$VRAM_LEVEL" VRAM_FLAG="$VRAM_FLAG" PY="$PY_BIN" \
   TORCH_INDEX="$CUDA_PICK" FORCE_TORCH="$FORCE" EXTRA_FORGE_ARGS="$EXTRA_FORGE_ARGS" \
   WAI_RUNTIME_DIR="$RUNTIME_DIR" VI_PROMPT_ROOT="$REPO_DIR" \
   WAI_PROFILE_MODEL_ID="$MODEL_ID" WAI_PROFILE_CFG="$(m_field "$MODEL_ID" cfg)" \
@@ -746,6 +781,34 @@ stage_model() {
 
 # ------------------------------------------------------------------- API / launch
 api_ready() { curl -fsS --max-time 3 "http://127.0.0.1:$PORT/sdapi/v1/sd-models" >/dev/null 2>&1; }
+guard_active_job_before_restart() {
+  api_ready || return 0
+  local rc=0
+  "$PY_BIN" - "$PORT" <<'PYJOB' || rc=$?
+import json, sys, urllib.request
+try:
+    with urllib.request.urlopen(f"http://127.0.0.1:{int(sys.argv[1])}/sdapi/v1/progress?skip_current_image=true", timeout=4) as response:
+        data = json.load(response)
+    state = data.get("state") if isinstance(data, dict) else {}
+    count = int(state.get("job_count") or data.get("job_count") or 0)
+    active_mobile = 0
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{int(sys.argv[1])}/vi-mobile/api/health", timeout=4) as response:
+            health = json.load(response)
+        active_mobile = int(health.get("active_jobs") or 0)
+    except (OSError, ValueError, TypeError):
+        pass  # extension cũ không có active_jobs: vẫn dùng tiến trình Forge chuẩn
+    sys.exit(10 if count > 0 or active_mobile > 0 else 0)
+except (OSError, ValueError, TypeError):
+    sys.exit(2)  # không đoán trạng thái khi endpoint quá tải/không phản hồi
+PYJOB
+  if [[ "$rc" == 10 ]]; then
+    die "Forge đang có job chạy. Không restart/đổi VRAM; chờ job hoàn tất rồi chạy lại lệnh."
+  fi
+  if [[ "$rc" != 0 ]]; then
+    warn "Không đọc được tiến trình; chỉ tiếp tục nếu bạn đã kiểm tra không còn job."
+  fi
+}
 owned_forge() {
   [[ -s "$RUNTIME_DIR/forge.pid" ]] || return 1
   local pid
@@ -754,6 +817,7 @@ owned_forge() {
   tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$FORGE_DIR/launch.py"
 }
 stage_launch() {
+  resolve_vram_level
   resolve_model
   [[ -f "$MODEL_DIR/$MODEL_FILE" ]] || die "Chưa có model đã chọn. Chạy stage model trước."
   local same=0
@@ -766,6 +830,7 @@ stage_launch() {
     die "Cổng $PORT đã có dịch vụ không do bộ cài quản lý. Không tự dừng nó; đổi --port hoặc dừng dịch vụ đó."
   fi
   if owned_forge && [[ "$same" == 0 || "$RESTART" == 1 || "$FORCE" == 1 ]]; then
+    guard_active_job_before_restart
     run_setup stop
   fi
   save_settings

@@ -72,8 +72,8 @@ def install_fakes():
 
 class FakeRequest:
     def __init__(self, payload):
-        if not str(payload.get("prompt") or "").strip():
-            raise ValueError("prompt là bắt buộc")
+        if not str(payload.get("prompt") or "").strip() and not payload.get("image"):
+            raise ValueError("prompt/image là bắt buộc")
         self.payload = dict(payload)
         for key, value in payload.items():
             setattr(self, key, value)
@@ -91,9 +91,10 @@ class FakeRequest:
         return {**self.payload, "send_images": self.send_images, "save_images": self.save_images}
 
 
-def require_key(x_api_key: str = Header(default=None)):
-    if x_api_key != "secret":
-        raise HTTPException(status_code=401, detail="missing key")
+if HAVE_FASTAPI:
+    def require_key(x_api_key: str = Header(default=None)):
+        if x_api_key != "secret":
+            raise HTTPException(status_code=401, detail="missing key")
 
 
 @unittest.skipUnless(HAVE_FASTAPI and HAVE_PIL, "cần fastapi + Pillow")
@@ -105,12 +106,15 @@ class MobileRoute(unittest.TestCase):
         cls.ext = load_module("vi_prompt_tab_route", EXT_PATH)
         cls.jobs = load_module("anime3_mobile_jobs_test", JOBS_PATH)
         cls.real_txt2img_request = cls.ext._txt2img_request
+        cls.real_extras_request = cls.ext._extras_request
         cls.ext._txt2img_request = lambda endpoint, payload: FakeRequest(payload)
+        cls.ext._extras_request = lambda endpoint, payload: FakeRequest(payload)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         os.environ["ANIME3_MOBILE_JOB_DIR"] = self.temp.name
         self.calls = []
+        self.extra_calls = []
         self.interrupts = 0
         self.started = threading.Event()
         self.release = threading.Event()
@@ -130,12 +134,22 @@ class MobileRoute(unittest.TestCase):
                     "width": 64, "height": 64}
             return types.SimpleNamespace(images=[encoded], info=json.dumps(info), parameters={})
 
+        def extras_endpoint(payload: dict):
+            self.extra_calls.append(payload.model_dump())
+            image = Image.new("RGB", (128, 128), (210, 120, 30))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            return types.SimpleNamespace(images=[encoded], info="upscaled", parameters={})
+
         def interrupt():
             self.interrupts += 1
 
         self.app = FastAPI()
         dependencies = [Depends(require_key)] if self._testMethodName == "test_09_auth_dependencies" else []
         self.app.add_api_route("/sdapi/v1/txt2img", standard_endpoint,
+                               methods=["POST"], dependencies=dependencies)
+        self.app.add_api_route("/sdapi/v1/extra-single-image", extras_endpoint,
                                methods=["POST"], dependencies=dependencies)
         self.app.add_api_route("/sdapi/v1/interrupt", interrupt, methods=["POST"])
         self.manager = self.ext.serve_mobile_app(None, self.app)
@@ -182,6 +196,7 @@ class MobileRoute(unittest.TestCase):
         health = self.client.get("/vi-mobile/api/health", headers=self.auth_headers())
         self.assertEqual(health.status_code, 200)
         self.assertTrue(health.json()["async_jobs"])
+        self.assertTrue(health.json()["extras_available"])
         self.assertIn("object_storage", health.json())
 
     def test_02_job_idempotency_original_png_manifest_and_range(self):
@@ -246,6 +261,7 @@ class MobileRoute(unittest.TestCase):
         first = self.create_job("first").json()["job_id"]
         self.assertTrue(self.started.wait(2))
         second = self.create_job("second", {"prompt": "không được chạy", "width": 64, "height": 64}).json()["job_id"]
+        self.assertEqual(self.client.get("/vi-mobile/api/health").json()["active_jobs"], 2)
         self.assertEqual(self.client.delete(f"/vi-mobile/api/jobs/{second}").json()["status"], "cancelled")
         self.release.set()
         self.assertEqual(self.wait_job(first)["status"], "done")
@@ -367,6 +383,45 @@ class MobileRoute(unittest.TestCase):
         disabled = type(self).real_txt2img_request(endpoint, {"prompt": "1girl", "enable_hr": False})
         self.assertNotIn("hr_additional_modules", disabled)
         self.assertEqual(len(captured), 3)
+
+    def test_11_extras_upscale_uses_background_job_and_binary_manifest(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (64, 64), "white").save(buffer, format="PNG")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        response = self.client.post("/vi-mobile/api/jobs", json={
+            "operation": "extras",
+            "payload": {"image": encoded, "resize_mode": 0, "upscaling_resize": 2,
+                        "upscaler_1": "RealESRGAN_x4plus_anime_6B", "upscaler_2": "None"},
+            "idempotency_key": "upscale-one",
+        })
+        self.assertEqual(response.status_code, 202, response.text)
+        job_id = response.json()["job_id"]
+        self.assertEqual(self.wait_job(job_id)["status"], "done")
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.extra_calls), 1)
+        self.assertEqual(self.extra_calls[0]["upscaling_resize"], 2)
+        self.assertEqual(self.manager.jobs[job_id]["payload"], {})
+        manifest = self.client.get(f"/vi-mobile/api/jobs/{job_id}/result").json()
+        self.assertEqual(manifest["info"], {"raw": "upscaled"})
+        image = self.client.get(manifest["files"][0]["url"])
+        self.assertEqual(image.status_code, 200)
+        with Image.open(io.BytesIO(image.content)) as output:
+            self.assertEqual(output.size, (128, 128))
+        invalid = self.client.post("/vi-mobile/api/jobs", json={
+            "operation": "extras", "payload": {"image": "không-phải-base64"},
+        })
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(len(self.extra_calls), 1)
+        oversized_buffer = io.BytesIO()
+        Image.new("L", (4097, 1), 255).save(oversized_buffer, format="PNG")
+        oversized = self.client.post("/vi-mobile/api/jobs", json={
+            "operation": "extras",
+            "payload": {"image": base64.b64encode(oversized_buffer.getvalue()).decode("ascii"),
+                        "resize_mode": 0, "upscaling_resize": 1,
+                        "upscaler_1": "Lanczos"},
+        })
+        self.assertEqual(oversized.status_code, 422)
+        self.assertEqual(len(self.extra_calls), 1, "ảnh quá lớn không được đưa vào GPU")
 
 
 if __name__ == "__main__":

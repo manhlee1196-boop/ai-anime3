@@ -18,6 +18,7 @@ INTRO = """# ⚡ WAI-Illustrious v17 — Colab một ô
 **Dùng:** bật **GPU T4** → chạy ô duy nhất bên dưới (**Runtime → Run all**) → mở link public được in ra.
 
 - **FP16 + Gradio share** là mặc định khuyến nghị; chỉ đổi khi thật sự cần.
+- **VRAM auto:** HighVRAM từ 12 GB, Cân bằng 8–12 GB, Tiết kiệm dưới 8 GB; có thể chọn tay 4 mức. GPU only dễ hết VRAM khi Hires.
 - Tự cài Forge Neo, checkpoint, tag tiếng Việt, app `/vi-mobile/` và **job nền + file stream cho Android**.
 - Ảnh giữ PNG/JPEG/WebP gốc; có thể bật **S3/Cloudflare R2** bằng Colab Secrets để tải qua signed URL. Không cấu hình thì dùng file local có resume Range.
 - Model/ảnh nằm trong `/content`, **không mount Drive**, không tự xóa dữ liệu cũ.
@@ -41,6 +42,7 @@ Civitai token được đọc từ **Colab Secrets → `CIVITAI_TOKEN`** nếu c
 CELL = r'''#@title 🎨 Cài / cập nhật WAI v17 + Forge + App Android { display-mode: "form" }
 MODEL = "fp16" #@param ["fp16", "fp8", "int8", "hswq"]
 TUNNEL = "share" #@param ["share", "cloudflared"]
+VRAM_LEVEL = "auto" #@param ["auto", "balanced", "highvram", "lowvram", "gpu-only"]
 BRANCH = "__BRANCH__"
 
 # Mặc định gọn cho một ô; tùy chọn nâng cao dùng trực tiếp colab/install.sh.
@@ -87,9 +89,9 @@ download_installer(dest, BRANCH, env)
 
 args = ["bash", str(dest), "--model", MODEL, "--model-dir", MODEL_DIR,
         "--branch", BRANCH, "--port", str(PORT), "--tunnel", TUNNEL,
-        "--cuda", CUDA_INDEX, "--restart"]
+        "--cuda", CUDA_INDEX, "--vram-level", VRAM_LEVEL, "--restart"]
 
-print(f"▶ Model {MODEL}; tunnel {TUNNEL}. Giữ model/ảnh đã có, cập nhật code rồi mở Forge.", flush=True)
+print(f"▶ Model {MODEL}; tunnel {TUNNEL}; VRAM {VRAM_LEVEL}. Giữ model/ảnh đã có, cập nhật code rồi mở Forge.", flush=True)
 process = subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            text=True, bufsize=1, start_new_session=True)
 try:
