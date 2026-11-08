@@ -48,7 +48,7 @@ nếu cần token. **Không dán token vào lệnh hoặc URL.**
 Nếu raw GitHub không truy cập được, lấy script qua API:
 
 ```python
-!curl -fsSL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/manhlee1196-boop/ai-anime3/contents/colab/install.sh?ref=arena%2Fec9855a4-ai-anime3" -o /content/install.sh && bash /content/install.sh --model fp16
+!curl -fsSL -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/manhlee1196-boop/ai-anime3/contents/colab/install.sh?ref=arena%2F0f8a8365-ai-anime3" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
 
 Cài mới mặc định dùng **Gradio share** (`gradio.live`). Có thể chọn `--tunnel cloudflared`
@@ -57,7 +57,10 @@ trong `settings.json`; environment ghi đè file và cờ `--tunnel` ghi đè c�
 notebook cũ vẫn có thể truyền `cloudflared`: chọn `share` trước khi chạy lại nếu muốn giữ Gradio.
 
 Repo public nên **không cần GitHub token**. Notebook tự thử raw GitHub rồi API; script
-tải về được kiểm tra cú pháp và thay thế nguyên tử, không chạy bản tải dở.
+tải về được kiểm tra cú pháp và thay thế nguyên tử, không chạy bản tải dở. Preflight dùng
+GET có redirect và 3 lượt thử (không phụ thuộc HEAD `curl -I`). Nếu vẫn báo không kết nối
+GitHub, đó là lỗi mạng thật sau các lượt thử; chạy lại khi mạng ổn, không cần tạo token cho
+repo public và bộ cài không xóa model/dữ liệu hiện có.
 
 ## 3. Chọn model
 

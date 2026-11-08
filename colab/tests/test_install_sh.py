@@ -713,6 +713,32 @@ def test_notebook():
     check("Metadata notebook chọn GPU T4", nb["metadata"]["accelerator"] == "GPU" and nb["metadata"]["colab"]["gpuType"] == "T4")
 
 
+def test_network_probe():
+    print("7) Probe mạng dùng GET và retry, không dừng vì HEAD bị chặn")
+    with tempfile.TemporaryDirectory(prefix="wai-network-probe-") as directory:
+        tools = Path(directory)
+        trace = tools / "curl.args"
+        executable(tools / "curl", '''#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$CURL_TRACE"
+if [[ "$*" == *" -I "* ]]; then exit 7; fi
+printf '%s' "${CURL_CODE:-200}"
+''')
+        env = {"PATH": str(tools) + os.pathsep + os.environ["PATH"],
+               "CURL_TRACE": str(trace), "CURL_CODE": "200"}
+        result = source_call(INSTALL, "probe_host github.com https://github.com/", env)
+        args = trace.read_text()
+        check("GitHub GET thành công không cần HEAD", result.returncode == 0
+              and "có phản hồi (HTTP 200)" in result.stdout and " -I " not in args,
+              result.stdout + result.stderr)
+        check("Probe có retry lỗi mạng/5xx thoáng qua", "--retry 2" in args
+              and "--retry-all-errors" in args and "-L" in args)
+        result = source_call(INSTALL, "probe_host github.com https://github.com/",
+                             {**env, "CURL_CODE": "000"})
+        check("Mất kết nối thật vẫn báo lỗi rõ sau các lượt thử", result.returncode == 1
+              and "sau 3 lượt" in result.stdout and "HTTP 000" in result.stdout,
+              result.stdout + result.stderr)
+
+
 def main():
     test_cli()
     test_metadata()
@@ -724,6 +750,7 @@ def main():
         test_lifecycle(tmp)
     test_notebook()
     test_public_link_verification()
+    test_network_probe()
     print("\n" + "=" * 68)
     if FAIL:
         print(f"HỎNG {len(FAIL)}/{len(PASS) + len(FAIL)} kiểm tra:", "; ".join(FAIL))

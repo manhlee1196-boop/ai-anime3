@@ -395,11 +395,15 @@ run_stage() {
 # ------------------------------------------------------------------- preflight
 probe_host() {
   local name="$1" url="$2" code
-  code=$(curl -s -o /dev/null --connect-timeout 5 --max-time 8 -w '%{http_code}' -I "$url" 2>/dev/null || true)
+  # Một số mạng chặn HEAD nhưng GET/clone vẫn hoạt động. Dùng GET + redirect và
+  # retry lỗi mạng/5xx thoáng qua thay vì dừng cả bộ cài sau một lần curl -I.
+  code=$(curl -sS -L -o /dev/null --connect-timeout 8 --max-time 15 \
+    --retry 2 --retry-all-errors --retry-delay 2 --retry-max-time 45 \
+    -w '%{http_code}' "$url" 2>/dev/null || true)
   if [[ "$code" =~ ^[23][0-9][0-9]$ || "$code" == 401 || "$code" == 403 ]]; then
     ok "  $name: có phản hồi (HTTP $code)"; return 0
   fi
-  warn "  $name: chưa kết nối được (HTTP ${code:-000})"; return 1
+  warn "  $name: chưa kết nối được sau 3 lượt (HTTP ${code:-000})"; return 1
 }
 stage_preflight() {
   step "Kiểm tra GPU, ổ đĩa và mạng"
@@ -441,7 +445,7 @@ stage_preflight() {
   else
     ok "Ổ đĩa còn ${free_gb} GiB (cần ~${need_gb} GiB)."
   fi
-  probe_host github.com https://github.com/ || problem "Không kết nối được GitHub."
+  probe_host github.com https://github.com/ || problem "Không kết nối được GitHub sau 3 lượt. Kiểm tra mạng Colab rồi chạy lại; chưa tải model hay xóa dữ liệu."
   probe_host pypi.org https://pypi.org/simple/ || problem "Không kết nối được PyPI."
   probe_host download.pytorch.org https://download.pytorch.org/whl/ || problem "Không kết nối được nguồn PyTorch CUDA."
   probe_host huggingface.co https://huggingface.co/ || true
@@ -932,7 +936,7 @@ summary() {
     link=$(public_link)
     [[ -z "$link" ]] || ok "Mở Forge: $link"
     [[ -z "$link" ]] || ok "App điện thoại: $link/vi-mobile/"
-    info "Android dùng API ảnh JPEG nhẹ; web txt2img vẫn trả ảnh gốc như mặc định."
+      info "Android dùng job nền + file gốc qua S3/R2 hoặc local Range; web txt2img không đổi."
     info "Trong txt2img, mở accordion 'Prompt tiếng Việt' hoặc gõ tiếng Việt trực tiếp."
   elif [[ "$DO_LAUNCH" == 0 ]]; then info "Chưa khởi động Forge (--no-launch)."; fi
   info "Ảnh: $FORGE_DIR/outputs/txt2img-images/ · Log: $LOG"
