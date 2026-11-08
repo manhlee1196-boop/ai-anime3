@@ -19,7 +19,13 @@ Kết quả: `mobile/apk/android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Trên GitHub thì không phải làm gì thủ công: workflow
 [`.github/workflows/android-apk.yml`](../../.github/workflows/android-apk.yml) chạy các
-bước trên trong runner có sẵn JDK 17 + Android SDK rồi đăng file APK lên Artifacts.
+bước trên trong runner có sẵn JDK 17 + Android SDK rồi đăng file APK lên **Artifacts**;
+khi push tag `v*` thì gắn luôn vào **Releases** (link tải không cần đăng nhập).
+
+Workflow tự chạy khi push lên nhánh `arena/**` hoặc `main` **và** có thay đổi trong
+`mobile/**` (hoặc chính file workflow) — nên push tài liệu không tốn lượt CI. Nút
+“Run workflow” chỉ hiện khi file này có trên nhánh mặc định; ở repo này `main` là commit
+upload ban đầu (không cùng gốc lịch sử) nên dùng cách push tag / Re-run all jobs.
 
 ## Điều cần biết
 

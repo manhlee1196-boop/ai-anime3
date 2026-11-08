@@ -15,6 +15,10 @@ on:
     branches:
       - "arena/**"      # push lên nhánh làm việc là build luôn, không cần chờ merge
       - "main"
+    # chỉ build khi app/workflow đổi, để push tài liệu (colab/, *.md ở gốc) không tốn CI
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android-apk.yml"
     tags:
       - "v*"
 

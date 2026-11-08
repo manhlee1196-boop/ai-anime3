@@ -42,6 +42,21 @@ và service worker giữ phần giao diện để mở lại nhanh.
 
 APK là **vỏ WebView (Capacitor)** bọc đúng giao diện này, có icon trong ngăn kéo ứng dụng.
 
+### C0. Tải bản build sẵn (nhanh nhất, không cần đăng nhập GitHub)
+
+➡️ **[Tải `anime3-mobile.apk` (5,5 MB)](https://github.com/manhlee1196-boop/ai-anime3/releases/download/v1.0.0/anime3-mobile.apk)**
+· hoặc mở trang **Releases** của repo.
+
+Cài xong: mở app → **⚙** → dán link Forge (`https://xxxx.gradio.live`) → **Kiểm tra kết nối**.
+
+> **Vì sao không thấy nút “Run workflow” trong tab Actions?** GitHub chỉ hiện nút đó khi
+> file workflow có trên **nhánh mặc định (`main`)**. Ở repo này `main` là commit upload
+> ban đầu, không cùng gốc lịch sử với hệ thống Colab, nên không merge vào `main`. Thay
+> vào đó workflow **tự chạy khi push lên nhánh `arena/**`** (chỉ khi `mobile/**` hoặc
+> chính workflow thay đổi) và khi push tag `v*` → gắn APK vào **Releases**. Muốn build
+> lại: mở một lần chạy cũ trong tab Actions → **Re-run all jobs**, hoặc push tag mới
+> (`git tag v1.0.1 && git push origin v1.0.1`).
+
 ### C1. Build bằng GitHub Actions (không cần cài Android SDK)
 
 1. Vào tab **Actions** của repo → workflow **Android APK** → **Run workflow**.
