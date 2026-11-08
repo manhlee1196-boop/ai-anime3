@@ -36,8 +36,10 @@ say "Tạo project Android + chép app"
 # AAPT coi *.gz là bản nén của file cùng tên -> "Duplicate resources" với tags.json.
 rm -f "$APK_DIR/android/app/src/main/assets/public/data/tags.json.gz"
 
-# Gradle wrapper mặc định chỉ chờ 10 giây; gói gradle-all có thể cần lâu hơn trên mạng chậm.
+# Bản bin nhỏ hơn all; host trực tiếp tránh redirect GitHub Releases (504).
 WRAPPER_PROPERTIES="$APK_DIR/android/gradle/wrapper/gradle-wrapper.properties"
+sed -i -E 's|^distributionUrl=.*|distributionUrl=https://downloads.gradle.org/distributions/gradle-8.2.1-bin.zip|' "$WRAPPER_PROPERTIES"
+# Gradle wrapper mặc định chỉ chờ 10 giây; tăng lên 60 giây cho mạng chậm.
 if grep -q '^networkTimeout=' "$WRAPPER_PROPERTIES"; then
   sed -i -E 's/^networkTimeout=.*/networkTimeout=60000/' "$WRAPPER_PROPERTIES"
 else
