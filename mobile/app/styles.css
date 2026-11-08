@@ -386,8 +386,42 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   background: var(--bg-soft);
 }
 
+/* ------------------------------------------------------- gợi ý tag trong prompt */
+.quick-tags { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.quick-tags-head {
+  display: flex; align-items: center; justify-content: space-between;
+  color: var(--muted); font-size: 12px;
+}
+.quick-tags-head button { min-height: 44px; padding: 4px 0 4px 10px; color: var(--muted); font-size: 12px; }
+.quick-tags .chips { margin-top: 4px; }
+.quick-tag { flex: 0 0 auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.tag-suggest {
+  margin-top: 8px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 13px; background: var(--bg-soft);
+  box-shadow: 0 14px 34px -24px #000;
+}
+.tag-suggest-label { padding: 8px 11px 5px; color: var(--muted); font-size: 11px; }
+.tag-suggest-list { max-height: 294px; overflow-y: auto; }
+.suggestion-row {
+  width: 100%; min-height: 48px; display: flex; align-items: center; gap: 10px;
+  padding: 8px 11px; text-align: left; border-top: 1px solid var(--line);
+}
+.suggestion-row.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.suggestion-main { min-width: 0; flex: 1; }
+.suggestion-main strong, .suggestion-main span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-main strong { font: 600 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.suggestion-main span { color: var(--muted); font-size: 11px; }
+.suggestion-count { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+
 /* ------------------------------------------------------------------ kho tag */
-.searchbar { position: sticky; top: calc(var(--safe-top) + 60px); z-index: 20; background: var(--bg); padding-bottom: 6px; }
+.tag-library-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 4px 2px 12px; }
+.tag-library-head strong { font-size: 18px; }
+.tag-library-head .hint { margin-top: 3px; }
+.tag-library-head .pill { margin-top: 3px; }
+.searchbar { position: sticky; top: calc(var(--safe-top) + 60px); z-index: 20; background: var(--bg); padding: 4px 0 6px; }
+.searchbar .chips { margin-top: 8px; }
+.tag-result-meta { min-height: 17px; margin: 5px 2px 0; color: var(--muted); font-size: 11px; }
 .tag-list { display: flex; flex-direction: column; gap: 6px; }
 .tag-row {
   display: flex;

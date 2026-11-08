@@ -103,9 +103,21 @@ const state_settings_api_url = () => {
   await until(() => !$('#splash'), { label: 'splash biến mất' });
   assert.ok($$('#sizeChips .chip').length >= 5, 'thiếu chip kích thước');
   assert.equal($$('#ratingChips .chip').length, 4, 'thiếu chip phân loại');
+  assert.ok($$('#quickTagList .quick-tag').length >= 5, 'thiếu gợi ý tag nhanh trong prompt');
+
+  // --- gợi ý trực tiếp trong prompt: gõ tiếng Việt, chọn tag Anh từ kho offline
+  const prompt = $('#prompt');
+  prompt.value = '1girl, toc dai';
+  prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+  prompt.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await until(() => $$('#tagSuggestList .suggestion-row')
+    .some((row) => row.textContent.includes('long_hair')), { label: 'gợi ý tag trong prompt' });
+  $$('#tagSuggestList .suggestion-row').find((row) => row.textContent.includes('long_hair'))
+    .dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.match(prompt.value, /1girl, long_hair, $/);
+  assert.ok($('#tagSuggest').classList.contains('hidden'), 'gợi ý không đóng sau khi chọn');
 
   // --- sinh ảnh qua Forge giả
-  const prompt = $('#prompt');
   prompt.value = '1girl, solo, long_hair, ao dai, smile';
   prompt.dispatchEvent(new window.Event('input', { bubbles: true }));
   assert.match($('#tokenInfo').textContent, /\d+ tag/);
@@ -128,6 +140,15 @@ const state_settings_api_url = () => {
   $('.tab-btn[data-tab="tags"]').dispatchEvent(new window.Event('click', { bubbles: true }));
   await wait(200);
   assert.ok($$('#tagFilters .chip').length > 10, 'thiếu chip nhóm tag');
+  assert.match($('#tagDataMeta').textContent, /95\.939 tag/);
+
+  // Lỗi cũ: key nhóm dạng chuỗi bị so với index dạng số nên mọi nhóm đều rỗng.
+  $('#tagFilters [data-group="background"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => $$('#tagResults .tag-row').length > 0, { label: 'tag nhóm bối cảnh' });
+  assert.ok($$('#tagResults .tag-row').some((row) => row.textContent.includes('simple_background')));
+  assert.match($('#tagResultMeta').textContent, /Bối cảnh/);
+  $('#tagFilters .chip').dispatchEvent(new window.Event('click', { bubbles: true }));
+
   const search = $('#tagSearch');
   search.value = 'toc dai';
   search.dispatchEvent(new window.Event('input', { bubbles: true }));

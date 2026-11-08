@@ -21,6 +21,9 @@ const state = {
   tagLimit: 60,
   tagQuery: '',
   tagGroup: null,
+  quickTagOffset: 0,
+  suggestions: [],
+  suggestionIndex: -1,
   styleQuery: '',
   styleGroup: null,
   busy: false,
@@ -139,6 +142,8 @@ async function init() {
     renderStylePresets();
     renderStyleGroups();
     renderStyleList();
+    renderQuickTags();
+    renderTagLibraryMeta();
     splash('Sẵn sàng');
   }
   renderSizeChips();
@@ -234,13 +239,29 @@ function bindEvents() {
     }
   }
 
-  // prompt
-  $('#prompt').addEventListener('input', () => { updatePromptMeta(); scheduleSave(); });
+  // prompt + gợi ý từ kho tag offline
+  $('#prompt').addEventListener('input', () => {
+    updatePromptMeta();
+    scheduleSave();
+    schedulePromptSuggestions();
+    renderQuickTags();
+  });
+  $('#prompt').addEventListener('keydown', handlePromptSuggestionKeys);
+  $('#prompt').addEventListener('blur', () => {
+    clearTimeout(hideTagSuggestions.timer);
+    hideTagSuggestions.timer = setTimeout(hideTagSuggestions, 140);
+  });
+  $('#quickTagRefresh').addEventListener('click', () => {
+    state.quickTagOffset += 1;
+    renderQuickTags();
+  });
   $('#negative').addEventListener('input', scheduleSave);
   $('#normaliseBtn').addEventListener('click', normalisePromptField);
   $('#compactBtn').addEventListener('click', compactPromptField);
   $('#clearPromptBtn').addEventListener('click', () => {
     $('#prompt').value = '';
+    hideTagSuggestions();
+    renderQuickTags();
     updatePromptMeta();
     scheduleSave();
   });
@@ -339,6 +360,7 @@ function bindEvents() {
 
 function showTab(name) {
   document.body.dataset.tab = name;
+  if (name !== 'create') hideTagSuggestions();
   for (const tab of $$('.tab')) tab.classList.toggle('active', tab.id === `tab-${name}`);
   for (const button of $$('.tab-btn')) {
     const active = button.dataset.tab === name;
@@ -542,6 +564,10 @@ function renderTagResults() {
     group: state.tagGroup === 'all' ? null : state.tagGroup,
   });
   const selectedKeys = new Set(state.selected.map((tag) => core.normKey(tag)));
+  const groupIndex = state.data.resolveGroup(state.tagGroup);
+  const groupLabel = groupIndex === null ? 'Tất cả nhóm'
+    : state.data.groupLabels[groupIndex] || state.tagGroup;
+  $('#tagResultMeta').textContent = `${rows.length === state.tagLimit ? 'Hiển thị ' : ''}${rows.length} tag · ${groupLabel}`;
   const box = $('#tagResults');
   const children = rows.map((row) => {
     const isSelected = selectedKeys.has(core.normKey(row.tag));
@@ -586,7 +612,7 @@ function renderTagFilters() {
   box.replaceChildren(h('button', {
     class: `chip${state.tagGroup === 'all' || state.tagGroup === null ? ' active' : ''}`,
     type: 'button',
-    text: 'Phổ biến',
+    text: 'Tất cả',
     onclick: () => { state.tagGroup = 'all'; markFilters(); renderTagResults(); },
   }), ...groups.map((group) => h('button', {
     class: 'chip',
@@ -634,8 +660,137 @@ function insertSelectedTags() {
   showTab('create');
 }
 
-// ------------------------------------------------------------------ prompt
+// ------------------------------------------------------------------ prompt + gợi ý tag offline
+function renderQuickTags() {
+  const box = $('#quickTagList');
+  if (!box) return;
+  if (!state.data) {
+    box.replaceChildren(h('span', { class: 'hint' }, 'Kho tag chưa sẵn sàng.'));
+    return;
+  }
+  const present = new Set(core.parseTags($('#prompt').value).map((piece) => core.normKey(piece.tag)));
+  const groups = ['subject', 'appearance', 'clothing', 'expression', 'pose', 'background', 'camera'];
+  const chips = [];
+  for (const group of groups) {
+    const items = state.data.quick[group] || [];
+    if (!items.length) continue;
+    // Bỏ tag đầu nhóm ngoại hình để gợi ý mặc định bắt đầu bằng long_hair.
+    const start = (state.quickTagOffset + (group === 'appearance' ? 1 : 0)) % items.length;
+    for (let step = 0; step < items.length; step += 1) {
+      const [tag, vi] = items[(start + step) % items.length];
+      if (present.has(core.normKey(tag))) continue;
+      const groupIndex = state.data.groups.indexOf(group);
+      chips.push(h('button', {
+        class: 'chip quick-tag',
+        type: 'button',
+        text: tag,
+        title: `${vi || tag} · ${state.data.groupLabels[groupIndex] || group}`,
+        onclick: () => appendTags([tag], vi || tag),
+      }));
+      break;
+    }
+  }
+  box.replaceChildren(...(chips.length ? chips : [h('span', { class: 'hint' }, 'Các gợi ý đã có trong prompt.')]));
+}
+
+function renderTagLibraryMeta() {
+  if (!state.data) return;
+  $('#tagDataMeta').textContent = `${state.data.rows.length.toLocaleString('vi-VN')} tag · `
+    + `${state.data.browseGroups.length} nhóm · tìm Anh/Việt không cần mạng`;
+}
+
+function schedulePromptSuggestions() {
+  clearTimeout(schedulePromptSuggestions.timer);
+  clearTimeout(hideTagSuggestions.timer);
+  schedulePromptSuggestions.timer = setTimeout(renderPromptSuggestions, 80);
+}
+
+function hideTagSuggestions() {
+  clearTimeout(schedulePromptSuggestions.timer);
+  $('#tagSuggest').classList.add('hidden');
+  state.suggestions = [];
+  state.suggestionIndex = -1;
+}
+
+function renderPromptSuggestions() {
+  if (!state.data) {
+    hideTagSuggestions();
+    return;
+  }
+  const textarea = $('#prompt');
+  const fragment = core.activeTagFragment(textarea.value, textarea.selectionStart);
+  if (!fragment.query) {
+    hideTagSuggestions();
+    return;
+  }
+  const present = new Set(core.parseTags(textarea.value).map((piece) => core.normKey(piece.tag)));
+  const rows = state.data.search(fragment.query, { limit: 20 })
+    .filter((row) => !present.has(core.normKey(row.tag)))
+    .slice(0, 6);
+  if (!rows.length) {
+    hideTagSuggestions();
+    return;
+  }
+  state.suggestions = rows;
+  state.suggestionIndex = 0;
+  $('#tagSuggestList').replaceChildren(...rows.map((row, index) => h('button', {
+    class: `suggestion-row${index === 0 ? ' active' : ''}`,
+    type: 'button',
+    role: 'option',
+    'aria-selected': index === 0 ? 'true' : 'false',
+    onpointerdown: (event) => event.preventDefault(),
+    onclick: () => applyPromptSuggestion(index),
+  },
+  h('span', { class: 'suggestion-main' },
+    h('strong', { text: row.tag }),
+    h('span', { text: row.vi || row.groupLabel }),
+  ),
+  h('span', { class: 'suggestion-count', text: TagData.formatCount(row.count) }),
+  )));
+  $('#tagSuggest').classList.remove('hidden');
+}
+
+function applyPromptSuggestion(index) {
+  const row = state.suggestions[index];
+  if (!row) return;
+  const textarea = $('#prompt');
+  const replaced = core.replaceActiveTag(textarea.value, textarea.selectionStart, row.tag);
+  textarea.value = replaced.text;
+  hideTagSuggestions();
+  textarea.focus();
+  textarea.setSelectionRange(replaced.caret, replaced.caret);
+  updatePromptMeta();
+  saveSettingsNow();
+  renderQuickTags();
+}
+
+function markActiveSuggestion() {
+  $$('#tagSuggestList .suggestion-row').forEach((row, index) => {
+    const active = index === state.suggestionIndex;
+    row.classList.toggle('active', active);
+    row.setAttribute('aria-selected', active ? 'true' : 'false');
+    if (active) row.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function handlePromptSuggestionKeys(event) {
+  if ($('#tagSuggest').classList.contains('hidden') || !state.suggestions.length) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const direction = event.key === 'ArrowDown' ? 1 : -1;
+    state.suggestionIndex = (state.suggestionIndex + direction + state.suggestions.length)
+      % state.suggestions.length;
+    markActiveSuggestion();
+  } else if (event.key === 'Enter' && state.suggestionIndex >= 0) {
+    event.preventDefault();
+    applyPromptSuggestion(state.suggestionIndex);
+  } else if (event.key === 'Escape' || event.key === 'Tab') {
+    hideTagSuggestions();
+  }
+}
+
 function appendTags(tags, label = '') {
+  hideTagSuggestions();
   const textarea = $('#prompt');
   const existing = core.parseTags(textarea.value);
   const present = new Set(existing.map((piece) => core.normKey(piece.tag)));
@@ -652,6 +807,7 @@ function appendTags(tags, label = '') {
   }
   const prefix = textarea.value.trim() ? `${textarea.value.trim().replace(/,\s*$/, '')}, ` : '';
   textarea.value = `${prefix}${added.join(', ')}`;
+  renderQuickTags();
   updatePromptMeta();
   saveSettingsNow();
   toast(`Đã thêm ${added.length} tag${label ? ` · ${label}` : ''}`);

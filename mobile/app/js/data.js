@@ -100,15 +100,19 @@ export class TagData {
    */
   search(query, { limit = 40, category = null, group = null } = {}) {
     const q = normKey(query);
+    // UI giữ nhóm theo key (`appearance`), còn từng dòng lưu index (8).
+    // Quy đổi tại một điểm để cả số lẫn chuỗi đều lọc đúng, không trả danh sách rỗng.
+    const groupIndex = this.resolveGroup(group);
+    if (groupIndex === -1) return [];
     if (!q) {
-      return this._popular({ limit, category, group });
+      return this._popular({ limit, category, group: groupIndex });
     }
     const hits = [];
     const words = q.split(' ');
     for (let i = 0; i < this.rows.length; i += 1) {
       const row = this.rows[i];
       if (category !== null && row[2] !== category) continue;
-      if (group !== null && row[3] !== group) continue;
+      if (groupIndex !== null && row[3] !== groupIndex) continue;
       const en = this.en[i];
       const vi = this.vi[i];
       let score = -1;
@@ -125,6 +129,13 @@ export class TagData {
     }
     hits.sort((a, b) => (a.score - b.score) || (b.count - a.count));
     return hits.slice(0, limit).map((hit) => this.describe(hit.index));
+  }
+
+  /** Nhận cả index nhóm lẫn key; nhóm không tồn tại trả -1 để không lọc sai thành "tất cả". */
+  resolveGroup(group) {
+    if (group === null || group === undefined || group === '' || group === 'all') return null;
+    if (Number.isInteger(group)) return group >= 0 && group < this.groups.length ? group : -1;
+    return this.groups.indexOf(String(group));
   }
 
   _popular({ limit = 40, category = null, group = null } = {}) {

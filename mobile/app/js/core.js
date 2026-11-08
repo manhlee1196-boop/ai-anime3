@@ -121,6 +121,48 @@ export function splitPieces(text) {
   return out;
 }
 
+/** Tag đang gõ tại con trỏ, bỏ qua dấu phẩy trong ngoặc và <lora:...>. */
+export function activeTagFragment(text, caret = null) {
+  const value = String(text ?? '');
+  const requested = caret === null || caret === undefined ? value.length : Number(caret);
+  const position = Math.max(0, Math.min(value.length, Number.isFinite(requested) ? requested : 0));
+  let depth = 0;
+  let angle = 0;
+  let start = 0;
+  for (let i = 0; i < position; i += 1) {
+    const ch = value[i];
+    if (ch === '<') angle += 1;
+    else if (ch === '>' && angle > 0) angle -= 1;
+    else if (!angle && ch === '(') depth += 1;
+    else if (!angle && ch === ')' && depth > 0) depth -= 1;
+    if (ch === ',' && depth === 0 && angle === 0) start = i + 1;
+  }
+
+  let end = position;
+  for (; end < value.length; end += 1) {
+    const ch = value[end];
+    if (ch === ',' && depth === 0 && angle === 0) break;
+    if (ch === '<') angle += 1;
+    else if (ch === '>' && angle > 0) angle -= 1;
+    else if (!angle && ch === '(') depth += 1;
+    else if (!angle && ch === ')' && depth > 0) depth -= 1;
+  }
+  const leading = value.slice(start, position).match(/^\s*/)?.[0].length || 0;
+  const from = start + leading;
+  return { start: from, end, query: value.slice(from, position).trim() };
+}
+
+/** Thay tag đang gõ bằng gợi ý, giữ các tag phía sau và đưa con trỏ tới tag kế tiếp. */
+export function replaceActiveTag(text, caret, tag) {
+  const value = String(text ?? '');
+  const replacement = String(tag ?? '').trim();
+  if (!replacement) return { text: value, caret: Number(caret) || 0 };
+  const fragment = activeTagFragment(value, caret);
+  const rest = value.slice(fragment.end).replace(/^,\s*/, '');
+  const next = `${value.slice(0, fragment.start)}${replacement}, ${rest}`;
+  return { text: next, caret: fragment.start + replacement.length + 2 };
+}
+
 /** Ước lượng token CLIP (±10%) như prompt_lib/limits.py. */
 export function pieceTokens(piece) {
   let total = 0;

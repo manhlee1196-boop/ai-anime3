@@ -133,8 +133,8 @@ Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ t�
 
 | Màn hình | Nội dung |
 |---|---|
-| **Tạo ảnh** | Prompt + negative (gập lại), thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, hires scale, denoise, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
-| **Kho tag** | 95.939 tag phổ biến (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), lọc theo 18 nhóm, chọn nhiều tag rồi **Chèn vào prompt** |
+| **Tạo ảnh** | Prompt + negative (gập lại), **gợi ý tag Anh–Việt ngay khi gõ** và chip gợi ý nhanh từ kho offline, thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, hires scale, denoise, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
+| **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed** |
 | **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 5 endpoint Forge, công tắc tự nhận link |
@@ -161,7 +161,7 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 ## Kiểm thử
 
 ```bash
-node mobile/tests/test_core.mjs          # 33 test logic: prompt, payload, token, tìm tag, bắt link Forge
+node mobile/tests/test_core.mjs          # 36 test logic: prompt, payload, token, tìm/lọc/gợi ý tag, bắt link Forge
 node mobile/tests/test_api.mjs           # 10 test ForgeClient, gồm hồi quy POST internal/progress / HTTP 405
 python3 mobile/tests/test_mobile_assets.py   # 19 test dữ liệu/tài nguyên/id trong HTML
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả

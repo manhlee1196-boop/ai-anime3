@@ -60,6 +60,20 @@ check('splitPieces không cắt dấu phẩy trong ngoặc/LoRA', () => {
   assert.deepEqual(pieces.map((p) => p.trim()), ['a', '(b, c:1.2)', '<lora:x,1:0.5>', 'd']);
 });
 
+check('activeTagFragment nhận đúng tag đang gõ tại con trỏ', () => {
+  const fragment = core.activeTagFragment('1girl, long_h');
+  assert.equal(fragment.query, 'long_h');
+  assert.equal(fragment.start, 7);
+  assert.equal(fragment.end, 13);
+});
+
+check('replaceActiveTag thay tag đang gõ và giữ tag phía sau', () => {
+  const source = '1girl, sm, solo';
+  const replaced = core.replaceActiveTag(source, source.indexOf('sm') + 2, 'smile');
+  assert.equal(replaced.text, '1girl, smile, solo');
+  assert.equal(replaced.text.slice(replaced.caret), 'solo');
+});
+
 // ------------------------------------------------------------------ dựng prompt
 const fakeGroups = {
   masterpiece: 0, 'best quality': 0, rating_general: 1, '1girl': 3,
@@ -262,6 +276,15 @@ check('lọc theo nhóm vẫn trả kết quả đúng nhóm', () => {
   const rows = data.search('', { limit: 10, group: groupIndex });
   assert.ok(rows.length > 0);
   assert.ok(rows.every((row) => row.group === groupIndex));
+});
+
+check('mọi bộ lọc nhóm dạng chuỗi của UI đều có tag', () => {
+  for (const group of payload.browse_groups) {
+    const rows = data.search('', { limit: 3, group });
+    assert.ok(rows.length > 0, `nhóm ${group} bị rỗng`);
+    assert.ok(rows.every((row) => row.groupKey === group), `sai tag trong nhóm ${group}`);
+  }
+  assert.deepEqual(data.search('', { group: 'nhom_khong_co' }), []);
 });
 
 check('groupIndexOf và viOf dùng được cho tag phổ biến', () => {
