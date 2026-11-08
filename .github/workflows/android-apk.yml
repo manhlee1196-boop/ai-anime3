@@ -1,7 +1,8 @@
 name: Android APK
 
 # Build file APK để cài lên điện thoại Android.
-# Chạy tay ở tab Actions (nút "Run workflow") hoặc tự chạy khi push tag v* .
+# Tự chạy khi push lên nhánh arena/** (và main), khi push tag v*; hoặc bấm tay ở
+# tab Actions → "Run workflow" (nút này chỉ hiện khi workflow đã có trên nhánh main).
 # APK là vỏ Capacitor bọc chính mobile/app — không có bản sao thứ hai của giao diện.
 on:
   workflow_dispatch:
@@ -11,6 +12,9 @@ on:
         required: false
         default: "200"
   push:
+    branches:
+      - "arena/**"      # push lên nhánh làm việc là build luôn, không cần chờ merge
+      - "main"
     tags:
       - "v*"
 
