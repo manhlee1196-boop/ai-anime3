@@ -643,7 +643,9 @@ start_cloudflared() {
     mv -f "$bin.part" "$bin"; rm -f -- "$bin.part.aria2"; chmod +x "$bin"
   fi
   if ! owned_process "$TUNNEL_PID_FILE" 'cloudflared tunnel'; then
-    nohup "$bin" tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate \
+    # QUIC/UDP có thể bị mạng Colab chặn hoặc đứt giữa chừng -> Error 1033.
+    # HTTP/2 dùng TCP, phù hợp hơn cho tunnel quick dài trong môi trường này.
+    nohup "$bin" tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate --protocol http2 \
       > "$TUNNEL_LOG" 2>&1 < /dev/null &
     pid=$!; echo "$pid" > "$TUNNEL_PID_FILE"
   fi
@@ -655,6 +657,16 @@ start_cloudflared() {
     sleep 2
   done
   die "Chưa có link tunnel sau 2 phút. Xem $TUNNEL_LOG hoặc đổi TUNNEL=share."
+}
+
+stage_tunnel() {
+  step "Tạo lại Cloudflare Tunnel (giữ Forge/model đang chạy)"
+  [[ "$TUNNEL" == cloudflared ]] || die "Stage tunnel chỉ dùng với TUNNEL=cloudflared."
+  curl -fsS -m 5 "http://127.0.0.1:$PORT/sdapi/v1/sd-models" >/dev/null 2>&1 \
+    || die "Forge local chưa phản hồi; chạy --only launch,verify --restart thay vì tạo tunnel."
+  stop_owned "$TUNNEL_PID_FILE" 'cloudflared tunnel'
+  rm -f -- "$TUNNEL_LOG"  # không đọc nhầm link của tunnel cũ đã phát Error 1033
+  start_cloudflared
 }
 
 prepare_launch() {
@@ -777,9 +789,10 @@ case "${1:-all}" in
   extras)     stage_extras ;;
   launch)     stage_launch ;;
   launch-bg)  stage_launch_bg ;;
+  tunnel)     stage_tunnel ;;
   stop)       stage_stop ;;
   all)        stage_all ;;
-  *)          die "stage không hợp lệ: ${1:-} (chọn: gpu repo forge torch model extras launch launch-bg stop all)" ;;
+  *)          die "stage không hợp lệ: ${1:-} (chọn: gpu repo forge torch model extras launch launch-bg tunnel stop all)" ;;
 esac
 }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

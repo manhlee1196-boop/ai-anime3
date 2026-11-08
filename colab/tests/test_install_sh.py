@@ -153,7 +153,7 @@ def test_cli():
     check("--help có chọn model và chẩn đoán", r.returncode == 0 and all(x in r.stdout for x in
           ("fp16", "fp8", "int8", "hswq", "--doctor", "--only", "--no-launch")))
     check("Danh sách stage đúng thứ tự", cli(["--list-stages"]).stdout.split() ==
-          ["preflight", "repo", "forge", "torch", "model", "extras", "launch", "verify"])
+          ["preflight", "repo", "forge", "torch", "model", "extras", "launch", "tunnel", "verify"])
     for args in (["--unknown"], ["--model"], ["--only"], ["--model", "--no-launch"],
                  ["--model", "gguf"], ["--only", "bogus"], ["--tunnel", "bad"],
                  ["--port", "99999"], ["--port", "x"], ["--cuda", "cu999"],
@@ -211,6 +211,17 @@ def test_tunnel_defaults(tmp):
               result.returncode == 0 and ("--share" in args) == (tunnel == "share"), result.stderr)
     result = source_call(SETUP, 'fetch() { return 99; }; start_cloudflared', {"TUNNEL": "share"})
     check("Gradio share không tải/chạy Cloudflare", result.returncode == 0 and not result.stdout, result.stderr)
+    check("Cloudflare dùng HTTP/2 tránh QUIC/UDP gây Error 1033", "--protocol http2" in SETUP.read_text())
+    result = source_call(SETUP,
+        'curl() { return 0; }; stop_owned() { printf "stop:%s\\n" "$2"; }; '
+        'start_cloudflared() { printf "start\\n"; }; stage_tunnel', {"TUNNEL": "cloudflared"})
+    check("Stage tunnel chỉ restart Cloudflare, giữ Forge/model", result.returncode == 0
+          and "stop:cloudflared tunnel" in result.stdout and "start" in result.stdout
+          and "launch.py" not in result.stdout, result.stdout + result.stderr)
+    result = source_call(INSTALL, "selected tunnel")
+    check("Stage tunnel không chạy trong cài đặt mặc định", result.returncode == 1)
+    result = source_call(INSTALL, "ONLY_STAGES=tunnel; selected tunnel")
+    check("--only tunnel được chọn rõ ràng", result.returncode == 0)
 
 
 def test_public_link_verification():

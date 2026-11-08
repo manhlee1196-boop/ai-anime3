@@ -5,7 +5,8 @@
 set -Eeuo pipefail
 
 INSTALLER_VERSION="1.0.7"
-DEFAULT_STAGES=(preflight repo forge torch model extras launch verify)
+# tunnel là stage phụ: chỉ chạy khi được nêu trong --only, không nằm trong cài đặt mặc định.
+DEFAULT_STAGES=(preflight repo forge torch model extras launch tunnel verify)
 STATE_DIR="${STATE_DIR:-/content/.wai_state}"
 LOG="${WAI_LOG:-/content/wai_install.log}"
 RUNTIME_DIR="${WAI_RUNTIME_DIR:-/content}"
@@ -57,6 +58,7 @@ die()  { bad "$*"; printf 'Log: %s\n' "$LOG" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 in_list() { local item; for item in ${1//,/ }; do [[ "$item" != "$2" ]] || return 0; done; return 1; }
 selected() {
+  [[ "$1" != tunnel || -n "$ONLY_STAGES" ]] || return 1
   [[ -z "$ONLY_STAGES" ]] || in_list "$ONLY_STAGES" "$1" || return 1
   [[ -z "$SKIP_STAGES" ]] || ! in_list "$SKIP_STAGES" "$1" || return 1
   [[ "$1" != launch || "$DO_LAUNCH" == 1 ]]
@@ -772,6 +774,11 @@ stage_launch() {
   fingerprint launch > "$STATE_DIR/running.sha"
   run_setup launch-bg
   api_ready || die "Stage launch trả về nhưng API chưa phản hồi. Xem $RUNTIME_DIR/forge.log."
+}
+stage_tunnel() {
+  [[ "$TUNNEL" == cloudflared ]] || die "Stage tunnel chỉ dùng với TUNNEL=cloudflared."
+  api_ready || die "Forge local chưa phản hồi; không tạo tunnel trỏ tới dịch vụ đã dừng."
+  run_setup tunnel
 }
 
 # ------------------------------------------------------------------- verify (đọc-only)

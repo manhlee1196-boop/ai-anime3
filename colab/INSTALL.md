@@ -55,6 +55,13 @@ Cài mới mặc định dùng **Gradio share** (`gradio.live`). Có thể chọ
 hoặc `--tunnel none`; không tự đổi tunnel khi lỗi. Với phiên đã có, bộ cài giữ lựa chọn
 trong `settings.json`; environment ghi đè file và cờ `--tunnel` ghi đè cả hai. Form
 notebook cũ vẫn có thể truyền `cloudflared`: chọn `share` trước khi chạy lại nếu muốn giữ Gradio.
+Cloudflare dùng `--protocol http2` để tránh QUIC/UDP bị chặn. Nếu gặp **Error 1033** trong
+khi API local vẫn sống, cập nhật rồi chỉ tạo lại tunnel (không restart Forge/nạp lại model):
+
+```python
+!bash /content/install.sh --only repo
+!bash /content/ai-anime3/colab/install.sh --only tunnel
+```
 
 Repo public nên **không cần GitHub token**. Notebook tự thử raw GitHub rồi API; script
 tải về được kiểm tra cú pháp và thay thế nguyên tử, không chạy bản tải dở. Preflight dùng
