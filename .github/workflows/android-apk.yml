@@ -86,26 +86,48 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/gradle.log
+          {
+            ./gradlew --version 2>&1 | head -20
+            echo "--- @capacitor packages"
+            ls ../node_modules/@capacitor 2>/dev/null
+            node -e "console.log('capacitor core', require('../node_modules/@capacitor/core/package.json').version)" 2>/dev/null || true
+            node -e "console.log('capacitor android', require('../node_modules/@capacitor/android/package.json').version)" 2>/dev/null || true
+            echo "--- bắt đầu assembleDebug"
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          } 2>&1 | tee /tmp/gradle.log
 
-      - name: Chẩn đoán khi build lỗi (đưa log vào Summary để đọc không cần quyền)
+      # Log của GitHub Actions cần đăng nhập mới xem được. Khi build lỗi, đẩy 300 dòng
+      # cuối + thông tin môi trường lên chính nhánh này để đọc lại bằng git.
+      - name: Ghi log lỗi lên nhánh (khi build fail)
         if: failure()
         run: |
           {
-            echo "## ❌ Gradle fail — 120 dòng cuối"
+            echo "# Gradle build lỗi — $(date -u +%FT%TZ)"
+            echo
+            echo "## 300 dòng cuối"
             echo '```'
-            tail -n 120 /tmp/gradle.log 2>/dev/null || echo "không có /tmp/gradle.log"
+            tail -n 300 /tmp/gradle.log 2>/dev/null || echo "không có /tmp/gradle.log"
             echo '```'
             echo "## Môi trường"
             echo '```'
             java -version 2>&1 | head -3
             echo "ANDROID_HOME=$ANDROID_HOME"
-            ls "$ANDROID_HOME/platforms" 2>/dev/null
-            ls "$ANDROID_HOME/build-tools" 2>/dev/null
+            ls "$ANDROID_HOME/platforms" 2>/dev/null || true
+            ls "$ANDROID_HOME/build-tools" 2>/dev/null || true
             cat mobile/apk/android/local.properties 2>/dev/null || true
+            echo "--- variables.gradle"
             sed -n '1,40p' mobile/apk/android/variables.gradle 2>/dev/null || true
+            echo "--- gradle wrapper"
+            cat mobile/apk/android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
+            echo "--- capacitor settings"
+            cat mobile/apk/android/capacitor.settings.gradle 2>/dev/null || true
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > ci-last-build.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f ci-last-build.md
+          git commit -m "CI: log Gradle lần build lỗi [skip ci]" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
 
       - name: Đặt tên file APK
         run: |
