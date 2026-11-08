@@ -91,6 +91,13 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           cat local.properties
 
+      - name: Tăng timeout tải Gradle wrapper
+        working-directory: mobile/apk/android
+        run: |
+          # Capacitor 6 đặt networkTimeout=10000; gói gradle-all ~130 MB dễ quá 10 giây.
+          sed -i -E 's/^networkTimeout=.*/networkTimeout=60000/' gradle/wrapper/gradle-wrapper.properties
+          grep '^networkTimeout=60000$' gradle/wrapper/gradle-wrapper.properties
+
       - name: Build APK (debug — ký sẵn bằng keystore debug, cài được ngay)
         working-directory: mobile/apk/android
         run: |

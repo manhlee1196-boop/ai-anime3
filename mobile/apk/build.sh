@@ -36,6 +36,14 @@ say "Tạo project Android + chép app"
 # AAPT coi *.gz là bản nén của file cùng tên -> "Duplicate resources" với tags.json.
 rm -f "$APK_DIR/android/app/src/main/assets/public/data/tags.json.gz"
 
+# Gradle wrapper mặc định chỉ chờ 10 giây; gói gradle-all có thể cần lâu hơn trên mạng chậm.
+WRAPPER_PROPERTIES="$APK_DIR/android/gradle/wrapper/gradle-wrapper.properties"
+if grep -q '^networkTimeout=' "$WRAPPER_PROPERTIES"; then
+  sed -i -E 's/^networkTimeout=.*/networkTimeout=60000/' "$WRAPPER_PROPERTIES"
+else
+  echo 'networkTimeout=60000' >> "$WRAPPER_PROPERTIES"
+fi
+
 say "Build APK"
 (cd "$APK_DIR/android" && chmod +x gradlew && ./gradlew assembleDebug --no-daemon)
 
