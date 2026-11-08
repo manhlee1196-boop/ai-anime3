@@ -115,7 +115,7 @@ tunnel** khi bạn quay về.
 | **🔗 Kết nối** + ô địa chỉ | Dán tay `https://xxxx.gradio.live` hoặc `192.168.1.9:7860` (Forge trong LAN, tự hiểu là `http`) |
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link gradio.live hết hạn thì chạy lệnh này, link mới hiện ra, quay lại app là tự nhận |
-| **🩺 Chẩn đoán kết nối** | Gọi song song 5 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`) bằng đúng GET/POST; tóm trạng thái, hiện mã lỗi và việc cần làm |
+| **🩺 Chẩn đoán kết nối** | Gọi song song 6 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`, `vi-mobile/api/health`) bằng đúng GET/POST; kiểm tra cả API ảnh nén cho Android |
 | **Lịch sử link** | 6 link gần nhất kèm ✅/❌ lần dùng cuối; bấm là kết nối lại. Tự kiểm tra lại mỗi 60 giây |
 
 **Vì sao không nhúng thẳng Colab vào app (iframe/WebView)?** Google **chặn đăng nhập
@@ -137,7 +137,7 @@ Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ t�
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed** |
-| **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 5 endpoint Forge, công tắc tự nhận link |
+| **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge/API ảnh nén, công tắc tự nhận link |
 | **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
 
 Tham số mặc định lấy **nguyên từ `prompt_lib/system_tags.py`** khi sinh dữ liệu
@@ -162,8 +162,9 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 
 ```bash
 node mobile/tests/test_core.mjs          # 37 test logic: prompt, payload, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
-node mobile/tests/test_api.mjs           # 21 test ForgeClient: progress, response ảnh đứt/cắt, huỷ job
+node mobile/tests/test_api.mjs           # 26 test ForgeClient: ảnh nén, chọn endpoint trước job, không nhân đôi job, huỷ
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
+python3 mobile/tests/test_mobile_route.py    # 8 test route FastAPI + JPEG + kế thừa API auth
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
 ```
@@ -179,7 +180,7 @@ tham số hires khi tắt hires…) nên sửa một bên mà quên bên kia là
 | `app/index.html`, `app/styles.css` | Khung 4 tab + các sheet, CSS mobile (safe-area, nút ≥ 44 px, dark) |
 | `app/js/core.js` | Logic thuần: parse tag/trọng số, chuẩn hoá prompt, token, payload, dịch lỗi, `extractForgeUrl` (bắt link tunnel trong log Colab). **Không DOM** → test được bằng Node |
 | `app/js/data.js` | Nạp `tags.json(.gz)`, tìm tag Anh↔Việt, 506 phong cách |
-| `app/js/api.js` | Gọi Forge: ping, tiến trình, `txt2img` (POST dài + poll song song), `interrupt` |
+| `app/js/api.js` | Gọi Forge: ping, tiến trình, kiểm tra health rồi chọn API nén JPEG/API chuẩn trước khi tạo job, `interrupt` |
 | `app/js/store.js` | Cài đặt (localStorage) + ảnh (IndexedDB) |
 | `app/js/ui.js` | Nối DOM, 4 tab (thêm **Máy chủ**: Colab, clipboard, chẩn đoán), sheet Cài đặt/Phong cách/Xem ảnh |
 | `app/sw.js`, `app/manifest.webmanifest`, `app/icons/` | PWA: cài ra màn hình chính, mở nhanh khi mạng chập chờn |
@@ -200,7 +201,7 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 | Hiện tượng | Nguyên nhân & cách sửa |
 |---|---|
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
-| Chẩn đoán đều xanh nhưng mất kết nối lúc trả ảnh | API nhỏ vẫn sống nhưng gói JSON chứa ảnh lớn bị đứt. Bản mới lưu preview gần cuối và khôi phục từ `current_image`, không tự tạo lại job. Nếu vẫn lỗi, tắt Hires/giảm kích thước và kiểm tra output Forge |
+| Web tạo ảnh bình thường nhưng APK mất kết nối lúc trả ảnh | Web dùng transport Gradio, APK tải JSON base64 lớn. Chạy lại notebook một ô để cập nhật extension + restart Forge; chẩn đoán phải có **Ảnh nén cho điện thoại**. App sẽ gọi `/vi-mobile/api/txt2img` nhận JPEG nhỏ thay vì PNG lớn; không đổi engine/job |
 | “Không thấy /sdapi” (404) | Forge chạy thiếu `--api`; bộ cài đã bật sẵn |
 | Không ghép dấu tiếng Việt được / Enter làm mất chữ | APK cũ có thể xử lý gợi ý giữa lúc IME ghép dấu. Bản mới chờ `compositionend`, không chặn Enter/keyCode 229 và hỗ trợ chuyển cụm Việt đã biết sang tag Anh |
 | Chẩn đoán báo `internal/progress` HTTP 405 | APK cũ gọi nhầm GET; bản mới dùng `POST` với `skip_current_image=true`. Cài lại APK build mới nhất |
@@ -214,15 +215,20 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 
 ## Ghi chú kỹ thuật
 
-- **Không có timeout cứng cho việc sinh ảnh**: `POST /sdapi/v1/txt2img` là đồng bộ,
+- **Ảnh nhẹ cho tunnel**: ưu tiên `POST /vi-mobile/api/txt2img`; extension gọi đúng
+  handler txt2img của Forge rồi đổi PNG base64 thành JPEG quality 88. Web/API chuẩn
+  không bị sửa và ảnh gốc trong outputs không bị ghi đè. App đọc `/vi-mobile/api/health`
+  để chọn endpoint **trước khi tạo job**; sau POST, mọi lỗi mạng/404/5xx đều không gửi
+  lại sang endpoint khác.
+- **Không có timeout cứng cho việc sinh ảnh**: request txt2img là đồng bộ,
   Forge chỉ trả lời khi xong (Hires trên T4 mất 3–6 phút). App chạy POST và poll
   `/sdapi/v1/progress` song song, nên vẫn thấy tiến trình và huỷ được.
-- **Khôi phục khi đứt response ảnh**: app đọc `current_image` một lần lúc tiến trình ≥90%.
+- **Khôi phục dự phòng khi đứt response ảnh**: app đọc `current_image` một lần lúc tiến trình ≥90%.
   Nếu body `txt2img` bị đứt, app chờ/đọc lại preview gần cuối thay vì POST tạo job trùng;
   không có bằng chứng job chạy thì không dùng ảnh cũ.
 - **Huỷ** gọi `/sdapi/v1/interrupt` rồi bỏ request — không để Forge chạy tiếp một job
   người dùng đã bỏ.
-- Ảnh Forge trả về là base64 PNG; app lưu **data URL** vào IndexedDB (không nhét vào
+- API mobile trả JPEG, API chuẩn trả PNG; app lưu **data URL** vào IndexedDB (không nhét vào
   `localStorage` vì giới hạn ~5 MB).
 - Payload theo đúng `prompt_lib/builder.py`: `clip_skip` đi qua
   `override_settings.clip_stop_at_last_layers`, sampler `… Karras` tách thành sampler +

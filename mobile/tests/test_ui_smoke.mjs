@@ -272,10 +272,10 @@ const state_settings_api_url = () => {
   await until(() => clipboard.writes.some((text) => text.includes('--restart')),
     { label: 'copy lệnh lấy link mới' });
 
-  // chẩn đoán: đủ 5 endpoint, internal/progress phải POST và không còn HTTP 405
+  // chẩn đoán: đủ 6 endpoint, internal/progress phải POST và có API ảnh nén
   $('#diagnoseBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
-  await until(() => $$('#diagnoseOut .diag-line').length === 5, { label: 'kết quả chẩn đoán' });
-  assert.equal($$('#diagnoseOut .diag-line.ok').length, 5, 'chẩn đoán có endpoint lỗi');
+  await until(() => $$('#diagnoseOut .diag-line').length === 6, { label: 'kết quả chẩn đoán' });
+  assert.equal($$('#diagnoseOut .diag-line.ok').length, 6, 'chẩn đoán có endpoint lỗi');
   assert.match($('#diagnoseOut').textContent, /POST \/internal\/progress/);
   assert.doesNotMatch($('#diagnoseOut').textContent, /HTTP 405/);
   assert.match($('#diagnoseOut .diag-summary').textContent, /Kết nối ổn/);

@@ -70,7 +70,7 @@ const idle = {
     && JSON.parse(internal.init.body).skip_current_image === true);
 }
 
-// Chẩn đoán phải dùng đúng method cho cả 5 endpoint và nhận diện API/tiến trình.
+// Chẩn đoán phải dùng đúng method cho cả 6 endpoint và nhận diện API/tiến trình.
 {
   const calls = [];
   const api = new ForgeClient({
@@ -91,11 +91,11 @@ const idle = {
   });
   const result = await api.diagnose();
   const internal = result.checks.find((item) => item.path === 'internal/progress');
-  check('chẩn đoán kiểm tra đủ 5 endpoint', result.checks.length === 5 && calls.length === 5);
+  check('chẩn đoán kiểm tra đủ 6 endpoint', result.checks.length === 6 && calls.length === 6);
   check('chẩn đoán internal/progress dùng POST', internal.ok && internal.method === 'POST'
     && internal.status === 200);
   check('mọi endpoint đều OK khi Forge phản hồi đúng', result.checks.every((item) => item.ok)
-    && result.hasApi && result.hasProgress && result.anyOk);
+    && result.hasApi && result.hasProgress && result.hasCompactApi && result.anyOk);
   check('chẩn đoán giữ method rõ ràng cho từng dòng UI', result.checks
     .filter((item) => item.path !== 'internal/progress')
     .every((item) => item.method === 'GET'));
@@ -171,6 +171,7 @@ const idle = {
         await new Promise((resolve) => setTimeout(resolve, 20));
         throw new TypeError('connection closed at final response');
       }
+      if (parsed.pathname === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
       if (parsed.searchParams.get('skip_current_image') === 'false') imageReads += 1;
       return jsonResponse({
         progress: 0.96,
@@ -191,10 +192,12 @@ const idle = {
   const api = new ForgeClient({
     base: 'https://forge.example',
     fetchImpl: async (url) => {
-      if (new URL(url).pathname === '/sdapi/v1/txt2img') {
+      const path = new URL(url).pathname;
+      if (path === '/sdapi/v1/txt2img') {
         postCount += 1;
         throw new TypeError('fetch failed');
       }
+      if (path === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
       return jsonResponse({ progress: 0, state: { job_count: 0 }, current_image: 'anh-cu' });
     },
   });
@@ -263,6 +266,7 @@ const idle = {
     base: 'https://forge.example',
     fetchImpl: async (url, init) => {
       const parsed = new URL(url);
+      if (parsed.pathname === '/vi-mobile/api/txt2img') return jsonResponse({}, 404);
       if (parsed.pathname === '/sdapi/v1/txt2img') {
         postCount += 1;
         return {
@@ -297,6 +301,108 @@ const idle = {
   check('Huỷ job được giữ là AbortError, không báo mất máy chủ', failure?.name === 'AbortError'
     && failure?.status === 0);
   check('Huỷ gần cuối không khôi phục ảnh và không tạo lại job', postCount === 1 && !recoveryCalled);
+}
+
+// Extension mới: dùng ảnh JPEG đã nén, không gọi thêm API chuẩn.
+{
+  const paths = [];
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      if (path === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, txt2img_available: true, image_format: 'jpeg' });
+      }
+      if (path === '/vi-mobile/api/txt2img') {
+        return jsonResponse({
+          images: ['data:image/jpeg;base64,anBlZw=='],
+          info: '{"seed": 42}',
+          mobile_image_format: 'jpeg',
+        });
+      }
+      if (path === '/sdapi/v1/txt2img') throw new Error('Không được gọi API chuẩn');
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1 });
+  check('app ưu tiên API ảnh nén và giữ đúng MIME JPEG', !result.recovered
+    && result.images[0] === 'data:image/jpeg;base64,anBlZw==' && result.info.seed === 42);
+  check('API ảnh nén thành công chỉ gửi một request tạo ảnh',
+    paths.filter((path) => path.endsWith('txt2img')).length === 1);
+}
+
+// Extension cũ: health 404 thì chọn API chuẩn ngay, không POST thử route nén.
+{
+  const paths = [];
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'Not Found' }, 404);
+      if (path === '/sdapi/v1/txt2img') return jsonResponse({ images: ['cG5n'], info: '{}' });
+      return jsonResponse({}, 404);
+    },
+  });
+  const result = await api.txt2img({ prompt: '1girl' }, { interval: 1 });
+  check('health 404 chọn API chuẩn trước khi tạo job', result.images.length === 1
+    && paths.includes('/vi-mobile/api/health') && paths.includes('/sdapi/v1/txt2img')
+    && !paths.includes('/vi-mobile/api/txt2img'));
+}
+
+// 500 có thể xảy ra sau khi job đã chạy: không được fallback rồi nhân đôi GPU/job.
+{
+  let standardPosts = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') {
+        return jsonResponse({ ok: true, txt2img_available: true, image_format: 'jpeg' });
+      }
+      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'CUDA error' }, 500);
+      if (path === '/sdapi/v1/txt2img') {
+        standardPosts += 1;
+        return jsonResponse({ images: ['khong-duoc-goi'] });
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try {
+    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
+  } catch (error) {
+    failure = error;
+  }
+  check('lỗi 500 từ API nén không tự tạo lại job bằng API chuẩn',
+    failure?.status === 500 && standardPosts === 0);
+}
+
+// Ngay cả 404 từ trong job cũng không được đổi endpoint và nhân đôi request.
+{
+  let standardPosts = 0;
+  const api = new ForgeClient({
+    base: 'https://forge.example',
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      if (path === '/vi-mobile/api/health') return jsonResponse({ ok: true });
+      if (path === '/vi-mobile/api/txt2img') return jsonResponse({ detail: 'Job error' }, 404);
+      if (path === '/sdapi/v1/txt2img') {
+        standardPosts += 1;
+        return jsonResponse({ images: ['khong-duoc-goi'] });
+      }
+      return jsonResponse({}, 404);
+    },
+  });
+  let failure = null;
+  try {
+    await api.txt2img({ prompt: '1girl' }, { interval: 1, recoveryTimeout: 1 });
+  } catch (error) {
+    failure = error;
+  }
+  check('404 sau POST nén cũng không tạo lại job bằng API chuẩn',
+    failure?.status === 404 && standardPosts === 0);
 }
 
 console.log(`\n✅ ${passed} kiểm tra ForgeClient đạt.`);

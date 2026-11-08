@@ -191,6 +191,10 @@ class NotebookTests(unittest.TestCase):
         self.assertNotIn("--no-launch", args)
         self.assertNotIn("--smoke-test", args)
         self.assertNotIn("--fallback-fp16", args)
+        self.assertIn("--restart", args)  # nạp extension/API mobile mới khi chạy lại
+        self.assertEqual(source.count("#@param"), 2)
+        self.assertNotIn("NO_LAUNCH", source)
+        self.assertNotIn("USE_GITHUB_SECRET", source)
         self.assertEqual(args[args.index("--model") + 1], "fp16")
         self.assertEqual(args[args.index("--model-dir") + 1], "/content/models")
         self.assertEqual(args[args.index("--tunnel") + 1], "share")

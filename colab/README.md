@@ -59,16 +59,21 @@ kéo ứng dụng thì *Thêm vào màn hình chính* (PWA) hoặc build APK b�
 (`.github/workflows/android-apk.yml`). Chi tiết: [`../mobile/README.md`](../mobile/README.md).
 
 `setup_forge.sh launch` đã thêm `--cors-allow-origins=*` (tắt bằng `CORS_ALLOW_ORIGINS=none`)
-để bản cài riêng/APK gọi được API.
+để bản cài riêng/APK gọi được API. Extension còn có `/vi-mobile/api/txt2img`: dùng đúng
+handler txt2img của Forge nhưng trả JPEG quality 88 thay vì PNG base64 lớn, giúp tránh
+đứt response trên tunnel. Web `/sdapi/v1/txt2img` và ảnh gốc trong outputs không đổi.
 
 ## Bộ cài một lệnh / notebook một ô (khuyên dùng)
 
-Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU, chọn model
-trong dropdown rồi chạy ô cài duy nhất. Mặc định **FP16 bản gốc**, lưu trong `/content`,
-không mount Drive; **Gradio share** mặc định (`gradio.live`), Cloudflare tùy chọn; có thêm FP8/INT8/HSWQ cộng đồng ở chế độ **thử nghiệm**.
+Mở [`WAI_v17_1click.ipynb`](WAI_v17_1click.ipynb) trong Colab, bật GPU rồi **Run all**.
+Form tối giản chỉ còn **model** và **tunnel**; mặc định FP16 + Gradio share. Cổng 7860,
+CUDA auto, `/content/models`, không mount Drive và không chạy smoke test được đặt sẵn.
+Các tùy chọn nâng cao vẫn nằm trong `install.sh`/notebook chi tiết.
 
-[**Mở notebook cài mới 1.0.7 trong Colab**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2Fec9855a4-ai-anime3/colab/WAI_v17_1click.ipynb)
-→ chọn GPU T4 → **Run all**. Ô cài từ chối cache cũ hơn 1.0.7.
+[**Mở notebook Colab tối giản**](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F0f8a8365-ai-anime3/colab/WAI_v17_1click.ipynb)
+→ chọn GPU T4 → **Run all**. Chạy lại ô sẽ cập nhật code/extension, giữ model và
+restart Forge để nạp API ảnh nén cho Android; đợi job hiện tại kết thúc trước khi chạy.
+Ô cài vẫn từ chối cache cũ hơn 1.0.7.
 **Bảng ảnh đã tạo:** [cập nhật phần mềm 1.0.7](INSTALL.md#bảng-ảnh-đã-tạo-107), giữ model/Torch/ảnh; mở mục **Ảnh đã tạo** trong app Gradio rồi bấm **Làm mới**.
 **Ảnh chậm / HTML thay JSON khi dùng Cloudflare:** [đổi sang Gradio share](INSTALL.md#ảnh-hiển-thị-chậm--unexpected-token--106), chỉ launch/verify sau khi sinh xong. Phiên share đang ổn không cần chạy lại.
 **Hàng loạt ô hiện Error / stack Matplotlib:** xem [sửa backend headless 1.0.5](INSTALL.md#error-hàng-loạt--matplotlib-backend-inline-colab-105), chỉ cập nhật/restart Forge, giữ venv/trọng số/notebook inline.
@@ -79,7 +84,7 @@ kết nối lại/bật GPU. Notebook không tự xóa dữ liệu cũ.
 Hoặc dán một dòng vào Colab:
 
 ```python
-!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/ec9855a4-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
+!curl -fsSL --retry 3 "https://raw.githubusercontent.com/manhlee1196-boop/ai-anime3/arena/0f8a8365-ai-anime3/colab/install.sh" -o /content/install.sh && bash /content/install.sh --model fp16
 ```
 
 Model tải vào `.part`, chỉ nhận khi SHA256 khớp; chạy lại không cài/khởi động trùng.

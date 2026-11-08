@@ -18,6 +18,10 @@ const PROGRESS_PATHS = [
   { path: 'internal/progress', method: 'POST', body: { skip_current_image: true } },
 ];
 const PING_PATHS = ['sdapi/v1/options', 'sdapi/v1/cmd-flags'];
+// API do extension Anime3 cung cấp: cùng handler txt2img nhưng nén PNG → JPEG trước
+// khi gửi qua tunnel. Health được đọc TRƯỚC khi tạo job; sau POST txt2img tuyệt đối
+// không đổi endpoint, kể cả 404/5xx, vì job lúc đó có thể đã bắt đầu.
+const GENERATION_PATHS = ['vi-mobile/api/txt2img', 'sdapi/v1/txt2img'];
 
 /** Lỗi có thông điệp tiếng Việt + mã HTTP (0 = lỗi mạng). */
 export class ForgeError extends Error {
@@ -125,7 +129,7 @@ export class ForgeClient {
       // Một số WebView/proxy trả text đã cắt thay vì reject response.text(). Chỉ xem là
       // response ảnh đứt khi đúng route txt2img và phần đầu đã có trường images; HTML
       // của tunnel hết hạn vẫn phải báo lỗi ngay, không chờ khôi phục ba phút.
-      const incomplete = path === 'sdapi/v1/txt2img'
+      const incomplete = GENERATION_PATHS.includes(path)
         && /^\s*\{\s*"images"\s*:/.test(text);
       throw new ForgeError(
         incomplete
@@ -207,6 +211,10 @@ export class ForgeClient {
         path: 'internal/progress', method: 'POST', label: 'Tiến trình Forge (dự phòng)',
         body: { skip_current_image: true }, optional: true,
       },
+      {
+        path: 'vi-mobile/api/health', method: 'GET', label: 'Ảnh nén cho điện thoại',
+        optional: true,
+      },
     ];
     const out = await Promise.all(checks.map(async (check) => {
       try {
@@ -217,7 +225,9 @@ export class ForgeClient {
         });
         const detail = check.path.endsWith('options')
           ? String(data?.sd_model_checkpoint || '(không rõ model)').split(/[\\/]/).pop()
-          : Array.isArray(data) ? `${data.length} mục` : 'Phản hồi JSON hợp lệ';
+          : check.path === 'vi-mobile/api/health'
+            ? `${String(data?.image_format || 'ảnh nén').toUpperCase()} · giảm dung lượng qua tunnel`
+            : Array.isArray(data) ? `${data.length} mục` : 'Phản hồi JSON hợp lệ';
         return { ...check, ok: true, status: 200, detail };
       } catch (error) {
         return {
@@ -231,11 +241,13 @@ export class ForgeClient {
     const anyOk = out.some((item) => item.ok);
     const hasApi = Boolean(out.find((item) => item.path === 'sdapi/v1/options')?.ok);
     const hasProgress = out.some((item) => item.path.endsWith('progress') && item.ok);
+    const hasCompactApi = Boolean(out.find((item) => item.path === 'vi-mobile/api/health')?.ok);
     return {
       base: this.base || '(cùng origin với trang)',
       anyOk,
       hasApi,
       hasProgress,
+      hasCompactApi,
       checks: out,
     };
   }
@@ -292,10 +304,23 @@ export class ForgeClient {
     let data;
     let requestError = null;
     try {
-      data = await this.request('sdapi/v1/txt2img', {
+      let generationPath = GENERATION_PATHS[1];
+      try {
+        const health = await this.request('vi-mobile/api/health', {
+          timeout: 7000,
+          signal: merged,
+        });
+        if (health?.ok && health?.txt2img_available !== false) {
+          generationPath = GENERATION_PATHS[0];
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        // Extension cũ hoặc health không khả dụng: chọn API chuẩn TRƯỚC khi có job.
+      }
+      data = await this.request(generationPath, {
         method: 'POST',
         body: payload,
-        timeout: 3600000,          // 60 phút: chỉ để không treo vô hạn, không phải "timeout ảnh"
+        timeout: 3600000,          // 60 phút: không phải timeout ảnh
         signal: merged,
       });
     } catch (error) {

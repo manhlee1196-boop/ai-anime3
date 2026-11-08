@@ -603,6 +603,7 @@ legacy trở lại hay chỉ sửa UID để bỏ qua cảnh báo. Model và ả
 | Forge không thấy model / Checkpoint trống | Cập nhật 1.0.4; API đã có model thì dùng ô software-only ở trên. Kiểm preset `xl` / `forge_checkpoint_xl` và config UI, không tải lại weights theo tên/hash null |
 | Cổng đang bị chiếm | Chọn `--port 7862`; bộ cài không kill process lạ |
 | Ảnh chậm / `Unexpected token <` trên Cloudflare | Xem hướng dẫn tunnel ở trên; đợi sinh xong, đổi share và mở link mới; không giảm chất lượng ảnh |
+| Web tạo được nhưng APK đứt kết nối lúc trả ảnh | Chạy lại `WAI_v17_1click.ipynb` để cập nhật extension + restart; giữ model. APK dùng `/vi-mobile/api/txt2img` trả JPEG nhẹ, không gửi lại job khi lỗi 5xx/mạng. Chẩn đoán phải có **Ảnh nén cho điện thoại** |
 | Gradio share không tạo link | Thử `--tunnel cloudflared --only launch,verify --restart` sau khi tác vụ sinh kết thúc; không tải lại model/Torch |
 | Mở link lại thấy **“No interface is running right now”** | Link `gradio.live` đã chết, **không** phải Forge hỏng. Xem mục ngay dưới |
 | UI hiện **“Connection errored out.”** nhưng Colab vẫn Running | Kết nối queue (SSE) bị cắt, **không** phải Forge chết. Xem mục *Connection errored out* ngay dưới |

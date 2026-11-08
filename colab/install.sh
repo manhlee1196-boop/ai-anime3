@@ -931,7 +931,9 @@ summary() {
     local link
     link=$(public_link)
     [[ -z "$link" ]] || ok "Mở Forge: $link"
-    info "Dùng tab Prompt VN hoặc gõ tiếng Việt trong ô prompt."
+    [[ -z "$link" ]] || ok "App điện thoại: $link/vi-mobile/"
+    info "Android dùng API ảnh JPEG nhẹ; web txt2img vẫn trả ảnh gốc như mặc định."
+    info "Trong txt2img, mở accordion 'Prompt tiếng Việt' hoặc gõ tiếng Việt trực tiếp."
   elif [[ "$DO_LAUNCH" == 0 ]]; then info "Chưa khởi động Forge (--no-launch)."; fi
   info "Ảnh: $FORGE_DIR/outputs/txt2img-images/ · Log: $LOG"
   info "Mọi dữ liệu ở /content sẽ mất khi runtime kết thúc; tải ảnh về trước khi ngắt phiên."

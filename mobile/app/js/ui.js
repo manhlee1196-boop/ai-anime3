@@ -1419,7 +1419,7 @@ async function runDiagnose() {
   out.setAttribute('aria-busy', 'true');
   out.replaceChildren(h('div', { class: 'diag-loading' },
     h('span', { class: 'diag-spinner', 'aria-hidden': 'true' }),
-    h('span', { text: 'Đang kiểm tra 5 endpoint, vui lòng chờ…' }),
+    h('span', { text: 'Đang kiểm tra 6 endpoint, vui lòng chờ…' }),
   ));
   try {
     const result = await client().diagnose();
@@ -1461,6 +1461,9 @@ async function runDiagnose() {
     }
     if (result.anyOk && !result.hasProgress) {
       hints.push('Vẫn có thể tạo ảnh, nhưng thanh tiến trình sẽ không cập nhật. Hãy cập nhật Forge hoặc kiểm tra cờ --api.');
+    }
+    if (result.hasApi && !result.hasCompactApi) {
+      hints.push('Colab chưa có API ảnh nén cho điện thoại. Chạy lại notebook một ô để cập nhật extension và khởi động lại Forge; không cần tải lại model.');
     }
     const hasNetworkError = result.checks.some((item) => !item.ok && item.status === 0);
     if (hasNetworkError && location.protocol === 'https:' && location.hostname === 'localhost') {

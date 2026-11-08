@@ -8,7 +8,10 @@ sang `/vi-mobile/`, và index.html/CSS/JS/icon/dữ liệu tag đều trả 200.
 không cần Gradio thật (gradio được giả lập tối thiểu để import extension).
 """
 
+import base64
 import importlib.util
+import io
+import random
 import sys
 import types
 import unittest
@@ -23,6 +26,12 @@ try:
     HAVE_FASTAPI = True
 except Exception:                                     # noqa: BLE001
     HAVE_FASTAPI = False
+
+try:
+    from PIL import Image
+    HAVE_PIL = True
+except Exception:                                     # noqa: BLE001
+    HAVE_PIL = False
 
 GR_NAMES = ("Accordion Button Checkbox CheckboxGroup Dataframe Dropdown Markdown Row Slider "
             "State Tab Tabs Textbox SelectData Blocks Column Gallery Number").split()
@@ -100,6 +109,74 @@ class MobileRoute(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertGreater(len(response.content), 500_000)
         self.assertEqual(response.content[:2], b"\x1f\x8b")
+
+    def test_06_mobile_api_health(self):
+        response = self.client.get("/vi-mobile/api/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertEqual(response.json()["image_format"], "jpeg")
+
+    @unittest.skipUnless(HAVE_PIL, "cần Pillow để kiểm tra nén ảnh")
+    def test_07_txt2img_reuses_standard_handler_and_returns_jpeg(self):
+        source = Image.frombytes("RGB", (96, 96), random.Random(17).randbytes(96 * 96 * 3))
+        png = io.BytesIO()
+        source.save(png, format="PNG")
+        encoded = base64.b64encode(png.getvalue()).decode("ascii")
+        calls = []
+        from pydantic import BaseModel
+
+        class Txt2ImgInput(BaseModel):
+            prompt: str
+            steps: int = 25
+            width: int = 1024
+            height: int = 1024
+
+        class Txt2ImgOutput(BaseModel):
+            images: list
+            parameters: dict
+            info: str
+
+        def fake_txt2img(payload: Txt2ImgInput):
+            calls.append(payload)
+            return Txt2ImgOutput(images=[encoded], parameters={}, info='{"seed": 42}')
+
+        self.app.post("/sdapi/v1/txt2img")(fake_txt2img)
+        response = self.client.post("/vi-mobile/api/txt2img", json={
+            "prompt": "1girl", "steps": 25, "width": 1024, "height": 1024,
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].prompt, "1girl")
+        self.assertEqual(calls[0].steps, 25)
+        data = response.json()
+        self.assertEqual(data["mobile_image_format"], "jpeg")
+        self.assertEqual(data["info"], '{"seed": 42}')
+        jpeg = data["images"][0]
+        self.assertTrue(jpeg.startswith("data:image/jpeg;base64,"))
+        self.assertLess(len(jpeg), len(encoded), "JPEG phải nhỏ hơn PNG base64 của fixture")
+        with Image.open(io.BytesIO(base64.b64decode(jpeg.split(",", 1)[1]))) as result:
+            self.assertEqual(result.format, "JPEG")
+            self.assertEqual(result.size, source.size)
+
+    def test_08_mobile_api_inherits_standard_api_auth(self):
+        from fastapi import Depends, FastAPI, HTTPException
+
+        app = FastAPI()
+        calls = []
+
+        def deny():
+            raise HTTPException(status_code=401, detail="auth required")
+
+        def fake_txt2img(payload: dict):
+            calls.append(payload)
+            return {"images": [], "parameters": {}, "info": "{}"}
+
+        app.post("/sdapi/v1/txt2img", dependencies=[Depends(deny)])(fake_txt2img)
+        self.ext.install_mobile_api(app)
+        client = TestClient(app)
+        response = client.post("/vi-mobile/api/txt2img", json={"prompt": "1girl"})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(calls, [], "Route mobile không được bỏ qua --api-auth")
 
 
 if __name__ == "__main__":

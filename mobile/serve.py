@@ -28,7 +28,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent / "app"
-PROXY_PREFIXES = ("/sdapi/", "/internal/")
+PROXY_PREFIXES = ("/sdapi/", "/internal/", "/vi-mobile/api/")
 LONG_TIMEOUT = 3600
 
 
@@ -219,6 +219,9 @@ class Handler(SimpleHTTPRequestHandler):
                                'sd_vae': 'Automatic', 'CLIP_stop_at_last_layers': 2})
         if path == '/sdapi/v1/cmd-flags':
             return self._json({'api': True, 'port': 7860, 'listen': True, 'mock': True})
+        if path == '/vi-mobile/api/health':
+            return self._json({'ok': True, 'txt2img_available': True,
+                               'image_format': 'jpeg', 'jpeg_quality': 88, 'mock': True})
         # Giống Forge thật: API chuẩn đọc bằng GET, route nội bộ chỉ nhận POST.
         if path == '/internal/progress' and method != 'POST':
             return self._json({'detail': 'Method Not Allowed'}, 405)
@@ -235,7 +238,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/sdapi/v1/upscalers':
             return self._json([{'name': name} for name in
                                ('RealESRGAN_x4plus_anime_6B', 'R-ESRGAN 4x+', 'Latent')])
-        if path == '/sdapi/v1/txt2img':
+        if path in ('/vi-mobile/api/txt2img', '/sdapi/v1/txt2img'):
             MOCK.begin(payload)
             deadline = time.time() + MOCK.duration
             while time.time() < deadline and MOCK.started:

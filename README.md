@@ -43,7 +43,7 @@ Mọi dữ liệu nằm trong `/content`, không tự mount Drive.
 
 > **Quy trình 1.0.3:** thêm quy trình Nháp → Chuẩn → Hoàn thiện, seed ảnh đã chọn, sinh tuần tự tiết kiệm VRAM; sửa thay toàn cụm Việt → Anh mà không sót chữ Việt/mất tag khác. Giữ toàn bộ bản sửa checkpoint 1.0.2. [Hướng dẫn](colab/README.md#quy-trình-tối-ưu-bản-103) · [Rà soát checkpoint](colab/AUDIT.md).
 
-**Chạy lại từ đầu:** [mở notebook Colab 1.0.7](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2Fec9855a4-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**.
+**Chạy hoặc cập nhật:** [mở notebook Colab tối giản](https://colab.research.google.com/github/manhlee1196-boop/ai-anime3/blob/arena%2F0f8a8365-ai-anime3/colab/WAI_v17_1click.ipynb), chọn GPU T4 rồi **Run all**. Chạy lại giữ model/ảnh và restart Forge để nạp API ảnh nén cho Android.
 Notebook lấy bộ cài mới, chặn cache <1.0.7, đã tích hợp hướng dẫn thay Việt → Anh và
 Nháp/Chuẩn/Hoàn thiện. Muốn runtime hoàn toàn mới, tải ảnh về trước khi **Disconnect
 and delete runtime**; không có bước tự xóa dữ liệu/mount Drive.
@@ -72,7 +72,7 @@ Tham số mặc định và payload lấy nguyên từ `prompt_lib` nên giống
 python3 mobile/build_data.py            # sinh dữ liệu tag từ CSV (95.939 tag, 1,4 MB gz)
 python3 mobile/serve.py --mock          # xem thử giao diện + Forge giả, không cần GPU
 node mobile/tests/test_core.mjs         # 37 test logic prompt/payload/tìm tag/gợi ý/dịch tag Việt
-node mobile/tests/test_api.mjs          # 21 test API: hồi quy 405, đứt/cắt response ảnh và huỷ job
+node mobile/tests/test_api.mjs          # 26 test API: ảnh nén, chọn endpoint trước job, không nhân đôi job, huỷ
 python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu + tài nguyên + nhập tiếng Việt
 ```
 
