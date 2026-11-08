@@ -75,11 +75,37 @@ jobs:
           test -f android/app/src/main/assets/public/index.html
           test -f android/app/src/main/assets/public/data/tags.json
 
+      - name: Ghi đường dẫn SDK cho Gradle
+        working-directory: mobile/apk/android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          cat local.properties
+
       - name: Build APK (debug — ký sẵn bằng keystore debug, cài được ngay)
         working-directory: mobile/apk/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/gradle.log
+
+      - name: Chẩn đoán khi build lỗi (đưa log vào Summary để đọc không cần quyền)
+        if: failure()
+        run: |
+          {
+            echo "## ❌ Gradle fail — 120 dòng cuối"
+            echo '```'
+            tail -n 120 /tmp/gradle.log 2>/dev/null || echo "không có /tmp/gradle.log"
+            echo '```'
+            echo "## Môi trường"
+            echo '```'
+            java -version 2>&1 | head -3
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            ls "$ANDROID_HOME/platforms" 2>/dev/null
+            ls "$ANDROID_HOME/build-tools" 2>/dev/null
+            cat mobile/apk/android/local.properties 2>/dev/null || true
+            sed -n '1,40p' mobile/apk/android/variables.gradle 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Đặt tên file APK
         run: |
