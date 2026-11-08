@@ -38,11 +38,13 @@
   <section id="tab-create" class="tab active">
     <div class="card">
       <div class="card-head">
-        <label class="label" for="prompt">Prompt (tiếng Anh)</label>
+        <label class="label" for="prompt">Prompt tiếng Việt hoặc tag tiếng Anh</label>
         <span id="tokenInfo" class="token-info">0 tag · 0 token</span>
       </div>
-      <textarea id="prompt" rows="5" spellcheck="false" autocapitalize="off"
-        placeholder="1girl, solo, long hair, ao dai, looking at viewer…"></textarea>
+      <textarea id="prompt" rows="5" lang="vi" inputmode="text" autocomplete="off"
+        autocorrect="off" spellcheck="false" autocapitalize="off"
+        placeholder="tóc dài, áo dài, nụ cười… hoặc 1girl, long_hair, smile…"></textarea>
+      <p class="hint prompt-help">Nhập từng cụm cách nhau bằng dấu phẩy. Cụm tiếng Việt đã có trong từ điển sẽ tự chuyển thành tag Anh khi tạo ảnh.</p>
       <div id="tagSuggest" class="tag-suggest hidden">
         <div class="tag-suggest-label">Gợi ý từ kho tag offline · chạm để thay tag đang gõ</div>
         <div id="tagSuggestList" class="tag-suggest-list" role="listbox" aria-label="Gợi ý tag"></div>
@@ -64,7 +66,8 @@
       </div>
       <details class="details">
         <summary>Negative prompt</summary>
-        <textarea id="negative" rows="3" spellcheck="false" autocapitalize="off"></textarea>
+        <textarea id="negative" rows="3" lang="vi" inputmode="text" autocomplete="off"
+          autocorrect="off" spellcheck="false" autocapitalize="off"></textarea>
         <div class="row gap"><button id="rebuildNegativeBtn" class="mini" type="button">↻ Dựng lại từ preset</button></div>
       </details>
     </div>
@@ -121,8 +124,9 @@
       <span class="pill ok">offline</span>
     </div>
     <div class="searchbar">
-      <input id="tagSearch" type="search" autocomplete="off" autocapitalize="off"
-        enterkeyhint="search" placeholder="Tìm tag: tóc dài, ao dai, smile, 1girl…">
+      <input id="tagSearch" type="search" lang="vi" inputmode="text" autocomplete="off"
+        autocorrect="off" autocapitalize="off" enterkeyhint="search"
+        placeholder="Tìm tag: tóc dài, ao dai, smile, 1girl…">
       <div id="tagFilters" class="chips scroll-x" aria-label="Lọc theo nhóm tag"></div>
       <div id="tagResultMeta" class="tag-result-meta"></div>
     </div>
@@ -270,7 +274,8 @@
     </div>
     <div class="sheet-body">
       <div id="stylePresets" class="chips"></div>
-      <input id="styleSearch" type="search" autocomplete="off" placeholder="Tìm phong cách / chất liệu…">
+      <input id="styleSearch" type="search" lang="vi" inputmode="text" autocomplete="off"
+        autocorrect="off" autocapitalize="off" placeholder="Tìm phong cách / chất liệu…">
       <div id="styleGroups" class="chips scroll-x"></div>
       <div id="styleList" class="tag-list"></div>
     </div>

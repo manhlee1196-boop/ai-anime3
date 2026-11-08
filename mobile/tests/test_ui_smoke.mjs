@@ -63,9 +63,11 @@ async function main() {
 
   const realFetch = globalThis.fetch;
   const fetchCalls = [];
+  const generationPayloads = [];
   globalThis.fetch = (input, init) => {
     const url = new URL(String(input), BASE).href;
     fetchCalls.push(url);
+    if (url.includes('txt2img') && init?.body) generationPayloads.push(JSON.parse(init.body));
     return realFetch(url, init);
   };
 
@@ -112,13 +114,36 @@ const state_settings_api_url = () => {
   prompt.dispatchEvent(new window.Event('input', { bubbles: true }));
   await until(() => $$('#tagSuggestList .suggestion-row')
     .some((row) => row.textContent.includes('long_hair')), { label: 'gợi ý tag trong prompt' });
+
+  // Enter khi IME đang ghép dấu phải được giữ cho bàn phím, không chọn gợi ý.
+  const imeEnter = new window.KeyboardEvent('keydown', {
+    key: 'Enter', isComposing: true, bubbles: true, cancelable: true,
+  });
+  prompt.dispatchEvent(imeEnter);
+  assert.equal(prompt.value, '1girl, toc dai');
+  assert.equal(imeEnter.defaultPrevented, false);
+
+  // Trong lúc composition, app giữ nguyên Unicode và chỉ gợi ý sau compositionend.
+  prompt.dispatchEvent(new window.Event('compositionstart', { bubbles: true }));
+  prompt.value = '1girl, tóc dài';
+  prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+  const composingInput = new window.Event('input', { bubbles: true });
+  Object.defineProperty(composingInput, 'isComposing', { value: true });
+  prompt.dispatchEvent(composingInput);
+  await wait(200);
+  assert.equal(prompt.value, '1girl, tóc dài');
+  assert.ok($('#tagSuggest').classList.contains('hidden'));
+  prompt.dispatchEvent(new window.Event('compositionend', { bubbles: true }));
+  await until(() => $$('#tagSuggestList .suggestion-row')
+    .some((row) => row.textContent.includes('long_hair')), { label: 'gợi ý sau khi ghép dấu' });
+
   $$('#tagSuggestList .suggestion-row').find((row) => row.textContent.includes('long_hair'))
     .dispatchEvent(new window.Event('click', { bubbles: true }));
   assert.match(prompt.value, /1girl, long_hair, $/);
   assert.ok($('#tagSuggest').classList.contains('hidden'), 'gợi ý không đóng sau khi chọn');
 
-  // --- sinh ảnh qua Forge giả
-  prompt.value = '1girl, solo, long_hair, ao dai, smile';
+  // --- sinh ảnh qua Forge giả: prompt Việt đã biết phải được gửi thành tag Anh
+  prompt.value = '1girl, solo, tóc dài, áo dài, nụ cười';
   prompt.dispatchEvent(new window.Event('input', { bubbles: true }));
   assert.match($('#tokenInfo').textContent, /\d+ tag/);
 
@@ -129,6 +154,11 @@ const state_settings_api_url = () => {
   assert.match($('#status').textContent, /Xong/);
   assert.equal(fetchCalls.filter((url) => url.includes('txt2img')).length, 1,
     'mỗi lần bấm chỉ được POST txt2img một lần');
+  assert.equal(generationPayloads.length, 1);
+  assert.match(generationPayloads[0].prompt, /long_hair/);
+  assert.match(generationPayloads[0].prompt, /ao_dai/);
+  assert.match(generationPayloads[0].prompt, /smile/);
+  assert.doesNotMatch(generationPayloads[0].prompt, /tóc dài|áo dài|nụ cười/);
 
   // --- thư viện: ảnh vừa tạo phải xuất hiện trong tab Thư viện
   $('.tab-btn[data-tab="gallery"]').dispatchEvent(new window.Event('click', { bubbles: true }));

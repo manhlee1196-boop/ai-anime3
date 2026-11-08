@@ -57,12 +57,14 @@ export class TagData {
     this.en = new Array(size);
     this.vi = new Array(size);
     this.exact = new Map();
+    this.viExact = new Map();
     for (let i = 0; i < size; i += 1) {
       const row = this.rows[i];
       const en = normKey(row[0]);
       this.en[i] = en;
       this.vi[i] = row[4] ? normKey(row[4]) : '';
       if (!this.exact.has(en)) this.exact.set(en, i);
+      if (this.vi[i] && !this.viExact.has(this.vi[i])) this.viExact.set(this.vi[i], i);
     }
     this.styleIndex = this.styles.map((row) => ({
       tag: row[0],
@@ -86,6 +88,15 @@ export class TagData {
   viOf(tag) {
     const index = this.exact.get(normKey(tag));
     return index === undefined ? '' : (this.rows[index][4] || '');
+  }
+
+  /** Cụm Anh/Việt đã biết -> tag Anh chuẩn; không đoán câu chưa có trong từ điển. */
+  englishOf(text) {
+    const key = normKey(text);
+    const english = this.exact.get(key);
+    if (english !== undefined) return this.rows[english][0];
+    const vietnamese = this.viExact.get(key);
+    return vietnamese === undefined ? String(text ?? '').trim() : this.rows[vietnamese][0];
   }
 
   /** Số bài đăng của tag, để hiện "độ mạnh". */

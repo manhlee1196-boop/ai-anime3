@@ -265,6 +265,14 @@ check('tra tiếng Việt ra tag tiếng Anh', () => {
   assert.ok(aoDai.length > 0);
 });
 
+check('chuyển đúng cụm Việt đã biết sang tag Anh, không đoán câu lạ', () => {
+  assert.equal(data.englishOf('tóc dài'), 'long_hair');
+  assert.equal(data.englishOf('toc dai'), 'long_hair');
+  assert.equal(data.englishOf('áo dài'), 'ao_dai');
+  assert.equal(data.englishOf('long hair'), 'long_hair');
+  assert.equal(data.englishOf('một câu chưa có trong từ điển'), 'một câu chưa có trong từ điển');
+});
+
 check('tra tiếng Anh khớp chính xác đứng đầu', () => {
   const rows = data.search('1girl', { limit: 5 });
   assert.equal(rows[0].tag, '1girl');

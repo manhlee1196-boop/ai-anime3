@@ -24,6 +24,9 @@ const state = {
   quickTagOffset: 0,
   suggestions: [],
   suggestionIndex: -1,
+  promptComposing: false,
+  tagComposing: false,
+  styleComposing: false,
   styleQuery: '',
   styleGroup: null,
   busy: false,
@@ -239,12 +242,18 @@ function bindEvents() {
     }
   }
 
-  // prompt + gợi ý từ kho tag offline
-  $('#prompt').addEventListener('input', () => {
-    updatePromptMeta();
-    scheduleSave();
-    schedulePromptSuggestions();
-    renderQuickTags();
+  // prompt + gợi ý từ kho tag offline. Không chạy tìm kiếm/render khi IME đang ghép dấu.
+  $('#prompt').addEventListener('compositionstart', () => {
+    state.promptComposing = true;
+    hideTagSuggestions();
+  });
+  $('#prompt').addEventListener('compositionend', () => {
+    state.promptComposing = false;
+    handlePromptInput();
+  });
+  $('#prompt').addEventListener('input', (event) => {
+    if (state.promptComposing || event.isComposing) return;
+    handlePromptInput();
   });
   $('#prompt').addEventListener('keydown', handlePromptSuggestionKeys);
   $('#prompt').addEventListener('blur', () => {
@@ -287,11 +296,23 @@ function bindEvents() {
 
   // kho tag
   let tagTimer = null;
-  $('#tagSearch').addEventListener('input', (event) => {
-    state.tagQuery = event.target.value;
+  const updateTagSearch = () => {
+    state.tagQuery = $('#tagSearch').value;
     state.tagLimit = 60;
     clearTimeout(tagTimer);
     tagTimer = setTimeout(renderTagResults, 120);
+  };
+  $('#tagSearch').addEventListener('compositionstart', () => {
+    state.tagComposing = true;
+    clearTimeout(tagTimer);
+  });
+  $('#tagSearch').addEventListener('compositionend', () => {
+    state.tagComposing = false;
+    updateTagSearch();
+  });
+  $('#tagSearch').addEventListener('input', (event) => {
+    if (state.tagComposing || event.isComposing) return;
+    updateTagSearch();
   });
   $('#tagInsertBtn').addEventListener('click', insertSelectedTags);
   $('#tagClearBtn').addEventListener('click', () => {
@@ -302,10 +323,22 @@ function bindEvents() {
 
   // phong cách
   let styleTimer = null;
-  $('#styleSearch').addEventListener('input', (event) => {
-    state.styleQuery = event.target.value;
+  const updateStyleSearch = () => {
+    state.styleQuery = $('#styleSearch').value;
     clearTimeout(styleTimer);
     styleTimer = setTimeout(renderStyleList, 120);
+  };
+  $('#styleSearch').addEventListener('compositionstart', () => {
+    state.styleComposing = true;
+    clearTimeout(styleTimer);
+  });
+  $('#styleSearch').addEventListener('compositionend', () => {
+    state.styleComposing = false;
+    updateStyleSearch();
+  });
+  $('#styleSearch').addEventListener('input', (event) => {
+    if (state.styleComposing || event.isComposing) return;
+    updateStyleSearch();
   });
 
   // cài đặt
@@ -699,6 +732,13 @@ function renderTagLibraryMeta() {
     + `${state.data.browseGroups.length} nhóm · tìm Anh/Việt không cần mạng`;
 }
 
+function handlePromptInput() {
+  updatePromptMeta();
+  scheduleSave();
+  schedulePromptSuggestions();
+  renderQuickTags();
+}
+
 function schedulePromptSuggestions() {
   clearTimeout(schedulePromptSuggestions.timer);
   clearTimeout(hideTagSuggestions.timer);
@@ -708,6 +748,7 @@ function schedulePromptSuggestions() {
 function hideTagSuggestions() {
   clearTimeout(schedulePromptSuggestions.timer);
   $('#tagSuggest').classList.add('hidden');
+  $('#tagSuggestList').replaceChildren();
   state.suggestions = [];
   state.suggestionIndex = -1;
 }
@@ -774,6 +815,8 @@ function markActiveSuggestion() {
 }
 
 function handlePromptSuggestionKeys(event) {
+  // Enter/keyCode 229 của bàn phím Việt dùng để chốt ký tự, không phải chọn gợi ý.
+  if (state.promptComposing || event.isComposing || event.keyCode === 229) return;
   if ($('#tagSuggest').classList.contains('hidden') || !state.suggestions.length) return;
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
@@ -827,8 +870,17 @@ function rebuildNegative() {
   saveSettingsNow();
 }
 
+/** Chỉ chuyển cụm có bản dịch chính xác; câu chưa biết được giữ nguyên, không đoán. */
+function translateKnownPrompt(text) {
+  if (!state.data) return String(text ?? '');
+  return core.parseTags(text).map((piece) => core.renderTag(
+    state.data.englishOf(piece.tag),
+    piece.weight,
+  )).join(', ');
+}
+
 function normalisePromptField() {
-  const text = $('#prompt').value;
+  const text = translateKnownPrompt($('#prompt').value);
   if (!text.trim()) {
     toast('Chưa có prompt để chuẩn hoá', { error: true });
     return;
@@ -841,11 +893,11 @@ function normalisePromptField() {
   });
   updatePromptMeta();
   saveSettingsNow();
-  toast('Đã sắp xếp theo nhóm và thêm tag chất lượng');
+  toast('Đã chuyển cụm Việt đã biết, sắp xếp nhóm và thêm tag chất lượng');
 }
 
 function compactPromptField() {
-  const pieces = core.dedupePieces(core.parseTags($('#prompt').value));
+  const pieces = core.dedupePieces(core.parseTags(translateKnownPrompt($('#prompt').value)));
   $('#prompt').value = pieces.map((piece) => core.renderTag(piece.tag, piece.weight)).join(', ');
   updatePromptMeta();
   saveSettingsNow();
@@ -854,7 +906,7 @@ function compactPromptField() {
 
 /** Prompt gửi đi: thêm tag chất lượng + phân loại nếu người dùng chưa có. */
 function finalPositive() {
-  const text = $('#prompt').value.trim();
+  const text = translateKnownPrompt($('#prompt').value.trim());
   if (!text) return '';
   const present = new Set(core.parseTags(text).map((piece) => core.normKey(piece.tag)));
   const wanted = [
@@ -914,7 +966,8 @@ async function generate() {
     $('#prompt').focus();
     return;
   }
-  const negative = $('#negative').value.trim() || buildNegativeFor(state.settings.rating);
+  const negative = translateKnownPrompt($('#negative').value.trim())
+    || buildNegativeFor(state.settings.rating);
 
   const payload = core.buildPayload({
     positive,

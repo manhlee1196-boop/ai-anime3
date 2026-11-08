@@ -178,6 +178,18 @@ class MobileAssets(unittest.TestCase):
         self.assertNotRegex(self.html, r'src="https?://')
         self.assertNotRegex(self.html, r'href="https?://')
 
+    def test_14b_vietnamese_input_fields(self):
+        """Các ô nhập prompt/tìm kiếm phải khai báo tiếng Việt và bàn phím văn bản."""
+        for name in ("prompt", "negative", "tagSearch", "styleSearch"):
+            match = re.search(rf'<(?:textarea|input) id="{name}"[^>]*>', self.html)
+            self.assertIsNotNone(match, name)
+            attrs = match.group(0)
+            self.assertIn('lang="vi"', attrs, name)
+            self.assertIn('inputmode="text"', attrs, name)
+        self.assertIn("addEventListener('compositionstart'", self.ui)
+        self.assertIn("addEventListener('compositionend'", self.ui)
+        self.assertIn('event.keyCode === 229', self.ui)
+
     def test_15_serve_script_compiles(self):
         import py_compile
         import tempfile

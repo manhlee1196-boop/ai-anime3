@@ -133,7 +133,7 @@ Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ t�
 
 | Màn hình | Nội dung |
 |---|---|
-| **Tạo ảnh** | Prompt + negative (gập lại), **gợi ý tag Anh–Việt ngay khi gõ** và chip gợi ý nhanh từ kho offline, thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, hires scale, denoise, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
+| **Tạo ảnh** | Prompt + negative (gập lại), **nhập tiếng Việt có dấu an toàn theo IME**, tự chuyển cụm đã biết sang tag Anh (`tóc dài → long_hair`), gợi ý Anh–Việt ngay khi gõ và chip gợi ý nhanh từ kho offline, thống kê `N tag · M token · mức`, 🧩 **Chuẩn hoá** (thêm tag chất lượng, xếp theo 18 nhóm Illustrious/WAI, khử trùng), ✂️ **Nén** (bỏ tag trùng nghĩa như `eyes` khi đã có `blue_eyes`), chip kích thước + 4 mức phân loại nội dung, tham số nâng cao (seed, steps, CFG, batch, clip skip, hires scale, denoise, hires on/off), nút **Tạo ảnh** + **Huỷ**, tiến trình thật từ `/sdapi/v1/progress` (`⏳ 01:12 · bước 9/25 · 36% · còn ~1m 20s`) |
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed** |
@@ -161,9 +161,9 @@ python3 mobile/serve.py --forge https://abc123.gradio.live --port 8787
 ## Kiểm thử
 
 ```bash
-node mobile/tests/test_core.mjs          # 36 test logic: prompt, payload, token, tìm/lọc/gợi ý tag, bắt link Forge
+node mobile/tests/test_core.mjs          # 37 test logic: prompt, payload, token, tìm/lọc/gợi ý/dịch tag, bắt link Forge
 node mobile/tests/test_api.mjs           # 10 test ForgeClient, gồm hồi quy POST internal/progress / HTTP 405
-python3 mobile/tests/test_mobile_assets.py   # 19 test dữ liệu/tài nguyên/id trong HTML
+python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
 ```
@@ -201,6 +201,7 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 |---|---|
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
 | “Không thấy /sdapi” (404) | Forge chạy thiếu `--api`; bộ cài đã bật sẵn |
+| Không ghép dấu tiếng Việt được / Enter làm mất chữ | APK cũ có thể xử lý gợi ý giữa lúc IME ghép dấu. Bản mới chờ `compositionend`, không chặn Enter/keyCode 229 và hỗ trợ chuyển cụm Việt đã biết sang tag Anh |
 | Chẩn đoán báo `internal/progress` HTTP 405 | APK cũ gọi nhầm GET; bản mới dùng `POST` với `skip_current_image=true`. Cài lại APK build mới nhất |
 | Forge trả 500 / ảnh trắng | Hết VRAM (Hires trên T4): tắt Hires, giảm kích thước, xem `forge.log` |
 | Trang `/vi-mobile/` báo thiếu dữ liệu | Chưa sinh dữ liệu: `python3 mobile/build_data.py` (bộ cài chạy tự động ở stage `extras`) |
