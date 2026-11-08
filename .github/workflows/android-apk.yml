@@ -100,6 +100,19 @@ jobs:
           grep '^distributionUrl=https://downloads.gradle.org/distributions/gradle-8.2.1-bin.zip$' gradle/wrapper/gradle-wrapper.properties
           grep '^networkTimeout=60000$' gradle/wrapper/gradle-wrapper.properties
 
+      - name: Tải Gradle distribution có retry
+        working-directory: mobile/apk/android
+        run: |
+          # Wrapper Java không retry HTTP 504. Tải trước bằng curl, kiểm ZIP rồi dùng file local.
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 20 --max-time 300 \
+            https://services.gradle.org/distributions/gradle-8.2.1-bin.zip \
+            -o /tmp/gradle-8.2.1-bin.zip
+          unzip -t /tmp/gradle-8.2.1-bin.zip >/dev/null
+          test "$(stat -c %s /tmp/gradle-8.2.1-bin.zip)" -gt 50000000
+          sed -i -E 's|^distributionUrl=.*|distributionUrl=file:///tmp/gradle-8.2.1-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+          grep '^distributionUrl=file:///tmp/gradle-8.2.1-bin.zip$' gradle/wrapper/gradle-wrapper.properties
+
       - name: Build APK (debug — ký sẵn bằng keystore debug, cài được ngay)
         working-directory: mobile/apk/android
         run: |
