@@ -76,13 +76,15 @@ Không có cơ chế hợp lệ nào bảo đảm runtime Colab không bị thu 
 Thay vì hứa “chống ngắt 100%”, app thực hiện phục hồi rõ ràng:
 
 1. Chỉ khi app đang foreground, app kiểm tra Forge mỗi 60 giây khi kết nối khỏe.
-2. Nếu lỗi, app thử lại theo backoff: 30 giây → 60 giây → 120 giây → tối đa 4 phút.
-   App background/offline không ping.
+2. Nếu cùng link bị mất kết nối, app tự thử lại theo backoff: 30 giây → 60 giây → 120 giây
+   → tối đa 4 phút; có nhãn **“tự kết nối lại…”** và thời gian thử lại. App background/offline
+   không ping; có mạng trở lại thì thử ngay.
 3. Khi link chết, mở lại Colab từ tab **Máy chủ**:
    - runtime còn sống: chạy `bash /content/install.sh --only launch,verify --restart`;
    - runtime đã dừng: kết nối runtime/GPU rồi **Run all**.
-4. Khi có tunnel mới, chạm **📲 Mở lại Anime3** lần nữa. App thay URL cũ, không đánh dấu
-   URL mới “sống” bằng phản hồi chậm từ URL cũ.
+4. Colab tạo tunnel URL mới thì app không thể tự đoán URL đó. Chạm **📲 Mở lại Anime3** lần
+   nữa để đưa URL mới vào app; app thay URL cũ, không đánh dấu URL mới “sống” bằng phản hồi
+   chậm từ URL cũ.
 5. Prompt/cài đặt/thư viện ảnh local vẫn ở app. Ảnh chỉ nằm `/content` sẽ mất nếu runtime
    bị xóa, vì vậy tải ảnh cần giữ về máy trước.
 

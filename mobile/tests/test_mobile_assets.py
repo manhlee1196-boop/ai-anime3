@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v16", sw)
+        self.assertIn("anime3-shell-v17", sw)
         for name in files:
             if name in ("", "."):
                 continue

@@ -45,6 +45,8 @@ const state = {
   installEvent: null,
   connected: false,
   connectedModel: '',
+  reconnectAt: 0,            // lần ping tự nối lại kế tiếp (chỉ khi app foreground)
+  networkOffline: false,
   diagnoseBusy: false,
 };
 
@@ -437,9 +439,14 @@ function bindEvents() {
     if (document.visibilityState === 'visible') pingServer();
     else stopPingMonitor();
   });
-  window.addEventListener('online', () => pingServer());
+  window.addEventListener('online', () => {
+    state.networkOffline = false;
+    // Vừa có mạng lại thì thử ngay, không chờ hết backoff cũ.
+    pingServer();
+  });
   window.addEventListener('offline', () => {
     stopPingMonitor();
+    state.networkOffline = true;
     state.connected = false;
     setConn('mất mạng', 'bad');
     renderServerTab();
@@ -1570,13 +1577,15 @@ function canMonitorConnection() {
 function stopPingMonitor() {
   clearTimeout(pingTimer);
   pingTimer = null;
+  state.reconnectAt = 0;
 }
 
 /**
- * Lịch kiểm tra là cơ chế phát hiện lỗi, không phải keep-alive runtime:
+ * Lịch kiểm tra là cơ chế tự nối lại cùng URL, không phải keep-alive runtime:
  * - kết nối đang khỏe: kiểm lại mỗi 60 giây khi app mở;
  * - lỗi liên tiếp: backoff 30s → 60s → 120s → tối đa 4 phút;
- * - app background/offline: không đặt request nào.
+ * - app background/offline: không đặt request nào;
+ * - tunnel đổi URL sau restart Colab: deep link/clipboard sẽ thay URL rồi ping ngay.
  */
 function schedulePing(ok) {
   stopPingMonitor();
@@ -1584,13 +1593,23 @@ function schedulePing(ok) {
   const delay = ok
     ? 60000
     : Math.min(240000, 30000 * (2 ** Math.max(0, pingFailures - 1)));
+  if (!ok) {
+    state.reconnectAt = Date.now() + delay;
+    // Cho người dùng biết app đang tự nối lại, thay vì trông như bị treo.
+    renderServerTab();
+  }
   pingTimer = setTimeout(() => { pingServer(); }, delay);
 }
 
 /** Ping Forge; trả về `true` nếu kết nối được. Cập nhật luôn thanh trên + tab Máy chủ. */
 async function pingServer() {
   stopPingMonitor();
-  if (!canMonitorConnection()) return false;
+  if (!canMonitorConnection()) {
+    state.networkOffline = navigator.onLine === false;
+    renderServerTab();
+    return false;
+  }
+  state.networkOffline = false;
 
   // Snapshot URL/credential cho lượt ping này. Khi người dùng vừa dán URL mới,
   // tuyệt đối không dùng phản hồi chậm từ URL cũ để đánh dấu URL mới là "sống".
@@ -1672,17 +1691,26 @@ function setServerPill(text, variant = '') {
 /** Vẽ lại toàn bộ tab Máy chủ từ state (không gọi mạng). */
 function renderServerTab() {
   if (!$('#serverState')) return;
+  const retrySeconds = state.reconnectAt > Date.now()
+    ? Math.max(1, Math.ceil((state.reconnectAt - Date.now()) / 1000))
+    : 0;
   if (state.busy) setServerPill('đang sinh ảnh…', 'busy');
   else if (state.connected) setServerPill('đã kết nối', 'ok');
+  else if (state.networkOffline) setServerPill('mất mạng', 'bad');
+  else if (retrySeconds) setServerPill('tự kết nối lại…', 'busy');
   else if (state.settings.apiUrl) setServerPill('không kết nối được', 'bad');
   else setServerPill('chưa có địa chỉ', '');
 
   const where = state.settings.apiUrl || 'cùng origin với app';
   $('#serverModel').textContent = state.connected
     ? `Model: ${state.connectedModel || '(không rõ)'} · ${where}`
-    : state.settings.apiUrl
-      ? `Đã lưu ${state.settings.apiUrl} nhưng chưa phản hồi — link gradio.live hết hạn sau vài giờ.`
-      : 'Chưa có địa chỉ Forge. Bấm “Mở Colab (chạy thủ công)” để bắt đầu.';
+    : state.networkOffline
+      ? 'Điện thoại đang mất mạng. App sẽ tự kết nối lại ngay khi mạng trở lại.'
+      : retrySeconds
+        ? `Mất kết nối ${where}. App sẽ tự thử lại cùng link sau khoảng ${retrySeconds} giây.`
+        : state.settings.apiUrl
+          ? `Đã lưu ${state.settings.apiUrl} nhưng chưa phản hồi — link gradio.live hết hạn sau vài giờ.`
+          : 'Chưa có địa chỉ Forge. Bấm “Mở Colab (chạy thủ công)” để bắt đầu.';
 
   const input = $('#serverUrl');
   if (document.activeElement !== input) input.value = state.settings.apiUrl || '';

@@ -341,8 +341,10 @@ const state_settings_api_url = () => {
   $('#pasteLinkBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => state_settings_api_url() === 'http://192.168.1.9:7860',
     { label: 'lưu địa chỉ Forge từ clipboard' });
-  await until(() => $('#serverState').textContent === 'không kết nối được',
-    { label: 'báo link chết' });
+  await until(() => /không kết nối được|tự kết nối lại/.test($('#serverState').textContent),
+    { label: 'báo link chết và tự thử lại' });
+  await until(() => /tự thử lại cùng link/.test($('#serverModel').textContent),
+    { label: 'hiện trạng thái tự kết nối lại' });
   assert.ok($$('#linkList .tag-row').length >= 1, 'lịch sử link trống');
 
   // quay lại app sau khi chạy Colab: tự đọc clipboard, thấy link sống -> kết nối

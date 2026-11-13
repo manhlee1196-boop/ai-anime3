@@ -122,7 +122,7 @@ lại. Bước cấp GPU và *Runtime → Run all* luôn do bạn xác nhận tr
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link hết hạn thì chạy lệnh này; copy URL mới để app nhận clipboard. Muốn dùng deep link lại, chạy lại ô notebook một lần rồi chạm **📲 Mở lại Anime3** |
 | **🩺 Chẩn đoán kết nối** | Gọi song song 6 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`, `vi-mobile/api/health`) bằng đúng GET/POST; kiểm tra **job nền + file stream** |
-| **Theo dõi phiên** | Khi app đang mở, ping lại mỗi 60 giây nếu kết nối khoẻ; nếu lỗi, retry theo backoff 30 giây đến tối đa 4 phút. App đi background/offline thì dừng, nên đây không phải keep-alive Colab |
+| **Theo dõi phiên & tự kết nối lại** | Khi app đang mở, ping lại mỗi 60 giây nếu kết nối khoẻ; nếu **cùng link** lỗi, app tự thử lại theo backoff 30 giây đến tối đa 4 phút và thử ngay khi mạng trở lại. App đi background/offline thì dừng, nên đây không phải keep-alive Colab; URL tunnel mới vẫn cần nút **📲 Mở lại Anime3** |
 
 Deep link native chỉ chấp nhận URL HTTPS `*.gradio.live`/`*.trycloudflare.com`, được lưu
 một lần rồi xoá sau khi app đọc. App không giữ Google credential, không auto-click và không
