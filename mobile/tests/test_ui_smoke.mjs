@@ -281,7 +281,7 @@ const state_settings_api_url = () => {
   assert.ok($('#tab-server').classList.contains('active'), 'tab Máy chủ không mở');
   assert.ok($('#serverState').textContent.length > 0, 'thiếu nhãn trạng thái máy chủ');
 
-  // nút "Mở Colab & chạy" phải mở đúng notebook (không phải link Github/Colab chung)
+  // nút "Mở Colab" phải mở đúng notebook (không phải link Github/Colab chung)
   const opened = [];
   window.open = (url) => { opened.push(url); return {}; };
   $('#openColabBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -303,7 +303,7 @@ const state_settings_api_url = () => {
   const realGlobalFetch = globalThis.fetch;
   globalThis.fetch = (input, init) => {
     const url = new URL(String(input), BASE);
-    if (url.hostname === 'abc123.gradio.live') {
+    if (url.hostname === 'abc123.gradio.live' || url.hostname === 'direct-link.gradio.live') {
       if (url.pathname.endsWith('/sdapi/v1/options')) {
         return Promise.resolve(jsonResponse({ sd_model_checkpoint: 'wai_v17_abc.safetensors' }));
       }
@@ -322,13 +322,29 @@ const state_settings_api_url = () => {
     return realGlobalFetch(input, init);
   };
 
+  // APK mới: chạm nút trong output Colab gửi anime3://connect vào plugin native;
+  // app phải nhận tunnel trực tiếp, không cần lấy URL qua clipboard.
+  const callbackUrls = ['https://direct-link.gradio.live'];
+  window.Capacitor.Plugins.Anime3Colab = {
+    consumeConnection: async () => ({ url: callbackUrls.shift() || '' }),
+  };
+  document.dispatchEvent(new window.Event('visibilitychange'));
+  await until(() => state_settings_api_url() === 'https://direct-link.gradio.live', {
+    timeout: 15000, label: 'nhận deep link Colab trực tiếp',
+  });
+  await until(() => $('#serverState').textContent === 'đã kết nối', {
+    label: 'ping tunnel từ deep link',
+  });
+
   // dán link Forge đã chết: phải lưu địa chỉ + báo "không kết nối được"
   clipboard.text = 'Link public: http://192.168.1.9:7860';
   $('#pasteLinkBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => state_settings_api_url() === 'http://192.168.1.9:7860',
     { label: 'lưu địa chỉ Forge từ clipboard' });
-  await until(() => $('#serverState').textContent === 'không kết nối được',
-    { label: 'báo link chết' });
+  await until(() => /không kết nối được|tự kết nối lại/.test($('#serverState').textContent),
+    { label: 'báo link chết và tự thử lại' });
+  await until(() => /tự thử lại cùng link/.test($('#serverModel').textContent),
+    { label: 'hiện trạng thái tự kết nối lại' });
   assert.ok($$('#linkList .tag-row').length >= 1, 'lịch sử link trống');
 
   // quay lại app sau khi chạy Colab: tự đọc clipboard, thấy link sống -> kết nối
@@ -340,6 +356,24 @@ const state_settings_api_url = () => {
   assert.match($('#serverModel').textContent, /wai_v17_abc/,
     'không hiện tên model sau khi tự kết nối');
   assert.ok($$('#linkList .tag-row').length >= 2, 'lịch sử link không ghi thêm link mới');
+
+  // Hybrid: chỉ Forge (không phải Colab) được nhúng trong sheet iframe của app.
+  assert.equal($('#openForgeBrowserBtn').disabled, false, 'Forge trong app phải mở khi đã kết nối');
+  $('#openForgeBrowserBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => !$('#sheetBrowser').classList.contains('hidden')
+    && $('#forgeBrowserFrame').src.startsWith('https://abc123.gradio.live/'),
+  { label: 'mở Forge trong iframe' });
+  assert.match($('#browserAddress').textContent, /abc123\.gradio\.live/);
+  $('#browserReloadBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.match($('#forgeBrowserFrame').src, /anime3_reload=/, 'reload iframe không thêm cache-buster');
+  const forgeExternal = [];
+  window.Capacitor.Plugins.Browser = { open: async ({ url }) => forgeExternal.push(url) };
+  $('#browserExternalBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => forgeExternal.length === 1, { label: 'mở Forge qua Custom Tab dự phòng' });
+  assert.equal(forgeExternal[0], 'https://abc123.gradio.live/');
+  $('#sheetBrowser [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.ok($('#sheetBrowser').classList.contains('hidden'), 'đóng browser sheet thất bại');
+  assert.equal($('#forgeBrowserFrame').getAttribute('src'), null, 'đóng sheet phải dừng iframe Forge');
 
   // copy lệnh lấy link mới cho Colab
   $('#copyRestartCmdBtn').dispatchEvent(new window.Event('click', { bubbles: true }));

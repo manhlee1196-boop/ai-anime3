@@ -12,7 +12,7 @@ cd mobile/apk
 npm install
 npx cap add android               # sinh thư mục android/ (đã .gitignore)
 npx cap sync android              # chép ../app vào android/app/src/main/assets/public
-bash native/install.sh            # plugin lưu ảnh MediaStore
+bash native/install.sh            # plugin lưu ảnh + callback Colab
 cd android && ./gradlew assembleDebug
 ```
 
@@ -28,7 +28,7 @@ Workflow tự chạy khi push lên nhánh `arena/**` hoặc `main` **và** có t
 “Run workflow” chỉ hiện khi file này có trên nhánh mặc định; ở repo này `main` là commit
 upload ban đầu (không cùng gốc lịch sử) nên dùng cách push tag / Re-run all jobs.
 
-## Nút “Mở Colab & chạy” (plugin `@capacitor/browser`)
+## Mở Colab và quay lại APK không cần dán link
 
 Tab **🔌 Máy chủ** gọi `Capacitor.Plugins.Browser.open({ url })` để mở notebook Colab
 bằng **Custom Tab**: vẫn là ngữ cảnh của app (thanh trên có nút quay lại), nhưng là
@@ -39,13 +39,23 @@ Colab vì Google chặn đăng nhập trong WebView (`disallowed_useragent`).
 "dependencies": { "@capacitor/browser": "^6.0.4" }
 ```
 
-- Plugin này **không bắt buộc để app chạy**: nếu thiếu, `ui.js` tự rơi xuống
+1. Trong Custom Tab, người dùng chọn GPU và bấm **Runtime → Run all**.
+2. Notebook tạo tunnel rồi hiện **📲 Mở lại Anime3**.
+3. Nút dùng `anime3://connect?url=<tunnel>` để trả APK; `Anime3ColabPlugin` nhận URL,
+   app ping Forge và tự kết nối. Không có bước copy/dán ở APK mới.
+
+`native/install.sh` chép plugin và đăng ký intent filter `anime3://connect` với
+`android:launchMode="singleTask"`, vì vậy callback quay về WebView đang mở thay vì tạo
+thêm activity. Plugin chỉ nhận HTTPS `*.gradio.live`/`*.trycloudflare.com`, lưu callback
+một lần trong `SharedPreferences`, rồi xoá sau khi JavaScript đọc xong.
+
+- Browser plugin **không bắt buộc để app chạy**: nếu thiếu, `ui.js` tự rơi xuống
   `window.open(url)`. Nhưng trong APK thì `window.open` mở tab ẩn của WebView (dễ mất
   phiên đăng nhập), nên vẫn nên có plugin.
 - `npx cap sync android` phải chạy **sau** `npm install` để plugin được chép vào project
-  Android (`android/capacitor.settings.gradle`). Workflow đã làm đúng thứ tự này.
-- Sau khi Colab in link public, người dùng quay lại app: app đọc clipboard và tự kết
-  nối — xem mục D trong [`../README.md`](../README.md).
+  Android (`android/capacitor.settings.gradle`). Workflow đã làm đúng thứ tự.
+- PWA và APK cũ không có custom scheme này: vẫn dùng `<tunnel>/vi-mobile/` hoặc clipboard
+  như fallback. Xem luồng đầy đủ ở [`../RUN_IN_APP_PLAN.md`](../RUN_IN_APP_PLAN.md).
 
 ## Lưu ảnh ra thư viện điện thoại
 
@@ -55,12 +65,12 @@ trong lúc ghi rồi publish; ảnh xuất hiện trong Google Photos/Files và 
 thư mục. Android 9 trở xuống dùng `Android/data/vn.anime3.mobile/files/Pictures/Anime3`,
 không xin quyền ghi toàn bộ bộ nhớ. Nút **Chia sẻ** vẫn dùng share sheet khi hệ thống hỗ trợ.
 
-`native/install.sh` chép `MainActivity.java` và `Anime3MediaPlugin.java` vào project do
-Capacitor sinh ra; cả `build.sh` và workflow đều gọi script này trước khi build. Plugin phải
-`registerPlugin(...)` **trước** `super.onCreate(...)` (yêu cầu từ Capacitor 4), nếu không JS
-không thấy `Anime3Media` và app phải báo lỗi rõ thay vì giả vờ tải qua WebView. Trên PWA,
-download vẫn do trình duyệt quản lý nên app hướng dẫn kiểm tra thông báo/Download thay vì
-khẳng định một đường dẫn cố định.
+`native/install.sh` chép `MainActivity.java`, `Anime3MediaPlugin.java` và
+`Anime3ColabPlugin.java` vào project do Capacitor sinh ra; cả `build.sh` và workflow đều gọi
+script này trước khi build. Plugin phải `registerPlugin(...)` **trước** `super.onCreate(...)`
+(yêu cầu từ Capacitor 4), nếu không JS không thấy plugin native và app phải báo lỗi rõ thay vì
+giả vờ tải qua WebView. Trên PWA, download vẫn do trình duyệt quản lý nên app hướng dẫn kiểm
+tra thông báo/Download thay vì khẳng định một đường dẫn cố định.
 
 ## Điều cần biết
 

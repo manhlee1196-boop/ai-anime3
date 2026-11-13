@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v14", sw)
+        self.assertIn("anime3-shell-v17", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -171,6 +171,7 @@ class MobileAssets(unittest.TestCase):
         """APK phải lưu bằng MediaStore, không báo tải thành công qua blob WebView."""
         native = MOBILE / "apk" / "native"
         plugin = (native / "Anime3MediaPlugin.java").read_text(encoding="utf-8")
+        colab_plugin = (native / "Anime3ColabPlugin.java").read_text(encoding="utf-8")
         activity = (native / "MainActivity.java").read_text(encoding="utf-8")
         installer = (native / "install.sh").read_text(encoding="utf-8")
         self.assertIn("Environment.DIRECTORY_PICTURES + \"/Anime3\"", plugin)
@@ -180,6 +181,18 @@ class MobileAssets(unittest.TestCase):
         self.assertLess(activity.index("registerPlugin(Anime3MediaPlugin.class)"),
                         activity.index("super.onCreate(savedInstanceState)"),
                         "Capacitor 4+ yêu cầu đăng ký plugin trước super.onCreate")
+        # Callback từ output Colab phải quay đúng Activity và chỉ nhận tunnel HTTPS hợp lệ.
+        self.assertIn("registerPlugin(Anime3ColabPlugin.class)", activity)
+        self.assertIn("captureConnectionIntent", activity)
+        self.assertIn('@CapacitorPlugin(name = \"Anime3Colab\")', colab_plugin)
+        self.assertIn("anime3://connect?url=", colab_plugin)
+        self.assertIn('lower.endsWith(".gradio.live")', colab_plugin)
+        self.assertIn('lower.endsWith(".trycloudflare.com")', colab_plugin)
+        self.assertIn("Anime3ColabPlugin.java", installer)
+        self.assertIn('android:scheme=\"anime3\"', installer)
+        self.assertIn('android:launchMode=\"singleTask\"', installer)
+        self.assertIn("consumeNativeColabCallback", self.ui)
+        self.assertIn("nativeColabTunnelUrl", self.ui)
         self.assertIn("Anime3MediaPlugin.java", installer)
         build = (MOBILE / "apk" / "build.sh").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
@@ -217,15 +230,16 @@ class MobileAssets(unittest.TestCase):
 
     def test_13b_server_tab_elements_wired(self):
         """Tab Máy chủ cần đủ phần tử và ui.js phải gắn hết (không nút chết)."""
-        needed = {"tab-server", "openColabBtn", "pasteLinkBtn", "connectBtn", "serverUrl",
+        needed = {"tab-server", "openColabBtn", "pasteLinkBtn", "openForgeBrowserBtn", "connectBtn", "serverUrl",
                   "autoConnect", "linkList", "diagnoseBtn", "diagnoseOut", "serverState",
-                  "copyStatusCmdBtn", "copyRestartCmdBtn", "clearLinksBtn"}
+                  "copyStatusCmdBtn", "copyRestartCmdBtn", "clearLinksBtn", "sheetBrowser",
+                  "forgeBrowserFrame", "browserReloadBtn", "browserExternalBtn"}
         missing = sorted(needed - self.ids)
         self.assertEqual(missing, [], f"index.html thiếu: {missing}")
-        for name in sorted(needed):
-            if name == "tab-server":
-                continue
-            self.assertIn(f"$('#{name}')", self.ui, f"ui.js không gắn {name}")
+        bindings = {name: f"$('#{name}')" for name in needed - {"tab-server", "sheetBrowser"}}
+        bindings["sheetBrowser"] = "openSheet('#sheetBrowser')"
+        for name, marker in sorted(bindings.items()):
+            self.assertIn(marker, self.ui, f"ui.js không gắn {name}")
 
     def test_14_html_has_no_external_dependency(self):
         """App phải chạy offline trong APK: không CDN, không font ngoài."""

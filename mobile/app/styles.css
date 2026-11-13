@@ -608,6 +608,47 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .image-panel .sheet-body { gap: 12px; }
 .image-view { width: 100%; border-radius: 14px; display: block; }
 
+/* Forge có thể nhúng sau khi đã kết nối. Colab không đặt ở iframe vì Google chặn
+   đăng nhập WebView; nút ↗ luôn mở Custom Tab làm phương án dự phòng. */
+.browser-sheet { align-items: stretch; background: var(--bg); }
+.browser-panel {
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  border: 0;
+}
+.browser-head {
+  flex: 0 0 auto;
+  padding-top: calc(var(--safe-top) + 10px);
+  border-bottom: 1px solid var(--line);
+}
+.browser-title { min-width: 0; }
+.browser-title .hint {
+  max-width: 58vw;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-actions { flex: 0 0 auto; }
+.browser-actions .icon-btn { width: 40px; height: 40px; }
+.browser-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 10px calc(8px + var(--safe-bottom));
+}
+.forge-browser-frame {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.browser-hint { flex: 0 0 auto; margin: 0 2px; font-size: 12px; }
+
 /* ------------------------------------------------------------------ toast */
 .toast {
   position: fixed;
@@ -642,6 +683,7 @@ body:not([data-tab="create"]) .toast { bottom: calc(86px + var(--safe-bottom)); 
   main { max-width: 620px; margin: 0 auto; }
   .generate-bar, .tabbar { max-width: 620px; margin: 0 auto; }
   .sheet-panel { max-width: 620px; margin: 0 auto; border-radius: 20px 20px 0 0; }
+  .browser-panel { max-width: none; margin: 0; border-radius: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
