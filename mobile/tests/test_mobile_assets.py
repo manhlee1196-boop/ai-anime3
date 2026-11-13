@@ -149,7 +149,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v15", sw)
+        self.assertIn("anime3-shell-v16", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -171,6 +171,7 @@ class MobileAssets(unittest.TestCase):
         """APK phải lưu bằng MediaStore, không báo tải thành công qua blob WebView."""
         native = MOBILE / "apk" / "native"
         plugin = (native / "Anime3MediaPlugin.java").read_text(encoding="utf-8")
+        colab_plugin = (native / "Anime3ColabPlugin.java").read_text(encoding="utf-8")
         activity = (native / "MainActivity.java").read_text(encoding="utf-8")
         installer = (native / "install.sh").read_text(encoding="utf-8")
         self.assertIn("Environment.DIRECTORY_PICTURES + \"/Anime3\"", plugin)
@@ -180,6 +181,18 @@ class MobileAssets(unittest.TestCase):
         self.assertLess(activity.index("registerPlugin(Anime3MediaPlugin.class)"),
                         activity.index("super.onCreate(savedInstanceState)"),
                         "Capacitor 4+ yêu cầu đăng ký plugin trước super.onCreate")
+        # Callback từ output Colab phải quay đúng Activity và chỉ nhận tunnel HTTPS hợp lệ.
+        self.assertIn("registerPlugin(Anime3ColabPlugin.class)", activity)
+        self.assertIn("captureConnectionIntent", activity)
+        self.assertIn('@CapacitorPlugin(name = \"Anime3Colab\")', colab_plugin)
+        self.assertIn("anime3://connect?url=", colab_plugin)
+        self.assertIn('lower.endsWith(".gradio.live")', colab_plugin)
+        self.assertIn('lower.endsWith(".trycloudflare.com")', colab_plugin)
+        self.assertIn("Anime3ColabPlugin.java", installer)
+        self.assertIn('android:scheme=\"anime3\"', installer)
+        self.assertIn('android:launchMode=\"singleTask\"', installer)
+        self.assertIn("consumeNativeColabCallback", self.ui)
+        self.assertIn("nativeColabTunnelUrl", self.ui)
         self.assertIn("Anime3MediaPlugin.java", installer)
         build = (MOBILE / "apk" / "build.sh").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")

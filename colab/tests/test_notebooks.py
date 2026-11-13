@@ -199,6 +199,9 @@ class NotebookTests(unittest.TestCase):
         self.assertEqual(args[args.index("--model") + 1], "fp16")
         self.assertEqual(args[args.index("--model-dir") + 1], "/content/models")
         self.assertEqual(args[args.index("--tunnel") + 1], "share")
+        self.assertIn("anime3://connect?url=", source)
+        self.assertIn("Mở lại Anime3", source)
+        self.assertIn('public_url = ""', source)
 
     def test_10_api_sample_disabled_makes_no_requests(self):
         with patch("requests.get", side_effect=AssertionError("Không gọi API")), \

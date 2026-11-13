@@ -24,8 +24,13 @@ INTRO = """# ⚡ WAI-Illustrious v17 — Colab một ô
 - Model/ảnh nằm trong `/content`, **không mount Drive**, không tự xóa dữ liệu cũ.
 - Chạy lại ô sẽ cập nhật code/extension, giữ model đã có và khởi động lại Forge để nạp bản mới. **Đợi job hiện tại kết thúc trước khi chạy lại.**
 
-### App Android
-Mở app → **Máy chủ** → dán link public. Chẩn đoán phải có **Job nền & file stream**. App tạo `job_id`, poll trạng thái, nhận manifest nhỏ rồi tải Blob; lỗi tải file chỉ retry download, không tạo lại ảnh. Web txt2img và app dùng cùng engine.
+### App Android — mở lại trực tiếp, không cần dán link
+Mở app → **Máy chủ** → **Mở Colab (chạy thủ công)** → chọn GPU và bấm *Runtime → Run all*.
+Khi ô cài xong, chạm nút **📲 Mở lại Anime3** hiện ngay dưới log: APK nhận link tunnel và
+kết nối Forge tự động, không cần copy/dán. Đây là deep link Android; PWA hoặc APK cũ vẫn có
+thể copy link rồi quay lại app. Chẩn đoán phải có **Job nền & file stream**. App tạo `job_id`,
+poll trạng thái, nhận manifest nhỏ rồi tải Blob; lỗi tải file chỉ retry download, không tạo lại ảnh.
+Web txt2img và app dùng cùng engine.
 
 **S3/R2 (tuỳ chọn):** thêm các Secrets `ANIME3_S3_BUCKET`, `ANIME3_S3_ENDPOINT_URL`, `ANIME3_S3_ACCESS_KEY_ID`, `ANIME3_S3_SECRET_ACCESS_KEY`; tuỳ chọn thêm `ANIME3_S3_REGION`, `ANIME3_S3_PREFIX`, `ANIME3_S3_SIGNED_TTL`. Bật quyền **Notebook access** cho các Secret đó trước khi chạy ô. Credential không nằm trong APK hay file cấu hình repo.
 
@@ -51,8 +56,11 @@ PORT = 7860
 CUDA_INDEX = "auto"
 
 import os
+import re
 import signal
 import subprocess
+from html import escape
+from urllib.parse import quote
 
 env = dict(os.environ)
 # Không thêm checkbox token: đọc secret khi có, không ghi token vào source/output.
@@ -94,9 +102,15 @@ args = ["bash", str(dest), "--model", MODEL, "--model-dir", MODEL_DIR,
 print(f"▶ Model {MODEL}; tunnel {TUNNEL}; VRAM {VRAM_LEVEL}. Giữ model/ảnh đã có, cập nhật code rồi mở Forge.", flush=True)
 process = subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            text=True, bufsize=1, start_new_session=True)
+public_url = ""
 try:
     for line in process.stdout:
         print(line, end="", flush=True)
+        # install.sh in đúng một dòng "Link public: https://..." khi tunnel sẵn sàng.
+        # Không lấy localhost và chỉ dùng URL HTTPS làm callback cho APK.
+        match = re.search(r"Link public:\s*(https://[^\s]+)", line)
+        if match:
+            public_url = match.group(1).rstrip("/.,;)")
     rc = process.wait()
 except KeyboardInterrupt:
     os.killpg(process.pid, signal.SIGTERM)
@@ -111,8 +125,25 @@ if rc:
 
 print("\n✅ Hoàn tất. Dùng link public mới ở phía trên.")
 print("▶ Web: mở link → txt2img → Generate.")
-print("▶ Android: dán link vào tab Máy chủ; chẩn đoán phải có 'Job nền & file stream'.")
-print("▶ Không cài APK: mở <link public>/vi-mobile/")
+if public_url:
+    # Không tự điều hướng/auto-click: người dùng chủ động chạm nút để Custom Tab
+    # quay về APK. URL được percent-encode trước khi đưa vào custom scheme.
+    direct_url = "anime3://connect?url=" + quote(public_url, safe="")
+    web_app_url = public_url.rstrip("/") + "/vi-mobile/"
+    try:
+        from IPython.display import HTML, display
+        display(HTML(
+            '<p><a href="' + escape(direct_url, quote=True) + '" '
+            'style="display:inline-block;padding:12px 16px;background:#7c3aed;color:white;'
+            'border-radius:9px;font-weight:700;text-decoration:none">📲 Mở lại Anime3</a></p>'
+            '<p>Chạm nút này để APK nhận link Colab và kết nối tự động, không cần copy/dán.</p>'
+            '<p>PWA/trình duyệt: <a href="' + escape(web_app_url, quote=True) + '">mở Anime3 web</a>.</p>'
+        ))
+    except Exception:
+        print("▶ APK Anime3: mở anime3://connect?url=" + quote(public_url, safe=""))
+else:
+    print("▶ Chưa đọc được link public trong log; chạy `!bash /content/install.sh --status` rồi dùng link in ra.")
+print("▶ APK cũ/PWA: mở <link public>/vi-mobile/ hoặc dán link vào tab Máy chủ.")
 '''.replace("__BOOTSTRAP__", BOOTSTRAP_SOURCE).replace("__BRANCH__", BRANCH)
 
 AFTER = """### Chỉ khi cần kiểm tra/lấy lại link

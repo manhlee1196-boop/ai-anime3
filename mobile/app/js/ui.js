@@ -170,6 +170,8 @@ async function init() {
   firstRunHint();
   renderServerTab();
   setupResumeWatch();
+  // APK mới có deep link từ nút trong output Colab: không cần copy/dán tunnel.
+  await consumeNativeColabCallback();
   renderGallery();
   registerServiceWorker();
 }
@@ -1724,7 +1726,7 @@ async function openColab() {
   if (plugin?.open) {
     try {
       await plugin.open({ url });
-      toast('Đã mở Colab — bấm Run all rồi quay lại app');
+      toast('Đã mở Colab — bấm Run all, rồi chạm “Mở lại Anime3”');
       return;
     } catch (error) {
       console.warn('Không mở được Custom Tab', error);
@@ -1736,7 +1738,46 @@ async function openColab() {
     $('#serverUrl').value = url;
     return;
   }
-  toast('Đã mở Colab — bấm Run all rồi quay lại app');
+  toast('Đã mở Colab — bấm Run all, rồi chạm “Mở lại Anime3”');
+}
+
+/** Chỉ nhận callback tunnel HTTPS mà notebook Colab chính thức có thể tạo. */
+function nativeColabTunnelUrl(rawUrl) {
+  const url = core.normalizeBaseUrl(rawUrl);
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const allowed = host.endsWith('.gradio.live') || host.endsWith('.trycloudflare.com');
+    return parsed.protocol === 'https:' && allowed ? url : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * APK nhận `anime3://connect?url=<tunnel>` khi người dùng chạm nút trong output
+ * Colab. Plugin native chỉ trả callback một lần; PWA/bản APK cũ vẫn dùng clipboard.
+ */
+let nativeColabConnectBusy = false;
+async function consumeNativeColabCallback() {
+  const plugin = window.Capacitor?.Plugins?.Anime3Colab;
+  if (!plugin?.consumeConnection || nativeColabConnectBusy) return false;
+  nativeColabConnectBusy = true;
+  try {
+    const result = await plugin.consumeConnection();
+    const url = nativeColabTunnelUrl(result?.url);
+    if (!url || url === state.settings.apiUrl) return false;
+    lastClipboardUrl = url;
+    showTab('server');
+    toast(`Đã nhận link Colab trực tiếp: ${shortUrl(url)}`, { ms: 3500 });
+    return await connectTo(url, { silent: true });
+  } catch (error) {
+    // Plugin không có trên PWA/APK cũ hoặc callback bị Android từ chối: clipboard là fallback.
+    return false;
+  } finally {
+    nativeColabConnectBusy = false;
+  }
 }
 
 /**
@@ -1811,7 +1852,12 @@ async function copyText(text, label) {
  */
 let lastClipboardUrl = '';
 function setupResumeWatch() {
-  const check = () => setTimeout(checkClipboardForLink, 700);
+  const check = () => {
+    // Callback Android là đường chính: không cần quyền clipboard. Đọc clipboard sau
+    // đó để APK cũ/PWA vẫn tương thích và không tranh với deep link vừa nhận.
+    setTimeout(() => { consumeNativeColabCallback(); }, 180);
+    setTimeout(checkClipboardForLink, 700);
+  };
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();
   });
@@ -1819,7 +1865,7 @@ function setupResumeWatch() {
 }
 
 async function checkClipboardForLink() {
-  if (state.settings.autoConnect === false) return;
+  if (state.settings.autoConnect === false || nativeColabConnectBusy) return;
   if (state.connected || state.busy) return;
   if (!navigator.clipboard?.readText) return;
   const text = await readClipboard();

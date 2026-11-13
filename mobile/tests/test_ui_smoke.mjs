@@ -281,7 +281,7 @@ const state_settings_api_url = () => {
   assert.ok($('#tab-server').classList.contains('active'), 'tab Máy chủ không mở');
   assert.ok($('#serverState').textContent.length > 0, 'thiếu nhãn trạng thái máy chủ');
 
-  // nút "Mở Colab & chạy" phải mở đúng notebook (không phải link Github/Colab chung)
+  // nút "Mở Colab" phải mở đúng notebook (không phải link Github/Colab chung)
   const opened = [];
   window.open = (url) => { opened.push(url); return {}; };
   $('#openColabBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -303,7 +303,7 @@ const state_settings_api_url = () => {
   const realGlobalFetch = globalThis.fetch;
   globalThis.fetch = (input, init) => {
     const url = new URL(String(input), BASE);
-    if (url.hostname === 'abc123.gradio.live') {
+    if (url.hostname === 'abc123.gradio.live' || url.hostname === 'direct-link.gradio.live') {
       if (url.pathname.endsWith('/sdapi/v1/options')) {
         return Promise.resolve(jsonResponse({ sd_model_checkpoint: 'wai_v17_abc.safetensors' }));
       }
@@ -321,6 +321,20 @@ const state_settings_api_url = () => {
     }
     return realGlobalFetch(input, init);
   };
+
+  // APK mới: chạm nút trong output Colab gửi anime3://connect vào plugin native;
+  // app phải nhận tunnel trực tiếp, không cần lấy URL qua clipboard.
+  const callbackUrls = ['https://direct-link.gradio.live'];
+  window.Capacitor.Plugins.Anime3Colab = {
+    consumeConnection: async () => ({ url: callbackUrls.shift() || '' }),
+  };
+  document.dispatchEvent(new window.Event('visibilitychange'));
+  await until(() => state_settings_api_url() === 'https://direct-link.gradio.live', {
+    timeout: 15000, label: 'nhận deep link Colab trực tiếp',
+  });
+  await until(() => $('#serverState').textContent === 'đã kết nối', {
+    label: 'ping tunnel từ deep link',
+  });
 
   // dán link Forge đã chết: phải lưu địa chỉ + báo "không kết nối được"
   clipboard.text = 'Link public: http://192.168.1.9:7860';

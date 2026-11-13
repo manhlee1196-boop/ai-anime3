@@ -78,11 +78,11 @@ python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu + tài nguyê
 
 Hướng dẫn đầy đủ (cài APK, CORS, lỗi thường gặp): [`mobile/README.md`](mobile/README.md).
 
-> **Vận hành “toàn bộ trong app” và Colab:** APK/PWA có thể là giao diện duy nhất,
-> nhưng WAI v17 vẫn cần GPU backend — điện thoại không chạy được model này. Với Colab,
-> app chỉ mở notebook, nhận link, theo dõi foreground và hỗ trợ phục hồi; không có cách
-> đáng tin cậy/đúng chính sách để app giữ runtime Colab không bị ngắt. Phương án GPU
-> backend bền vững, luồng khôi phục và ranh giới kỹ thuật được nêu trong
+> **Chế độ Colab-only chạy từ app:** APK mở notebook Colab qua Custom Tab; sau khi bạn
+> chọn GPU và bấm *Run all*, notebook hiện nút **📲 Mở lại Anime3**. APK mới nhận link
+> tunnel và kết nối Forge không cần copy/dán. WAI v17 vẫn chạy trên GPU Colab, không chạy
+> trong điện thoại; app không auto-click hay giữ runtime Colab bằng thủ thuật. Luồng deep
+> link, fallback PWA/APK cũ và cách khôi phục được nêu trong
 > [`mobile/RUN_IN_APP_PLAN.md`](mobile/RUN_IN_APP_PLAN.md).
 
 ## Các file đầu ra
