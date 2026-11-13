@@ -429,8 +429,19 @@ function bindEvents() {
     $('#installBtn').classList.remove('hidden');
   });
 
+  // Chỉ theo dõi khi app đang ở foreground. Đây là giám sát kết nối để báo link
+  // tunnel chết, không phải cơ chế giả hoạt động nhằm giữ runtime Colab tồn tại.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pingServer();
+    else stopPingMonitor();
+  });
   window.addEventListener('online', () => pingServer());
-  window.addEventListener('offline', () => setConn('mất mạng', 'bad'));
+  window.addEventListener('offline', () => {
+    stopPingMonitor();
+    state.connected = false;
+    setConn('mất mạng', 'bad');
+    renderServerTab();
+  });
 }
 
 function showTab(name) {
@@ -1545,42 +1556,99 @@ function setConn(text, variant = '') {
 }
 
 let pingTimer = null;
+let pingInFlight = null;
+let pingTarget = '';
+let pingFailures = 0;
+
+/** App chỉ monitor khi đang hiện và có mạng; không dùng poll nền để giữ Colab sống. */
+function canMonitorConnection() {
+  return document.visibilityState !== 'hidden' && navigator.onLine !== false;
+}
+
+function stopPingMonitor() {
+  clearTimeout(pingTimer);
+  pingTimer = null;
+}
+
+/**
+ * Lịch kiểm tra là cơ chế phát hiện lỗi, không phải keep-alive runtime:
+ * - kết nối đang khỏe: kiểm lại mỗi 60 giây khi app mở;
+ * - lỗi liên tiếp: backoff 30s → 60s → 120s → tối đa 4 phút;
+ * - app background/offline: không đặt request nào.
+ */
+function schedulePing(ok) {
+  stopPingMonitor();
+  if (!canMonitorConnection()) return;
+  const delay = ok
+    ? 60000
+    : Math.min(240000, 30000 * (2 ** Math.max(0, pingFailures - 1)));
+  pingTimer = setTimeout(() => { pingServer(); }, delay);
+}
+
 /** Ping Forge; trả về `true` nếu kết nối được. Cập nhật luôn thanh trên + tab Máy chủ. */
 async function pingServer() {
-  clearTimeout(pingTimer);
-  setConn('đang kiểm tra…');
-  try {
-    const info = await client().ping();
-    const model = info.model
-      ? info.model.split(/[\\/]/).pop().replace(/\.safetensors$/, '')
-      : '';
-    state.connected = true;
-    state.connectedModel = model;
-    setConn(model ? `● ${model}` : '● đã kết nối', 'ok');
-    $('#connInfo').textContent = model
-      ? `Đã kết nối Forge · model: ${model}`
-      : 'Đã kết nối Forge.';
-    if (state.settings.apiUrl) {
-      store.rememberLink(state.settings, state.settings.apiUrl, { ok: true, model });
-      store.saveSettings(state.settings);
+  stopPingMonitor();
+  if (!canMonitorConnection()) return false;
+
+  // Snapshot URL/credential cho lượt ping này. Khi người dùng vừa dán URL mới,
+  // tuyệt đối không dùng phản hồi chậm từ URL cũ để đánh dấu URL mới là "sống".
+  const target = state.settings.apiUrl;
+  if (pingInFlight && pingTarget === target) return pingInFlight;
+  const probe = new ForgeClient({
+    base: target,
+    user: state.settings.user,
+    pass: state.settings.pass,
+  });
+
+  let ok = false;
+  let work = null;
+  work = (async () => {
+    setConn('đang kiểm tra…');
+    try {
+      const info = await probe.ping();
+      if (target !== state.settings.apiUrl) return false;
+      const model = info.model
+        ? info.model.split(/[\\/]/).pop().replace(/\.safetensors$/, '')
+        : '';
+      state.connected = true;
+      state.connectedModel = model;
+      pingFailures = 0;
+      ok = true;
+      setConn(model ? `● ${model}` : '● đã kết nối', 'ok');
+      $('#connInfo').textContent = model
+        ? `Đã kết nối Forge · model: ${model}`
+        : 'Đã kết nối Forge.';
+      if (target) {
+        store.rememberLink(state.settings, target, { ok: true, model });
+        store.saveSettings(state.settings);
+      }
+      renderServerTab();
+      return true;
+    } catch (error) {
+      if (target !== state.settings.apiUrl) return false;
+      state.connected = false;
+      state.connectedModel = '';
+      pingFailures += 1;
+      setConn('chưa kết nối', 'bad');
+      $('#connInfo').textContent = error.message || 'Không kết nối được.';
+      if (target) {
+        store.rememberLink(state.settings, target, { ok: false });
+        store.saveSettings(state.settings);
+      }
+      renderServerTab();
+      return false;
+    } finally {
+      // Lượt cũ không được xóa lịch của lượt ping URL mới hơn.
+      if (pingInFlight === work) {
+        pingInFlight = null;
+        pingTarget = '';
+        schedulePing(ok);
+      }
     }
-    renderServerTab();
-    return true;
-  } catch (error) {
-    state.connected = false;
-    state.connectedModel = '';
-    setConn('chưa kết nối', 'bad');
-    $('#connInfo').textContent = error.message || 'Không kết nối được.';
-    if (state.settings.apiUrl) {
-      store.rememberLink(state.settings, state.settings.apiUrl, { ok: false });
-      store.saveSettings(state.settings);
-    }
-    renderServerTab();
-    return false;
-  } finally {
-    // kiểm tra lại mỗi 60 giây để link tunnel hết hạn là biết ngay
-    pingTimer = setTimeout(pingServer, 60000);
-  }
+  })();
+  pingInFlight = work;
+  pingTarget = target;
+  return work;
 }
 
 // ------------------------------------------------------------------ tab Máy chủ (Colab)
@@ -1612,7 +1680,7 @@ function renderServerTab() {
     ? `Model: ${state.connectedModel || '(không rõ)'} · ${where}`
     : state.settings.apiUrl
       ? `Đã lưu ${state.settings.apiUrl} nhưng chưa phản hồi — link gradio.live hết hạn sau vài giờ.`
-      : 'Chưa có địa chỉ Forge. Bấm “Mở Colab & chạy” để bắt đầu.';
+      : 'Chưa có địa chỉ Forge. Bấm “Mở Colab (chạy thủ công)” để bắt đầu.';
 
   const input = $('#serverUrl');
   if (document.activeElement !== input) input.value = state.settings.apiUrl || '';
@@ -1646,14 +1714,17 @@ function renderLinks() {
   }));
 }
 
-/** Mở Colab bằng một nút: Custom Tab (APK) hoặc tab mới của trình duyệt (PWA). */
+/**
+ * Mở notebook Colab: Custom Tab (APK) hoặc tab mới (PWA). Google không cho app
+ * bấm Run all hộ hay giữ runtime luôn sống; người dùng thực hiện bước đó trong Colab.
+ */
 async function openColab() {
   const url = colabInfo().url;
   const plugin = window.Capacitor?.Plugins?.Browser;
   if (plugin?.open) {
     try {
       await plugin.open({ url });
-      toast('Đã mở Colab — chạy Run all rồi quay lại app');
+      toast('Đã mở Colab — bấm Run all rồi quay lại app');
       return;
     } catch (error) {
       console.warn('Không mở được Custom Tab', error);
@@ -1665,7 +1736,7 @@ async function openColab() {
     $('#serverUrl').value = url;
     return;
   }
-  toast('Đã mở Colab — chạy Run all rồi quay lại app');
+  toast('Đã mở Colab — bấm Run all rồi quay lại app');
 }
 
 /**
@@ -1735,8 +1806,8 @@ async function copyText(text, label) {
 /**
  * Tự nhận link khi quay lại app: người dùng copy link trong Colab (hoặc nút copy
  * của Colab), chuyển sang app → đọc clipboard → thấy link Forge → kết nối luôn.
- * Đây là phần "chạy Colab ngay trong app" khả thi nhất: Google không cho nhúng
- * Colab vào WebView (chặn đăng nhập) và không có API bấm Run all hộ.
+ * Đây là phần tích hợp Colab khả thi nhất: Google không cho nhúng Colab vào WebView
+ * (chặn đăng nhập) và không có API để app bấm Run all hoặc giữ runtime hộ người dùng.
  */
 let lastClipboardUrl = '';
 function setupResumeWatch() {

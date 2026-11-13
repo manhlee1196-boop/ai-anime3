@@ -78,6 +78,13 @@ python3 mobile/tests/test_mobile_assets.py   # 20 test dữ liệu + tài nguyê
 
 Hướng dẫn đầy đủ (cài APK, CORS, lỗi thường gặp): [`mobile/README.md`](mobile/README.md).
 
+> **Vận hành “toàn bộ trong app” và Colab:** APK/PWA có thể là giao diện duy nhất,
+> nhưng WAI v17 vẫn cần GPU backend — điện thoại không chạy được model này. Với Colab,
+> app chỉ mở notebook, nhận link, theo dõi foreground và hỗ trợ phục hồi; không có cách
+> đáng tin cậy/đúng chính sách để app giữ runtime Colab không bị ngắt. Phương án GPU
+> backend bền vững, luồng khôi phục và ranh giới kỹ thuật được nêu trong
+> [`mobile/RUN_IN_APP_PLAN.md`](mobile/RUN_IN_APP_PLAN.md).
+
 ## Các file đầu ra
 
 | File | Nội dung | Dùng để làm gì |

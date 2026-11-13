@@ -17,9 +17,14 @@ mở Colab và tự bắt link Forge ngay trong app:
 | **B. Cài PWA** | Như A, rồi *Thêm vào màn hình chính* | — | Có icon riêng, mở toàn màn hình |
 | **C. APK** ⭐ | GitHub Actions build sẵn file `.apk`, tải về cài | ✅ | Muốn app thật trong danh sách ứng dụng |
 
-Bấm **🔌 Máy chủ → Mở Colab & chạy** là Colab mở ngay từ app (tab trình duyệt gắn với
-app, có nút quay lại); chạy *Run all* xong thì **quay lại app là app tự đọc link Forge
-trong clipboard và kết nối** — không phải copy tay (xem [mục D](#d-chạy-colab-ngay-trong-app-tab--máy-chủ)).
+Bấm **🔌 Máy chủ → Mở Colab (chạy thủ công)** là notebook Colab mở từ app (tab trình duyệt
+gắn với app, có nút quay lại); bạn bấm *Runtime → Run all*, rồi **quay lại app là app tự
+đọc link Forge trong clipboard và kết nối** — không phải dán link tay (xem [mục D](#d-mở-colab-từ-app-bạn-vẫn-chạy-run-all-thủ-công)).
+
+> Muốn app mở lên là dùng ổn định, không phụ thuộc runtime/tunnel Colab, xem
+> [phương án vận hành trong app & phục hồi phiên](RUN_IN_APP_PLAN.md). App không có và
+> không nên dùng thủ thuật giả hoạt động để ngăn Colab tự ngắt; app chỉ phát hiện nhanh,
+> giữ dữ liệu local và hướng dẫn kết nối lại.
 
 ---
 
@@ -52,8 +57,9 @@ APK là **vỏ WebView (Capacitor)** bọc đúng giao diện này, có icon tro
 ➡️ **[Tải `anime3-mobile.apk` (v1.1.0)](https://github.com/manhlee1196-boop/ai-anime3/releases/download/v1.1.0/anime3-mobile.apk)**
 · hoặc mở trang **Releases** của repo.
 
-Cài xong: mở app → tab **🔌 Máy chủ** → **Mở Colab & chạy** → *Run all* → quay lại app
-(app tự nhận link). Không muốn dùng Colab thì dán link Forge vào ô địa chỉ → **Kết nối**.
+Cài xong: mở app → tab **🔌 Máy chủ** → **Mở Colab (chạy thủ công)** → *Runtime → Run all*
+→ quay lại app (app tự nhận link). Không muốn dùng Colab thì dán link Forge vào ô địa chỉ
+→ **Kết nối**.
 
 > **Vì sao không thấy nút “Run workflow” trong tab Actions?** GitHub chỉ hiện nút đó khi
 > file workflow có trên **nhánh mặc định (`main`)**. Ở repo này `main` là commit upload
@@ -69,8 +75,8 @@ Cài xong: mở app → tab **🔌 Máy chủ** → **Mở Colab & chạy** → 
 2. Đợi ~5–10 phút, mở lượt chạy vừa xong → tải artifact **anime3-mobile-apk**
    (file `anime3-mobile.apk`).
 3. Chuyển file sang điện thoại → bấm để cài → cho phép “Cài ứng dụng không rõ nguồn gốc”.
-4. Mở app → tab **🔌 Máy chủ** → **Mở Colab & chạy** (hoặc dán link tunnel, ví dụ
-   `https://abc123.gradio.live`, rồi **Kết nối**).
+4. Mở app → tab **🔌 Máy chủ** → **Mở Colab (chạy thủ công)**, bấm *Runtime → Run all*
+   trong Colab (hoặc dán link tunnel, ví dụ `https://abc123.gradio.live`, rồi **Kết nối**).
 
 Cũng có thể push tag `v1.1.0` để workflow gắn APK vào GitHub Release.
 
@@ -101,27 +107,30 @@ APK **không** chứa model và không chứa bản sao của UI: nó đóng gó
 
 ---
 
-## D. Chạy Colab ngay trong app (tab 🔌 Máy chủ)
+## D. Mở Colab từ app (bạn vẫn chạy Run all thủ công)
 
-Mục tiêu: **không phải chép link bằng tay**. App không nhúng Colab (xem lý do bên dưới)
-mà mở Colab ở **Custom Tab** — vẫn nằm trong app, có nút quay lại — rồi **tự bắt link
-tunnel** khi bạn quay về.
+Mục tiêu: **không phải dán link bằng tay**. App không nhúng Colab (xem lý do bên dưới)
+mà mở notebook ở **Custom Tab** — vẫn nằm trong app, có nút quay lại — rồi **tự bắt link
+tunnel** khi bạn quay về. Bước cấp GPU và *Runtime → Run all* luôn do bạn xác nhận trong
+Colab.
 
 | Nút | Việc nó làm |
 |---|---|
-| **🚀 Mở Colab & chạy** | Mở đúng notebook `colab/WAI_v17_1click.ipynb` của repo trên Colab (Custom Tab trong APK, tab mới trên web). Bấm *Runtime → Run all* là Forge cài + chạy + in link public |
+| **🚀 Mở Colab (chạy thủ công)** | Mở đúng notebook `colab/WAI_v17_1click.ipynb` của repo trên Colab (Custom Tab trong APK, tab mới trên web). Bạn bấm *Runtime → Run all* để Forge cài + chạy + in link public |
 | *(tự động)* **nhận link khi quay lại** | Quay lại app → app đọc clipboard → thấy `*.gradio.live` / `*.trycloudflare.com` / `*.ngrok*` → kết nối luôn. Tắt được bằng công tắc **Tự nhận link khi quay lại app** |
 | **📋 Dán link trong clipboard** | Đọc clipboard theo yêu cầu, tự tìm link Forge trong cả đoạn log Colab (kể cả log cloudflared) rồi kết nối |
 | **🔗 Kết nối** + ô địa chỉ | Dán tay `https://xxxx.gradio.live` hoặc `192.168.1.9:7860` (Forge trong LAN, tự hiểu là `http`) |
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link gradio.live hết hạn thì chạy lệnh này, link mới hiện ra, quay lại app là tự nhận |
 | **🩺 Chẩn đoán kết nối** | Gọi song song 6 endpoint (`options`, `cmd-flags`, `sd-models`, `progress`, `internal/progress`, `vi-mobile/api/health`) bằng đúng GET/POST; kiểm tra **job nền + file stream** |
-| **Lịch sử link** | 6 link gần nhất kèm ✅/❌ lần dùng cuối; bấm là kết nối lại. Tự kiểm tra lại mỗi 60 giây |
+| **Theo dõi phiên** | Khi app đang mở, ping lại mỗi 60 giây nếu kết nối khoẻ; nếu lỗi, retry theo backoff 30 giây đến tối đa 4 phút. App đi background/offline thì dừng, nên đây không phải keep-alive Colab |
+| **Lịch sử link** | 6 link gần nhất kèm ✅/❌ lần dùng cuối; bấm là kết nối lại |
 
 **Vì sao không nhúng thẳng Colab vào app (iframe/WebView)?** Google **chặn đăng nhập
 Google trong WebView** (lỗi “disallowed_useragent”), và Colab **không có API** để app bấm
-*Run all* hộ. Nên cách khả thi nhất — và đúng chính sách của Google — là Custom Tab +
-tự đọc clipboard khi quay lại, đúng như app này đang làm.
+*Run all* hộ hay bảo đảm runtime không bị ngắt. Nên cách khả thi, đúng chính sách là Custom
+Tab + tự đọc clipboard khi quay lại. Khi cần uptime cao, chuyển GPU backend bền vững theo
+[phương án vận hành trong app](RUN_IN_APP_PLAN.md), thay vì dùng thủ thuật giữ Colab sống.
 
 Link Colab sinh lúc build trỏ tới **tag/nhánh không chứa dấu `/`** (hoặc commit SHA) vì
 Colab không mở được ref bị mã hoá `%2F`. Build từ tag `v*` sẽ tạo link `.../blob/v1.1.0/...`
@@ -160,7 +169,7 @@ app **không tạo lại ảnh**.
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed**, **Biến đổi bằng img2img**, **Upscale ảnh đã có** 1.5–4× bằng RealESRGAN Anime/Lanczos/Nearest; bản mới lưu riêng, giữ ảnh gốc; chặn ảnh vào >20 MiB hoặc cạnh ra >4096 px |
-| **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge + job API, công tắc tự nhận link |
+| **🔌 Máy chủ** | Mở notebook Colab bằng một nút (**bạn chạy Run all thủ công**), tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge + job API, theo dõi foreground có backoff và công tắc tự nhận link |
 | **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
 
 Preset chất lượng/sampler vẫn lấy từ `prompt_lib/system_tags.py` (steps 25, CFG 6,
