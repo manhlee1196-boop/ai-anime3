@@ -357,6 +357,24 @@ const state_settings_api_url = () => {
     'không hiện tên model sau khi tự kết nối');
   assert.ok($$('#linkList .tag-row').length >= 2, 'lịch sử link không ghi thêm link mới');
 
+  // Hybrid: chỉ Forge (không phải Colab) được nhúng trong sheet iframe của app.
+  assert.equal($('#openForgeBrowserBtn').disabled, false, 'Forge trong app phải mở khi đã kết nối');
+  $('#openForgeBrowserBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => !$('#sheetBrowser').classList.contains('hidden')
+    && $('#forgeBrowserFrame').src.startsWith('https://abc123.gradio.live/'),
+  { label: 'mở Forge trong iframe' });
+  assert.match($('#browserAddress').textContent, /abc123\.gradio\.live/);
+  $('#browserReloadBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.match($('#forgeBrowserFrame').src, /anime3_reload=/, 'reload iframe không thêm cache-buster');
+  const forgeExternal = [];
+  window.Capacitor.Plugins.Browser = { open: async ({ url }) => forgeExternal.push(url) };
+  $('#browserExternalBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await until(() => forgeExternal.length === 1, { label: 'mở Forge qua Custom Tab dự phòng' });
+  assert.equal(forgeExternal[0], 'https://abc123.gradio.live/');
+  $('#sheetBrowser [data-close]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.ok($('#sheetBrowser').classList.contains('hidden'), 'đóng browser sheet thất bại');
+  assert.equal($('#forgeBrowserFrame').getAttribute('src'), null, 'đóng sheet phải dừng iframe Forge');
+
   // copy lệnh lấy link mới cho Colab
   $('#copyRestartCmdBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   await until(() => clipboard.writes.some((text) => text.includes('--restart')),

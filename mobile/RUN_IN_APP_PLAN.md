@@ -60,6 +60,9 @@ từ chối các host/scheme khác.
   có thể trả app trước khi WebView sẵn sàng, JavaScript lấy callback theo kiểu consume-once.
 - `ui.js` xác minh lại URL, lưu lịch sử link, ping Forge rồi kết nối. Nếu deep link không có
   (PWA/APK cũ), đường clipboard hiện có vẫn là fallback.
+- Sau khi health ping đạt, nút **🌐 Forge trong app** mở giao diện gốc Forge trong iframe
+  full-screen của app. Iframe chỉ dành cho Forge/tunnel đã kết nối; Colab/Google login vẫn
+  dùng Custom Tab. Nút ↗ mở cùng URL qua Custom Tab nếu server đặt CSP/X-Frame-Options chặn iframe.
 
 ### Notebook Colab một ô
 

@@ -230,15 +230,16 @@ class MobileAssets(unittest.TestCase):
 
     def test_13b_server_tab_elements_wired(self):
         """Tab Máy chủ cần đủ phần tử và ui.js phải gắn hết (không nút chết)."""
-        needed = {"tab-server", "openColabBtn", "pasteLinkBtn", "connectBtn", "serverUrl",
+        needed = {"tab-server", "openColabBtn", "pasteLinkBtn", "openForgeBrowserBtn", "connectBtn", "serverUrl",
                   "autoConnect", "linkList", "diagnoseBtn", "diagnoseOut", "serverState",
-                  "copyStatusCmdBtn", "copyRestartCmdBtn", "clearLinksBtn"}
+                  "copyStatusCmdBtn", "copyRestartCmdBtn", "clearLinksBtn", "sheetBrowser",
+                  "forgeBrowserFrame", "browserReloadBtn", "browserExternalBtn"}
         missing = sorted(needed - self.ids)
         self.assertEqual(missing, [], f"index.html thiếu: {missing}")
-        for name in sorted(needed):
-            if name == "tab-server":
-                continue
-            self.assertIn(f"$('#{name}')", self.ui, f"ui.js không gắn {name}")
+        bindings = {name: f"$('#{name}')" for name in needed - {"tab-server", "sheetBrowser"}}
+        bindings["sheetBrowser"] = "openSheet('#sheetBrowser')"
+        for name, marker in sorted(bindings.items()):
+            self.assertIn(marker, self.ui, f"ui.js không gắn {name}")
 
     def test_14_html_has_no_external_dependency(self):
         """App phải chạy offline trong APK: không CDN, không font ngoài."""

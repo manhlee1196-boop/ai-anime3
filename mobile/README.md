@@ -118,6 +118,7 @@ lại. Bước cấp GPU và *Runtime → Run all* luôn do bạn xác nhận tr
 |---|---|
 | **🚀 Mở Colab (chạy thủ công)** | Mở đúng notebook `colab/WAI_v17_1click.ipynb` của repo trên Colab (Custom Tab trong APK, tab mới trên web). Bạn chọn GPU và bấm *Runtime → Run all* |
 | **📲 Mở lại Anime3** ⭐ | Sau khi Forge tạo link, notebook hiện nút này. Chạm nút → `anime3://connect?...` mở APK → app nhận URL `gradio.live`/`trycloudflare.com`, ping Forge và kết nối **không cần clipboard** |
+| **🌐 Forge trong app** | Khi đã kết nối, mở giao diện Forge thật trong một sheet iframe của app: có tải lại và nút ↗ chuyển sang Chrome Custom Tab nếu tunnel chặn iframe. Chỉ nhúng Forge, **không nhúng Colab/Google login** |
 | *(fallback)* **Tự nhận / Dán clipboard** | PWA hoặc APK cũ không có deep link vẫn đọc `*.gradio.live` / `*.trycloudflare.com` từ clipboard khi quay lại, hoặc dùng nút **📋 Dán link Forge** |
 | **📄 Copy lệnh kiểm tra** | Copy `bash /content/install.sh --status` để dán vào Colab khi không thấy link |
 | **♻️ Copy lệnh lấy link mới** | Copy `bash /content/install.sh --only launch,verify --restart` — link hết hạn thì chạy lệnh này; copy URL mới để app nhận clipboard. Muốn dùng deep link lại, chạy lại ô notebook một lần rồi chạm **📲 Mở lại Anime3** |
@@ -171,7 +172,7 @@ app **không tạo lại ảnh**.
 | **Kho tag** | 95.939 tag được đóng gói trong APK (mọi tag có nghĩa tiếng Việt đều được giữ, kể cả tag hiếm): gõ **tiếng Việt không cần dấu** (`toc dai` → `long_hair`), duyệt đủ 18 nhóm bằng thanh cuộn ngang, chọn nhiều tag rồi **Chèn vào prompt** |
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed**, **Biến đổi bằng img2img**, **Upscale ảnh đã có** 1.5–4× bằng RealESRGAN Anime/Lanczos/Nearest; bản mới lưu riêng, giữ ảnh gốc; chặn ảnh vào >20 MiB hoặc cạnh ra >4096 px |
-| **🔌 Máy chủ** | Mở notebook Colab (**bạn chạy Run all thủ công**) rồi chạm **📲 Mở lại Anime3** để APK nhận tunnel không cần dán link; clipboard là fallback cho PWA/APK cũ; có lịch sử link, lệnh `install.sh`, chẩn đoán 6 endpoint Forge + job API, theo dõi foreground có backoff |
+| **🔌 Máy chủ** | Mở notebook Colab (**bạn chạy Run all thủ công**) rồi chạm **📲 Mở lại Anime3** để APK nhận tunnel không cần dán link; mở **🌐 Forge trong app** bằng iframe sau khi kết nối (↗ Custom Tab nếu bị chặn); clipboard là fallback cho PWA/APK cũ; có lịch sử link, lệnh `install.sh`, chẩn đoán 6 endpoint Forge + job API, theo dõi foreground có backoff |
 | **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
 
 Preset chất lượng/sampler vẫn lấy từ `prompt_lib/system_tags.py` (steps 25, CFG 6,

@@ -229,6 +229,9 @@ function bindEvents() {
   // --- tab Máy chủ
   $('#openColabBtn').addEventListener('click', openColab);
   $('#pasteLinkBtn').addEventListener('click', pasteAndConnect);
+  $('#openForgeBrowserBtn').addEventListener('click', openForgeBrowser);
+  $('#browserReloadBtn').addEventListener('click', reloadForgeBrowser);
+  $('#browserExternalBtn').addEventListener('click', openForgeInCustomTab);
   $('#connectBtn').addEventListener('click', () => connectTo($('#serverUrl').value));
   $('#serverUrl').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -480,6 +483,10 @@ function closeSheet(sheet) {
   if (sheet.id === 'sheetImage' && state.viewUrl) {
     URL.revokeObjectURL(state.viewUrl);
     state.viewUrl = '';
+  }
+  if (sheet.id === 'sheetBrowser') {
+    // Dừng iframe khi đóng để không giữ WebSocket/timer Forge trong nền app.
+    $('#forgeBrowserFrame').removeAttribute('src');
   }
   if (!$$('.sheet').some((item) => !item.classList.contains('hidden'))) {
     document.body.style.overflow = '';
@@ -1721,6 +1728,9 @@ function renderServerTab() {
     ? `Notebook: ${colab.repo} · bản ${colab.branch} · ${colab.notebook}`
     : 'Chưa nạp được dữ liệu app — vẫn dùng được ô địa chỉ Forge bên trên.';
 
+  // Chỉ mở iframe Forge khi health ping đã xác nhận cùng máy chủ trả lời.
+  $('#openForgeBrowserBtn').disabled = !state.connected;
+
   renderLinks();
 }
 
@@ -1767,6 +1777,68 @@ async function openColab() {
     return;
   }
   toast('Đã mở Colab — bấm Run all, rồi chạm “Mở lại Anime3”');
+}
+
+/** URL giao diện gốc Forge để đưa vào iframe; Colab luôn ở Custom Tab, không ở iframe. */
+function forgeBrowserUrl() {
+  const configured = core.normalizeBaseUrl(state.settings.apiUrl);
+  if (configured) return `${configured}/`;
+  // PWA chạy ngay dưới <tunnel>/vi-mobile/ nên root của origin là Forge.
+  if (/^https?:$/.test(location.protocol) && location.hostname !== 'localhost') {
+    return new URL('/', location.href).href;
+  }
+  return '';
+}
+
+function setForgeBrowserSource({ reload = false } = {}) {
+  const url = forgeBrowserUrl();
+  if (!url) return '';
+  const frame = $('#forgeBrowserFrame');
+  // Thêm cache-buster chỉ lúc người dùng chủ động reload; Forge bỏ qua query này.
+  const source = reload ? `${url}${url.includes('?') ? '&' : '?'}anime3_reload=${Date.now()}` : url;
+  frame.src = source;
+  $('#browserAddress').textContent = shortUrl(url);
+  return url;
+}
+
+/** Mở giao diện Forge đã kết nối ngay trong app; không bao giờ cố nhúng Colab/Google login. */
+function openForgeBrowser() {
+  if (!state.connected) {
+    toast('Hãy kết nối Forge trước khi mở trình duyệt trong app.', { error: true });
+    showTab('server');
+    return;
+  }
+  const url = setForgeBrowserSource();
+  if (!url) {
+    toast('Chưa xác định được địa chỉ Forge để mở trong app.', { error: true });
+    return;
+  }
+  openSheet('#sheetBrowser');
+}
+
+function reloadForgeBrowser() {
+  const url = setForgeBrowserSource({ reload: true });
+  if (!url) toast('Chưa có địa chỉ Forge để tải lại.', { error: true });
+}
+
+/** Dự phòng khi tunnel/Forge trả CSP hoặc X-Frame-Options không cho iframe. */
+async function openForgeInCustomTab() {
+  const url = forgeBrowserUrl();
+  if (!url) {
+    toast('Chưa có địa chỉ Forge để mở.', { error: true });
+    return;
+  }
+  const plugin = window.Capacitor?.Plugins?.Browser;
+  if (plugin?.open) {
+    try {
+      await plugin.open({ url });
+      return;
+    } catch (error) {
+      console.warn('Không mở được Forge bằng Custom Tab', error);
+    }
+  }
+  const opened = window.open(url, '_blank', 'noopener');
+  if (!opened && !plugin) toast(`Trình duyệt chặn tab mới. Mở tay: ${url}`, { error: true, ms: 6000 });
 }
 
 /** Chỉ nhận callback tunnel HTTPS mà notebook Colab chính thức có thể tạo. */

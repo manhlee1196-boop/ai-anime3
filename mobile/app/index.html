@@ -207,6 +207,7 @@
       <div class="row gap wrap">
         <button id="openColabBtn" class="primary" type="button">▶ Mở Colab (chạy thủ công)</button>
         <button id="pasteLinkBtn" class="chip" type="button">📋 Dán link Forge</button>
+        <button id="openForgeBrowserBtn" class="chip" type="button" disabled>🌐 Forge trong app</button>
       </div>
       <p class="hint">
         Colab mở bằng trình duyệt / Chrome Custom Tab (Google chặn đăng nhập trong WebView
@@ -383,6 +384,31 @@
         <button id="imageShareBtn" class="chip" type="button">↗ Chia sẻ</button>
         <button id="imageDeleteBtn" class="chip danger-text" type="button">🗑 Xoá</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------- Trình duyệt Forge nhúng -->
+<div id="sheetBrowser" class="sheet browser-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="browserTitle">
+  <div class="sheet-panel browser-panel">
+    <div class="sheet-head browser-head">
+      <div class="browser-title">
+        <h2 id="browserTitle">Forge trong app</h2>
+        <p id="browserAddress" class="hint">Chưa có máy chủ Forge để mở.</p>
+      </div>
+      <div class="row gap browser-actions">
+        <button id="browserReloadBtn" class="icon-btn" type="button" aria-label="Tải lại Forge">↻</button>
+        <button id="browserExternalBtn" class="icon-btn" type="button" aria-label="Mở Forge bằng trình duyệt">↗</button>
+        <button class="icon-btn" data-close type="button" aria-label="Đóng trình duyệt">✕</button>
+      </div>
+    </div>
+    <div class="sheet-body browser-body">
+      <iframe id="forgeBrowserFrame" class="forge-browser-frame" title="Giao diện Forge trong app"
+        referrerpolicy="no-referrer"></iframe>
+      <p id="browserHint" class="hint browser-hint">
+        Đây là giao diện Forge đã kết nối, không phải Colab. Nếu tunnel chặn iframe hoặc trang trắng,
+        bấm ↗ để mở bằng Chrome Custom Tab.
+      </p>
     </div>
   </div>
 </div>
