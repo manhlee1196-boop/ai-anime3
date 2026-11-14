@@ -11,8 +11,8 @@ from . import groups as G
 from .editing import split_prompt, piece_body, rewrite_piece
 from .index import norm
 from .styles import PRESETS as STYLE_PRESETS
-from .system_tags import (NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS, SIZE_PRESETS,
-                          WAI_DEFAULTS, pick_upscaler)
+from .system_tags import (ANTI_WATERMARK, NEGATIVE_PRESETS, QUALITY_PRESETS, RATINGS,
+                          SIZE_PRESETS, WAI_DEFAULTS, pick_upscaler)
 
 LORA_RE = re.compile(r"^<(lora|lyco|embedding|hypernet):")
 WEIGHT_RE = re.compile(r"^(?P<body>.+?):(?P<w>\d+\.\d+|\d+)$")
@@ -173,9 +173,12 @@ class PromptBuilder:
 
     # ------------------------------------------------------------------ negative
     def negative(self, rating_id="general", preset="Chuẩn cộng đồng (đầy đủ)",
-                 extra_negative=""):
+                 extra_negative="", anti_watermark=True):
         rating = RATING_BY_ID.get(rating_id, RATINGS[0])
         parts = [NEGATIVE_PRESETS.get(preset, "")]
+        # Chặn chữ ký/logo Patreon mà model tự vẽ; tôn trọng lựa chọn "Không dùng negative".
+        if anti_watermark and parts[0].strip():
+            parts.append(ANTI_WATERMARK)
         # mức phân loại không chọn -> đẩy sang negative (đúng hướng dẫn của thẻ model)
         parts.append(", ".join(rating["negative"]))
         if extra_negative:

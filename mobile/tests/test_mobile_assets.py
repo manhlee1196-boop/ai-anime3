@@ -18,6 +18,8 @@ MOBILE = ROOT / "mobile"
 APP = MOBILE / "app"
 sys.path.insert(0, str(ROOT / "colab"))
 
+from prompt_lib import system_tags as ST  # noqa: E402
+
 
 def load_build_data():
     spec = importlib.util.spec_from_file_location("mobile_build_data", MOBILE / "build_data.py")
@@ -91,6 +93,9 @@ class MobileData(unittest.TestCase):
             self.assertIn(key, presets)
         self.assertGreaterEqual(len(presets["quality"]), 4)
         self.assertGreaterEqual(len(presets["negative"]), 4)
+        self.assertEqual(presets["anti_watermark"], ST.ANTI_WATERMARK)
+        for tag in ("watermark", "signature", "patreon username", "patreon logo", "logo"):
+            self.assertIn(tag, presets["anti_watermark"].split(", "))
         self.assertEqual([r["id"] for r in presets["ratings"]],
                          ["general", "sensitive", "questionable", "explicit"])
         self.assertEqual(presets["defaults"]["steps"], 25)
@@ -149,7 +154,7 @@ class MobileAssets(unittest.TestCase):
         self.assertIn("index.html", files)
         self.assertIn("url.pathname.includes('/vi-mobile/api/')", sw,
                       "job status/result/file local không được đi qua cache shell")
-        self.assertIn("anime3-shell-v14", sw)
+        self.assertIn("anime3-shell-v15", sw)
         for name in files:
             if name in ("", "."):
                 continue
@@ -205,6 +210,22 @@ class MobileAssets(unittest.TestCase):
             self.assertIn(f"$('#{name}')", self.ui, f"ui.js không gắn {name}")
         self.assertIn("api.img2img.bind(api)", self.ui)
         self.assertIn("payload.init_images = [await blobToBase64(source)]", self.ui)
+
+    def test_12e_watermark_guard_is_wired(self):
+        """Ảnh dính chữ PATREON + logo: negative phải có nhóm chặn và bật mặc định."""
+        self.assertIn("setBlockWatermark", self.ids)
+        self.assertIn("$('#setBlockWatermark')", self.ui)
+        self.assertIn("guard: watermarkGuard()", self.ui,
+                      "negative dựng từ preset phải cộng nhóm chặn watermark")
+        self.assertIn("migrateWatermarkGuard()", self.ui,
+                      "negative đã lưu ở bản cũ phải được bổ sung một lần")
+        store = (APP / "js" / "store.js").read_text(encoding="utf-8")
+        self.assertIn("blockWatermark: true", store)
+        core = (APP / "js" / "core.js").read_text(encoding="utf-8")
+        literal = re.search(r"export const ANTI_WATERMARK = (.*?);", core, re.S).group(1)
+        fallback = "".join(re.findall(r"'([^']*)'", literal))
+        self.assertEqual(fallback, ST.ANTI_WATERMARK,
+                         "core.js và prompt_lib/system_tags.py lệch nhóm tag chặn watermark")
 
     def test_13_ui_references_known_element_ids(self):
         """Bắt lỗi gõ sai id — thứ mà test Node không thấy vì không có DOM."""

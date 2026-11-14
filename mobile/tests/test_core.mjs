@@ -114,6 +114,58 @@ check('buildNegative gộp preset + phân loại, không lặp', () => {
   assert.equal(out, 'bad quality, worst quality, sketch, rating_explicit, explicit, watermark');
 });
 
+check('buildNegative chèn nhóm chặn watermark ngay sau preset', () => {
+  const out = core.buildNegative({
+    preset: 'bad quality, sketch',
+    guard: core.ANTI_WATERMARK,
+    ratingNegative: ['nsfw'],
+    extra: 'watermark, blurry',
+  });
+  assert.equal(out, `bad quality, sketch, ${core.ANTI_WATERMARK}, nsfw, blurry`);
+  assert.equal(core.buildNegative({ preset: 'bad quality', guard: '' }), 'bad quality');
+});
+
+check('ANTI_WATERMARK chặn đúng chữ ký/logo Patreon, không chặn chữ nói chung', () => {
+  const tags = core.parseTags(core.ANTI_WATERMARK).map((piece) => piece.tag);
+  for (const tag of ['watermark', 'signature', 'artist name', 'patreon username',
+    'patreon logo', 'web address', 'logo']) {
+    assert.ok(tags.includes(tag), `thiếu ${tag}`);
+  }
+  assert.ok(!tags.includes('text'), 'không chặn text: người dùng vẫn cần bong bóng thoại');
+  assert.equal(new Set(tags).size, tags.length);
+});
+
+check('mergeTags chỉ nối phần thiếu và giữ nguyên chữ người dùng viết', () => {
+  const mine = 'bad quality, (sketch), Watermark, (patreon_logo:1.3), <lora:x:0.5>, ';
+  const out = core.mergeTags(mine, core.ANTI_WATERMARK);
+  assert.ok(out.startsWith('bad quality, (sketch), Watermark, (patreon_logo:1.3), <lora:x:0.5>, signature'), out);
+  assert.equal(out.match(/watermark/gi).length, 1, 'không lặp tag đã có');
+  assert.equal(out.match(/patreon.logo/gi).length, 1, 'gạch dưới và trọng số vẫn tính là đã có');
+  assert.equal(core.mergeTags(out, core.ANTI_WATERMARK), out, 'gọi lại không đổi gì');
+  assert.equal(core.mergeTags('', 'a, b'), 'a, b');
+});
+
+check('removeTags gỡ đúng nhóm chặn, không đụng tag khác', () => {
+  const out = core.removeTags(
+    'bad quality, (sketch), watermark, (patreon_logo:1.3), artist_name, <lora:x:0.5>, logo',
+    core.ANTI_WATERMARK,
+  );
+  assert.equal(out, 'bad quality, (sketch), <lora:x:0.5>');
+  assert.equal(core.removeTags(core.mergeTags('censor', core.ANTI_WATERMARK), core.ANTI_WATERMARK), 'censor');
+});
+
+check('tagsIn phát hiện prompt dương tự gọi chữ ký/watermark', () => {
+  assert.deepEqual(core.tagsIn('1girl, signature, (Patreon_Username:1.2), signature', core.ANTI_WATERMARK),
+    ['signature', 'patreon username']);
+  assert.deepEqual(core.tagsIn('1girl, long hair, logo print shirt', core.ANTI_WATERMARK), []);
+});
+
+check('payloadWarnings báo CFG 1 làm negative vô hiệu', () => {
+  assert.ok(core.payloadWarnings({ cfg_scale: 1 }).some((text) => text.includes('bỏ qua negative')));
+  assert.equal(core.payloadWarnings({ cfg_scale: 1.5 }).length, 0);
+  assert.equal(core.payloadWarnings({}).length, 0, 'không có CFG thì không cảnh báo');
+});
+
 // ------------------------------------------------------------------ token
 check('estimateTokens đếm gần đúng và chia mức ngân sách', () => {
   assert.equal(core.estimateTokens('1girl, solo'), 4);       // 1+1 token + 2 dấu phẩy? (mỗi mảnh 1)

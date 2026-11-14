@@ -143,6 +143,20 @@ def main():
     check("'explicit' không tự chặn chính nó", "rating_explicit" in neg18, False)
     check_in("'explicit' chặn mức an toàn", "rating_general", neg18)
 
+    print("\n10b) Negative chặn chữ ký / watermark / logo Patreon mà model tự vẽ")
+    short = builder.negative("general", "WAI khuyến nghị (ngắn)")
+    for token in ("watermark", "signature", "artist name", "patreon username",
+                  "patreon logo", "web address", "logo"):
+        check_in("preset ngắn + nhóm chặn", token, [p.strip() for p in short.split(",")])
+    full = [p.strip() for p in neg.split(",")]
+    check("preset đầy đủ không lặp watermark", full.count("watermark"), 1)
+    check_in("preset đầy đủ cũng chặn Patreon", "patreon logo", full)
+    check("'Không dùng negative' không bị ép thêm tag",
+          "watermark" in builder.negative("general", "Không dùng negative"), False)
+    check("tắt được nhóm chặn",
+          "patreon" in builder.negative("general", "WAI khuyến nghị (ngắn)",
+                                        anti_watermark=False), False)
+
     print("\n11) Không nhầm cú pháp trọng số với tag có dấu hai chấm")
     pieces, specials, unresolved = parse_pieces(
         "16:9, :3, 9/11, (solo:1.2), <lora:abc:0.8>, áo dài", index)

@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS = {
   qualityPreset: 'WAI khuyến nghị (đầy đủ)',
   negativePreset: 'WAI khuyến nghị (ngắn)',
   negativeExtra: '',
+  blockWatermark: true,       // cộng nhóm tag chặn chữ ký/watermark/logo Patreon vào negative
+  watermarkGuard: 0,          // phiên bản di trú: 1 = negative đã lưu được bổ sung nhóm chặn
   autoConnect: true,          // tự nhận link Forge trong clipboard khi quay lại app
   links: [],                  // [{url, at, ok, model}] — 6 link gần nhất
 };

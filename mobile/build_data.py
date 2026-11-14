@@ -191,6 +191,7 @@ def build_payload(min_count=DEFAULT_MIN_COUNT):
         "presets": {
             "quality": ST.QUALITY_PRESETS,
             "negative": ST.NEGATIVE_PRESETS,
+            "anti_watermark": ST.ANTI_WATERMARK,
             "ratings": ST.RATINGS,
             "sizes": [[label, list(size)] for label, size in SIZE_PRESETS_ORDER],
             "defaults": {

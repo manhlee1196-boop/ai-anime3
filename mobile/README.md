@@ -161,7 +161,7 @@ app **không tạo lại ảnh**.
 | **Phong cách** | 12 công thức sẵn (màu nước, cel-shading, ukiyo-e, pixel art…) + đủ **506 tag phong cách** lọc theo nhóm/chất liệu, có nghĩa tiếng Việt |
 | **Thư viện** | Ảnh tạo xong **tự lưu trên máy** (IndexedDB, không nằm trong RAM): xem ảnh, chia sẻ/tải về, xoá, **dùng lại prompt + seed**, **Biến đổi bằng img2img**, **Upscale ảnh đã có** 1.5–4× bằng RealESRGAN Anime/Lanczos/Nearest; bản mới lưu riêng, giữ ảnh gốc; chặn ảnh vào >20 MiB hoặc cạnh ra >4096 px |
 | **🔌 Máy chủ** | **Mở Colab & chạy** bằng một nút, tự nhận link tunnel khi quay lại app (clipboard), dán link trong clipboard, 6 link gần nhất, copy lệnh `install.sh` để kiểm tra/lấy link mới, **chẩn đoán** 6 endpoint Forge + job API, công tắc tự nhận link |
-| **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, công thức phong cách, cài PWA, xoá thư viện |
+| **Cài đặt** | Địa chỉ Forge, tài khoản API (`--api-auth`), tag chất lượng/negative/sampler mặc định, **chặn watermark/chữ ký/logo Patreon**, công thức phong cách, cài PWA, xoá thư viện |
 
 Preset chất lượng/sampler vẫn lấy từ `prompt_lib/system_tags.py` (steps 25, CFG 6,
 Euler a, clip skip 2). Riêng cấu hình mobile an toàn hơn cho T4: **832×1216, batch 1,
@@ -174,6 +174,19 @@ ngoài 0.1–0.75, kích thước không chia hết cho 8 và cảnh báo đầu
 **Biến đổi bằng img2img**. Denoise thấp giữ nhiều nét gốc; 0,55 là mặc định, trên 0,8 app
 cảnh báo ảnh có thể thay gần như toàn bộ. Kích thước đầu ra vẫn do chip Độ phân giải quyết
 định. App gửi đúng một `init_images`, không gửi Hires và không trả ảnh init trong kết quả.
+
+**Ảnh dính chữ “PATREON”, logo hay chữ ký ở góc:** đây không phải watermark do app hay Forge
+đóng lên — chính model vẽ ra, vì dữ liệu huấn luyện có rất nhiều ảnh mang chữ ký hoạ sĩ
+(theo `danbooru_e621.csv` của repo: `watermark` 342k ảnh, `patreon_username` 75k,
+`patreon_logo` 53k). App cộng sẵn nhóm tag
+chặn vào negative: `watermark, signature, artist name, username, patreon username, patreon
+logo, twitter username, web address, logo, artist logo`. Công tắc nằm ở **Cài đặt → Mặc định
+cho prompt → Chặn watermark, chữ ký, logo Patreon** (bật mặc định). Negative đã lưu từ bản
+cũ được bổ sung một lần khi mở app; ảnh nạp lại từ Thư viện cũng được bổ sung. Ba điều cần
+nhớ: (1) **CFG 1** bỏ qua negative hoàn toàn — app cảnh báo ngay dưới prompt; (2) đừng để
+`signature`, `watermark`, `patreon_username`… trong prompt dương, app sẽ nhắc; (3) Upscale và
+img2img denoise thấp **giữ nguyên** watermark đã có trên ảnh gốc — hãy tạo lại ảnh; img2img
+chỉ có cơ hội vẽ đè khi denoise cao (khoảng 0,6 trở lên) và không bảo đảm xoá sạch.
 
 ## Chạy thử ở máy tính (không cần GPU)
 
@@ -192,9 +205,9 @@ file PNG gradient có HTTP Range — đủ kiểm toàn bộ giao diện mà kh�
 ## Kiểm thử
 
 ```bash
-node mobile/tests/test_core.mjs          # 40 test logic: prompt, payload txt2img/img2img/Hires, token, tra tag, link Forge
+node mobile/tests/test_core.mjs          # 46 test logic: prompt, negative chặn watermark, payload txt2img/img2img/Hires, token, tra tag, link Forge
 node mobile/tests/test_api.mjs           # 21 test ForgeClient: txt2img/img2img/extras job, manifest, Blob, retry, Range, huỷ
-python3 mobile/tests/test_mobile_assets.py   # 23 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt
+python3 mobile/tests/test_mobile_assets.py   # 24 test dữ liệu/tài nguyên/id HTML/nhập tiếng Việt/chặn watermark
 python3 mobile/tests/test_mobile_route.py    # 12 test job FastAPI/img2img/Extras, PNG gốc, S3, Range, idempotency, auth
 npm i jsdom && node mobile/tests/test_ui_smoke.mjs   # smoke UI thật trên DOM giả + Forge giả
                                                      # (kể cả tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán)
@@ -231,6 +244,7 @@ bản gz, máy cũ không hỗ trợ thì tải bản `.json`. Muốn nhẹ hơn
 
 | Hiện tượng | Nguyên nhân & cách sửa |
 |---|---|
+| Ảnh luôn có chữ “PATREON” + logo / chữ ký ở góc | Model tự vẽ do negative thiếu tag chặn. Bật **Cài đặt → Chặn watermark, chữ ký, logo Patreon**, để CFG 5–7 (CFG 1 làm negative vô hiệu), bỏ `signature`/`watermark` khỏi prompt. Ảnh đã dính thì tạo lại, Upscale không xoá được |
 | “Không gọi được máy chủ…” | Link tunnel hết hạn (gradio.live sống ~10 phút–vài giờ) → chạy `bash /content/install.sh --status`, rồi `--only launch,verify --restart` và mở **link mới**. Hoặc app ở origin khác mà Forge thiếu `--cors-allow-origins` |
 | Web tạo ảnh nhưng APK mất kết nối lúc trả ảnh | Cập nhật notebook/extension để có **Job nền & file stream**. App chỉ nhận JSON nhỏ rồi tải file gốc từ S3/R2 hoặc local Range; lỗi download được retry mà không tạo job mới |
 | Chẩn đoán thiếu `async_jobs` | Extension Colab đang ở bản cũ. Chạy lại notebook một ô và dùng link mới; app cố ý không quay lại `/vi-mobile/api/txt2img` base64 |

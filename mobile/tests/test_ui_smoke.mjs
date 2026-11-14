@@ -106,8 +106,22 @@ const state_settings_api_url = () => {
   const $ = (selector) => doc.querySelector(selector);
   const $$ = (selector) => Array.from(doc.querySelectorAll(selector));
 
+  // Người dùng bản cũ: negative đã lưu cứng trong máy, KHÔNG có tag chặn watermark.
+  // Đây đúng là tình huống ảnh luôn dính chữ "PATREON" + logo.
+  const OLD_NEGATIVE = 'bad quality, worst quality, worst detail, sketch, censor, (my custom:1.2)';
+  window.localStorage.setItem('anime3.mobile.settings.v1', JSON.stringify({ negative: OLD_NEGATIVE }));
+
+  const core = await import(join(APP, 'js', 'core.js'));
   await import(join(APP, 'js', 'ui.js'));
   await until(() => !$('#splash'), { label: 'splash biến mất' });
+  // Di trú một lần: giữ nguyên phần người dùng viết, nối thêm nhóm chặn còn thiếu.
+  assert.ok($('#negative').value.startsWith(OLD_NEGATIVE), 'di trú không được sửa negative cũ');
+  for (const tag of ['watermark', 'signature', 'patreon username', 'patreon logo', 'logo']) {
+    assert.ok($('#negative').value.split(', ').includes(tag), `negative sau di trú thiếu "${tag}"`);
+  }
+  const savedAfterMigration = JSON.parse(window.localStorage.getItem('anime3.mobile.settings.v1'));
+  assert.equal(savedAfterMigration.watermarkGuard, 1, 'phải đánh dấu đã di trú');
+  assert.match(savedAfterMigration.negative, /patreon logo/);
   assert.ok($$('#sizeChips .chip').length >= 5, 'thiếu chip kích thước');
   assert.equal($$('#ratingChips .chip').length, 4, 'thiếu chip phân loại');
   assert.ok($$('#quickTagList .quick-tag').length >= 5, 'thiếu gợi ý tag nhanh trong prompt');
@@ -173,6 +187,13 @@ const state_settings_api_url = () => {
   assert.match(generationPayloads[0].prompt, /ao_dai/);
   assert.match(generationPayloads[0].prompt, /smile/);
   assert.doesNotMatch(generationPayloads[0].prompt, /tóc dài|áo dài|nụ cười/);
+  // Negative thật sự gửi lên Forge phải chặn chữ ký / watermark / logo Patreon.
+  for (const tag of ['watermark', 'signature', 'patreon_username', 'patreon_logo', 'web_address']) {
+    assert.match(generationPayloads[0].negative_prompt.replace(/ /g, '_'), new RegExp(`(^|,_)${tag}(,|$)`),
+      `negative gửi đi thiếu ${tag}: ${generationPayloads[0].negative_prompt}`);
+  }
+  assert.doesNotMatch(generationPayloads[0].prompt, /patreon|watermark|signature/,
+    'app không được tự chèn tag watermark vào prompt dương');
 
   // APK: nút Lưu vào máy phải gửi PNG thật tới MediaStore và hiện đúng thư mục.
   const nativeSaves = [];
@@ -229,6 +250,8 @@ const state_settings_api_url = () => {
   await until(() => jobRequests.length === 3 && $('#cancelBtn').classList.contains('hidden')
     && /xong/i.test($('#status').textContent), { timeout: 40000, label: 'job img2img hoàn tất' });
   assert.equal(jobRequests[2].operation, 'img2img');
+  assert.match(jobRequests[2].payload.negative_prompt, /patreon_logo|patreon logo/,
+    'img2img nạp negative từ ảnh Thư viện vẫn phải chặn watermark');
   assert.equal(jobRequests[2].payload.denoising_strength, 0.65);
   assert.equal(jobRequests[2].payload.resize_mode, 1);
   assert.equal(jobRequests[2].payload.include_init_images, false);
@@ -275,6 +298,37 @@ const state_settings_api_url = () => {
   $('#settingsBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
   assert.ok($$('#setQuality option').length >= 4, 'thiếu preset chất lượng');
   assert.ok($$('#setSampler option').length >= 6, 'thiếu danh sách sampler');
+
+  // --- công tắc chặn watermark: tắt gỡ đúng nhóm tag, bật nối lại, không đụng phần khác
+  const guardSwitch = $('#setBlockWatermark');
+  assert.equal(guardSwitch.checked, true, 'chặn watermark phải bật mặc định');
+  const beforeToggle = $('#negative').value;
+  guardSwitch.checked = false;
+  guardSwitch.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.doesNotMatch($('#negative').value, /patreon|watermark|signature|logo|web.address/);
+  assert.match($('#negative').value, /bad quality/, 'tắt chặn không được xoá phần negative khác');
+  guardSwitch.checked = true;
+  guardSwitch.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.match($('#negative').value, /patreon logo/);
+  assert.equal(core.tagsIn($('#negative').value, core.ANTI_WATERMARK).length,
+    core.parseTags(core.ANTI_WATERMARK).length, 'bật lại phải đủ cả nhóm chặn');
+  assert.ok(beforeToggle.length > 0);
+
+  // Prompt dương tự gọi chữ ký thì phải cảnh báo, và CFG 1 phải báo negative vô hiệu.
+  const promptBeforeWarn = $('#prompt').value;
+  $('#prompt').value = '1girl, signature, patreon_username';
+  $('#prompt').dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.match($('#promptWarn').textContent, /signature, patreon username/);
+  assert.ok(!$('#promptWarn').classList.contains('hidden'));
+  $('#prompt').value = promptBeforeWarn;
+  $('#prompt').dispatchEvent(new window.Event('input', { bubbles: true }));
+  $('#cfg').value = '1';
+  $('#cfg').dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.ok(!$('#promptWarn').classList.contains('hidden'));
+  assert.match($('#promptWarn').textContent, /CFG 1 bỏ qua negative/);
+  $('#cfg').value = '6';
+  $('#cfg').dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.ok($('#promptWarn').classList.contains('hidden'), 'CFG 6 không còn cảnh báo negative vô hiệu');
 
   // --- tab Máy chủ: mở Colab, dán link, tự nhận link, chẩn đoán
   $('.tab-btn[data-tab="server"]').dispatchEvent(new window.Event('click', { bubbles: true }));

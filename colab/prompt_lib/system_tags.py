@@ -147,6 +147,18 @@ NEGATIVE_PRESETS = {
     "Không dùng negative": "",
 }
 
+# ---------------------------------------------------------------- chặn watermark
+# WAI/Illustrious học từ Danbooru, nơi rất nhiều ảnh điểm cao mang chữ ký hoạ sĩ,
+# "patreon username", "patreon logo", địa chỉ web... Tag chất lượng (masterpiece,
+# newest) kéo theo cả các dấu này, nên negative KHÔNG có nhóm tag dưới đây thì model
+# hay tự vẽ chữ "PATREON" + logo ở góc ảnh. Preset ngắn theo thẻ model không chứa
+# chúng, vì vậy nhóm này được cộng thêm vào mọi preset (trừ "Không dùng negative").
+# Cố ý không có `text`/`english text`: người dùng vẫn cần vẽ bong bóng thoại, biển hiệu.
+ANTI_WATERMARK = (
+    "watermark, signature, artist name, username, patreon username, patreon logo, "
+    "twitter username, web address, logo, artist logo"
+)
+
 # ---------------------------------------------------------------- mức phân loại
 # Thẻ model WAI v17 liệt kê 4 mức: general / sensitive / nsfw / explicit.
 # Cộng đồng Illustrious cũng dùng dạng rating_* theo chuẩn Danbooru/e621, nên ở đây

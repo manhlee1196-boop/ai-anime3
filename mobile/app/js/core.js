@@ -274,17 +274,72 @@ export function normalisePrompt(text, opts = {}) {
   return all.map((p) => renderTag(p.tag, p.weight)).join(', ');
 }
 
-/** Negative prompt: preset + mức phân loại ngược + phần người dùng nhập, đã khử trùng. */
-export function buildNegative({ preset = '', ratingNegative = [], extra = '' } = {}) {
+/**
+ * Nhóm tag chặn chữ ký / watermark / logo Patreon mà model tự vẽ lên ảnh.
+ * Bản dự phòng của `presets.anti_watermark` (prompt_lib/system_tags.py: ANTI_WATERMARK);
+ * test_mobile_assets đối chiếu hai nơi để không lệch nhau.
+ */
+export const ANTI_WATERMARK = 'watermark, signature, artist name, username, patreon username, '
+  + 'patreon logo, twitter username, web address, logo, artist logo';
+
+/**
+ * Negative prompt: preset + nhóm chặn watermark + mức phân loại ngược + phần người dùng
+ * nhập, đã khử trùng. `guard` rỗng = không chặn watermark.
+ */
+export function buildNegative({ preset = '', ratingNegative = [], extra = '', guard = '' } = {}) {
   const seen = new Set();
   const out = [];
-  for (const piece of parseTags([preset, (ratingNegative || []).join(', '), extra].filter(Boolean).join(', '))) {
+  for (const piece of parseTags([preset, guard, (ratingNegative || []).join(', '), extra].filter(Boolean).join(', '))) {
     const key = normKey(piece.tag);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(renderTag(piece.tag, piece.weight));
   }
   return out.join(', ');
+}
+
+/**
+ * Thêm các tag của `extra` còn thiếu vào cuối `text`. Phần người dùng đã viết được giữ
+ * nguyên từng ký tự (ngoặc nhấn mạnh, BREAK, <lora:...>), chỉ nối thêm phần thiếu.
+ */
+export function mergeTags(text, extra) {
+  const base = String(text ?? '').trim().replace(/[,\s]+$/, '');
+  const seen = new Set(parseTags(base).map((piece) => normKey(piece.tag)));
+  const added = [];
+  for (const piece of parseTags(extra)) {
+    const key = normKey(piece.tag);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    added.push(renderTag(piece.tag, piece.weight));
+  }
+  return [base, added.join(', ')].filter(Boolean).join(', ');
+}
+
+/**
+ * Bỏ khỏi `text` mọi tag có trong `remove` (không phân biệt `_`/khoảng trắng, trọng số);
+ * các mảnh còn lại giữ nguyên cách viết.
+ */
+export function removeTags(text, remove) {
+  const drop = new Set(parseTags(remove).map((piece) => normKey(piece.tag)));
+  return splitPieces(text)
+    .map((raw) => raw.trim())
+    .filter((raw) => {
+      if (!raw) return false;
+      const piece = parseTags(raw)[0];
+      return !piece || piece.special || !drop.has(normKey(piece.tag));
+    })
+    .join(', ');
+}
+
+/** Các tag của `text` nằm trong danh sách `list` — dùng để báo prompt đang tự gọi watermark. */
+export function tagsIn(text, list) {
+  const wanted = new Set(parseTags(list).map((piece) => normKey(piece.tag)));
+  const found = [];
+  for (const piece of parseTags(text)) {
+    const key = normKey(piece.tag);
+    if (!piece.special && wanted.has(key) && !found.includes(key)) found.push(key);
+  }
+  return found;
 }
 
 const SAMPLER_ALIASES = {
@@ -342,6 +397,10 @@ export function payloadWarnings(payload) {
     if (width % 8 || height % 8) out.push('Kích thước nên là bội số của 8.');
   }
   if (Number(payload.cfg_scale) > 10) out.push('CFG trên 10 dễ bết màu; WAI v17 khuyến nghị 5–7.');
+  if (payload.cfg_scale !== undefined && payload.cfg_scale !== null && payload.cfg_scale !== ''
+      && Number(payload.cfg_scale) <= 1) {
+    out.push('CFG 1 bỏ qua negative prompt: không chặn được watermark/chữ ký (chỉ hợp model turbo).');
+  }
   if (Number(payload.steps) > 40) out.push('Trên 40 bước gần như không đẹp thêm mà chậm gấp đôi.');
   if (Array.isArray(payload.init_images) && Number(payload.denoising_strength) > 0.8) {
     out.push('Denoise img2img trên 0,8 có thể thay gần như toàn bộ ảnh gốc.');

@@ -20,7 +20,7 @@ from .limits import (BUDGET_GOOD, BUDGET_MAX, BUDGET_OK, CHUNK_TOKENS, audit_pro
                     compact_prompt, estimate_tokens, summary_line)
 from .styles import PRESETS as STYLE_PRESETS
 from .styles import STYLE_CSV, StyleLibrary, StyleTag, missing_tags
-from .system_tags import (ACTIVE_PROFILE_ID, MODEL_PROFILES, NEGATIVE_PRESETS,
+from .system_tags import (ACTIVE_PROFILE_ID, ANTI_WATERMARK, MODEL_PROFILES, NEGATIVE_PRESETS,
                           QUALITY_PRESETS, RATINGS, SIZE_PRESETS, SYSTEM_TAGS, UPSCALERS,
                           WAI_DEFAULTS, apply_model_profile, pick_upscaler)
 
@@ -31,7 +31,7 @@ __all__ = [
     "norm", "unaccent",
     "CHUNK_TOKENS", "BUDGET_OK", "BUDGET_GOOD", "BUDGET_MAX",
     "audit_prompt", "compact_prompt", "estimate_tokens", "summary_line",
-    "SYSTEM_TAGS", "QUALITY_PRESETS", "NEGATIVE_PRESETS", "RATINGS",
+    "SYSTEM_TAGS", "QUALITY_PRESETS", "NEGATIVE_PRESETS", "ANTI_WATERMARK", "RATINGS",
     "SIZE_PRESETS", "UPSCALERS", "WAI_DEFAULTS", "pick_upscaler",
     "MODEL_PROFILES", "ACTIVE_PROFILE_ID", "apply_model_profile",
     "StyleLibrary", "StyleTag", "STYLE_PRESETS", "STYLE_CSV", "missing_tags",

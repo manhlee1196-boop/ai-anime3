@@ -163,9 +163,11 @@ async function init() {
     splash('Sẵn sàng');
   }
   renderSizeChips();
+  const guardAdded = migrateWatermarkGuard();
   applySettingsToForm();
   updatePromptMeta();
   hideSplash();
+  if (guardAdded) toast('Đã thêm tag chặn watermark / logo Patreon vào negative');
   pingServer();
   firstRunHint();
   renderServerTab();
@@ -387,6 +389,7 @@ function bindEvents() {
     saveSettingsNow();
     rebuildNegative();
   });
+  $('#setBlockWatermark').addEventListener('change', () => setBlockWatermark($('#setBlockWatermark').checked));
   $('#setSampler').addEventListener('change', () => { state.settings.sampler = $('#setSampler').value; saveSettingsNow(); });
   $('#setStylePreset').addEventListener('change', () => {
     const preset = (presets().style_presets || [])[Number($('#setStylePreset').value)];
@@ -541,6 +544,7 @@ function fillSettingsForm() {
   if (!$('#setQuality').options.length && state.data) fillSelects();
   $('#setQuality').value = state.settings.qualityPreset;
   $('#setNegativePreset').value = state.settings.negativePreset;
+  $('#setBlockWatermark').checked = state.settings.blockWatermark !== false;
   $('#setSampler').value = state.settings.sampler;
 }
 
@@ -956,13 +960,60 @@ function appendTags(tags, label = '') {
   toast(`Đã thêm ${added.length} tag${label ? ` · ${label}` : ''}`);
 }
 
+/** Nhóm tag chặn chữ ký/watermark/logo Patreon; rỗng khi người dùng đã tắt công tắc. */
+function watermarkGuard() {
+  if (state.settings.blockWatermark === false) return '';
+  return presets().anti_watermark || core.ANTI_WATERMARK;
+}
+
+/** Negative lấy từ nơi khác (ảnh cũ trong Thư viện) vẫn phải có nhóm chặn nếu đang bật. */
+function withWatermarkGuard(text) {
+  const value = String(text ?? '');
+  const guard = watermarkGuard();
+  return value.trim() && guard ? core.mergeTags(value, guard) : value;
+}
+
+/**
+ * Di trú một lần: app lưu nguyên ô negative vào máy, nên người đã dùng bản cũ sẽ không
+ * bao giờ nhận được nhóm tag chặn watermark nếu chỉ đổi preset. Nối phần còn thiếu vào
+ * negative đã lưu (giữ nguyên phần người dùng tự viết) rồi đánh dấu để không làm lại.
+ */
+function migrateWatermarkGuard() {
+  const settings = state.settings;
+  if (Number(settings.watermarkGuard) >= 1) return false;
+  settings.watermarkGuard = 1;
+  const before = String(settings.negative || '');
+  const after = withWatermarkGuard(before);
+  settings.negative = after;
+  store.saveSettings(settings);
+  return after !== before;
+}
+
 function buildNegativeFor(ratingId) {
   const rating = ratingById(ratingId);
   return core.buildNegative({
     preset: (presets().negative || {})[state.settings.negativePreset] || '',
+    guard: watermarkGuard(),
     ratingNegative: rating.negative || [],
     extra: state.settings.negativeExtra || '',
   });
+}
+
+/** Bật: nối nhóm chặn vào negative hiện có. Tắt: gỡ đúng các tag đó, không đụng phần khác. */
+function setBlockWatermark(enabled) {
+  state.settings.blockWatermark = Boolean(enabled);
+  const field = $('#negative');
+  const tags = presets().anti_watermark || core.ANTI_WATERMARK;
+  if (enabled) {
+    field.value = field.value.trim() ? core.mergeTags(field.value, tags)
+      : buildNegativeFor(state.settings.rating);
+  } else {
+    field.value = core.removeTags(field.value, tags);
+  }
+  updatePromptMeta();
+  saveSettingsNow();
+  toast(enabled ? 'Đã bật chặn watermark / chữ ký / logo Patreon'
+    : 'Đã tắt chặn watermark — model có thể tự vẽ chữ ký, logo');
 }
 
 function rebuildNegative() {
@@ -1036,6 +1087,10 @@ function updatePromptMeta() {
       ...overrides, init_images: state.source ? ['selected'] : [],
       denoising_strength: state.settings.img2imgDenoise,
     }));
+  }
+  const calling = core.tagsIn(text, presets().anti_watermark || core.ANTI_WATERMARK);
+  if (calling.length) {
+    warnings.push(`Prompt đang tự gọi chữ/logo lên ảnh: ${calling.join(', ')} — xoá các tag này nếu không muốn.`);
   }
   const box = $('#promptWarn');
   if (warnings.length) {
@@ -1330,7 +1385,7 @@ async function reuseImage() {
   const item = await store.getImage(state.viewId);
   if (!item) return;
   $('#prompt').value = item.prompt || '';
-  $('#negative').value = item.negative || '';
+  $('#negative').value = withWatermarkGuard(item.negative || '');
   if (item.seed !== null && item.seed !== undefined) {
     state.settings.seed = item.seed;
     $('#seed').value = String(item.seed);
@@ -1357,7 +1412,7 @@ async function useViewImageForImg2Img() {
   if (!accepted) return;
   if (item) {
     $('#prompt').value = item.prompt || $('#prompt').value;
-    $('#negative').value = item.negative || $('#negative').value;
+    $('#negative').value = withWatermarkGuard(item.negative || $('#negative').value);
   }
   setGenerationMode('img2img');
   closeSheet($('#sheetImage'));
