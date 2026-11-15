@@ -21,12 +21,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Install ClamAV and update virus definitions
+      - name: Install ClamAV
         run: |
           sudo apt-get update
           sudo apt-get install --yes clamav
-          sudo freshclam
           clamscan --version
+      - name: Update virus definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl stop clamav-freshclam.service 2>/dev/null || true
+          if ! sudo freshclam --stdout --verbose; then
+            echo "ClamAV definition update failed; retrying once."
+            sleep 10
+            sudo freshclam --stdout --verbose
+          fi
       - name: Download the exact GitHub Release APK and verify its SHA-256
         env:
           GH_TOKEN: ${{ github.token }}
