@@ -27,5 +27,4 @@ android {
 dependencies {
     // Image Generator is published as a separate MediaPipe artifact.
     implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.18")
-    implementation("com.google.mediapipe:tasks-vision:0.10.18")
 }
