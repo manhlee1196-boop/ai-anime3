@@ -62,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -215,6 +216,24 @@ class MainActivity : ComponentActivity() {
         speechRecognizer = null
     }
 
+    fun startVoiceSession(): Boolean = runCatching {
+        val intent = Intent(this, VoiceSessionService::class.java).setAction(VoiceSessionService.ACTION_START)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        true
+    }.getOrDefault(false)
+
+    fun resumeVoiceSession() {
+        if (VoiceSessionState.active.value) {
+            startService(Intent(this, VoiceSessionService::class.java).setAction(VoiceSessionService.ACTION_RESUME))
+        }
+    }
+
+    fun stopVoiceSession() {
+        if (VoiceSessionState.active.value) {
+            startService(Intent(this, VoiceSessionService::class.java).setAction(VoiceSessionService.ACTION_STOP))
+        }
+    }
+
     private fun finishSpeechRecognition(result: Result<String>) {
         val callback = speechResultCallback ?: return
         speechResultCallback = null
@@ -329,6 +348,9 @@ private fun PilotApp(
     var actionStatus by remember { mutableStateOf("") }
     var voiceStatus by remember { mutableStateOf("Nhấn micro để nói một câu tiếng Việt; không nghe nền.") }
     var voiceListening by remember { mutableStateOf(false) }
+    val sessionActive by VoiceSessionState.active.collectAsState()
+    val sessionStatus by VoiceSessionState.status.collectAsState()
+    val pendingSessionCommand by VoiceSessionState.pendingCommand.collectAsState()
     var shizukuStatus by remember { mutableStateOf("Chưa kiểm tra · tùy chọn") }
     val focusManager = LocalFocusManager.current
 
@@ -438,7 +460,7 @@ private fun PilotApp(
                         val visibleAnswer = raw.lineSequence()
                             .filterNot { it.trimStart().startsWith("ACTION_PLAN_JSON:") }
                             .joinToString("\n").trim().ifBlank {
-                                if (plan.isNotEmpty()) "Mình đã soạn một kế hoạch thao tác. Hãy kiểm tra từng bước và duyệt nếu đúng."
+                                if (plan.isNotEmpty()) "Mình đã chuẩn bị một hành động. Hãy kiểm tra nội dung và duyệt riêng nếu đúng."
                                 else "Mình chưa thể thực hiện yêu cầu đó."
                             }
                         messages.add(ChatLine(false, visibleAnswer))
@@ -497,6 +519,45 @@ private fun PilotApp(
             voiceStatus = "Bạn chưa cấp quyền micro. LocalPilot không thu âm."
         }
     }
+    val sessionMicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && activity != null) {
+            VoiceSessionState.setStatus(if (activity.startVoiceSession()) "Đang khởi động phiên nghe ngoại tuyến…" else "Không khởi động được phiên nghe. Hãy mở lại LocalPilot rồi thử lại.")
+        } else {
+            VoiceSessionState.setStatus("Bạn chưa cấp quyền micro. LocalPilot không bắt đầu nghe nền.")
+        }
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        val currentActivity = activity
+        if (currentActivity != null && currentActivity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            VoiceSessionState.setStatus(if (currentActivity.startVoiceSession()) "Đang khởi động phiên nghe ngoại tuyến…" else "Không khởi động được phiên nghe. Hãy thử lại.")
+        } else {
+            sessionMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    val startVoiceSession: () -> Unit = start@{
+        val currentActivity = activity
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            VoiceSessionState.setStatus("Phiên nghe ngoại tuyến cần Android 12 trở lên.")
+            return@start
+        }
+        if (currentActivity == null) {
+            VoiceSessionState.setStatus("Không thể mở phiên nghe lúc này.")
+            return@start
+        }
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+            VoiceSessionState.setStatus("Thiết bị chưa có nhận dạng ngoại tuyến; không dùng dịch vụ trực tuyến thay thế.")
+            return@start
+        }
+        if (Build.VERSION.SDK_INT >= 33 && currentActivity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return@start
+        }
+        if (currentActivity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            sessionMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return@start
+        }
+        VoiceSessionState.setStatus(if (currentActivity.startVoiceSession()) "Đang khởi động phiên nghe ngoại tuyến…" else "Không khởi động được phiên nghe. Hãy thử lại.")
+    }
     val startVoiceInput: () -> Unit = {
         when {
             Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> {
@@ -540,6 +601,31 @@ private fun PilotApp(
                         shizukuStatus = shizukuStatus,
                         onShizukuGrant = { shizukuStatus = requestShizukuPermission() },
                         onShizukuCheck = { runShizukuCheck { result -> shizukuStatus = result } }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    VoiceSessionCard(
+                        active = sessionActive,
+                        status = sessionStatus,
+                        pendingCommand = pendingSessionCommand,
+                        onStart = {
+                            if (voiceListening) VoiceSessionState.setStatus("Hãy kết thúc lượt nhận dạng một lần trước khi bật phiên nghe.")
+                            else startVoiceSession()
+                        },
+                        onStop = { activity?.stopVoiceSession() },
+                        onUseCommand = { command ->
+                            input = command
+                            VoiceSessionState.consumeCommand()
+                            VoiceSessionState.setStatus("Lệnh đã đưa vào ô chat, chưa chạy. Nhấn Gửi để xem phản hồi; thao tác UI cần chụp màn hình và duyệt kế hoạch riêng.")
+                        },
+                        onResume = {
+                            VoiceSessionState.consumeCommand()
+                            if (sessionActive) {
+                                activity?.resumeVoiceSession()
+                                VoiceSessionState.setStatus("Đang tiếp tục nhận lệnh bằng giọng nói ngoại tuyến.")
+                            } else {
+                                VoiceSessionState.setStatus("Đã bỏ lệnh đang chờ. Phiên nghe đã dừng.")
+                            }
+                        }
                     )
                     Spacer(Modifier.height(8.dp))
                     if (messages.isEmpty()) {
@@ -626,7 +712,7 @@ private fun PilotApp(
                         )
                         OutlinedButton(
                             onClick = startVoiceInput,
-                            enabled = modelReady && !busy && !voiceListening,
+                            enabled = modelReady && !busy && !voiceListening && !sessionActive,
                             shape = CircleShape,
                             modifier = Modifier.size(48.dp),
                             contentPadding = PaddingValues(0.dp)
@@ -656,6 +742,55 @@ private fun PilotApp(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun VoiceSessionCard(
+    active: Boolean,
+    status: String,
+    pendingCommand: String?,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onUseCommand: (String) -> Unit,
+    onResume: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Text("PHIÊN NGHE TIẾNG VIỆT", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(status, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 5.dp))
+            if (pendingCommand != null) {
+                Spacer(Modifier.height(9.dp))
+                Text("LỆNH ĐANG CHỜ · CHƯA THỰC HIỆN", color = Color(0xFF76531A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("“$pendingCommand”", color = Ink, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 3.dp))
+                Text("Đưa lệnh vào chat không chạy thao tác. Lệnh điều khiển app cần snapshot và kế hoạch được bạn duyệt riêng.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Button(onClick = { onUseCommand(pendingCommand) }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink)) {
+                        Text("Dùng lệnh trong chat", color = Color.White)
+                    }
+                    TextButton(onClick = onResume) { Text(if (active) "Bỏ qua · nghe tiếp" else "Bỏ lệnh", color = Muted) }
+                }
+                if (active) TextButton(onClick = onStop) { Text("Dừng phiên nghe", color = Color(0xFF9B3D32)) }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    if (active) {
+                        OutlinedButton(onClick = onResume, shape = RoundedCornerShape(12.dp)) { Text("Tiếp tục nghe") }
+                        TextButton(onClick = onStop) { Text("Dừng phiên", color = Color(0xFF9B3D32)) }
+                    } else {
+                        Button(onClick = onStart, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink)) {
+                            Icon(Icons.Default.Mic, null, modifier = Modifier.size(16.dp), tint = Green)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Bắt đầu phiên nghe", color = Color.White)
+                        }
+                    }
+                }
+            }
+            Text("Chỉ nghe sau khi bạn bắt đầu · nhận dạng ngoại tuyến · tự tắt sau 20 phút", color = Muted, fontSize = 10.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }
@@ -789,7 +924,7 @@ private fun ScreenSnapshotCard(text: String, packageName: String?) {
 private fun ActionCard(actions: List<UiAction>, targetPackage: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E7)), border = BorderStroke(1.dp, Color(0xFFF0D8A9))) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Text("DUYỆT KẾ HOẠCH · ${actions.size} BƯỚC", color = Color(0xFF76531A), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("DUYỆT MỘT HÀNH ĐỘNG", color = Color(0xFF76531A), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Text("Chỉ chạy trong app: $targetPackage", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(6.dp))
             actions.forEachIndexed { index, action ->
@@ -801,10 +936,10 @@ private fun ActionCard(actions: List<UiAction>, targetPackage: String, onConfirm
                     }
                 }
             }
-            Text("Chỉ chạy sau khi bạn duyệt. Không gửi biểu mẫu/tin nhắn; không nhập mật khẩu hay mã xác thực.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Text("Chỉ hành động này chạy sau khi bạn duyệt. Mỗi hành động kế tiếp cần kế hoạch và phê duyệt mới. Không gửi biểu mẫu/tin nhắn; không nhập mật khẩu hay mã xác thực.", color = Muted, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
                 Button(onClick = onConfirm, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink)) {
-                    Text("Duyệt & quay lại app", color = Color.White)
+                    Text("Duyệt bước này & quay lại app", color = Color.White)
                 }
                 TextButton(onClick = onCancel) { Text("Hủy", color = Muted) }
             }
@@ -825,7 +960,7 @@ private fun parseActionPlan(planLine: String, screenText: String, userRequest: S
     return try {
         val json = planLine.substringAfter("ACTION_PLAN_JSON:").trim().trim('`')
         val items = JSONArray(json)
-        if (items.length() !in 1..5) return emptyList()
+        if (items.length() != 1) return emptyList()
         val visibleLines = screenText.lineSequence().map { it.trim() }.toSet()
         val plan = ArrayList<UiAction>(items.length())
         var typedChars = 0

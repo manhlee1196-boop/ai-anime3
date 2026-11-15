@@ -265,7 +265,8 @@ class ScreenAccessService : AccessibilityService() {
 
         internal fun queueApprovedPlan(actions: List<UiAction>, targetPackage: String?): Boolean {
             val service = instance() ?: return false
-            if (targetPackage.isNullOrBlank() || actions.isEmpty() || actions.size > 5) return false
+            // Each approved plan is exactly one step so every action requires a fresh user review.
+            if (targetPackage.isNullOrBlank() || actions.size != 1) return false
             if (actions.any { action ->
                     action.label.length !in 2..120 || when (action) {
                         is UiAction.Tap -> BLOCKED_LABELS.any { action.label.contains(it, ignoreCase = true) }
