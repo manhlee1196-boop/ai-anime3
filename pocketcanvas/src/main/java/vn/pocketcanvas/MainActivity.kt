@@ -551,7 +551,7 @@ class MainActivity : Activity() {
     }
 }
 
-private object ModelPackage {
+internal object ModelPackage {
     fun isValid(directory: File): Boolean = findRoot(directory) != null
 
     fun findRoot(start: File): File? {

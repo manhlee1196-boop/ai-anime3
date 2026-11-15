@@ -25,6 +25,7 @@ android {
 }
 
 dependencies {
-    // MediaPipe's on-device Stable Diffusion v1.5 Image Generator API.
-    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    // Image Generator is published as a separate MediaPipe artifact.
+    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.18")
+    implementation("com.google.mediapipe:tasks-vision:0.10.18")
 }
