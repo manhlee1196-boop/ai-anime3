@@ -94,6 +94,8 @@ private val Muted = Color(0xFF687778)
 private val Green = Color(0xFFB6F36A)
 private val Canvas = Color(0xFFF4F7F4)
 private val Border = Color(0xFFE3E9E4)
+private const val MODEL_PREFS_NAME = "localpilot_model_settings"
+private const val ACTIVE_MODEL_PATH_KEY = "active_model_path"
 
 class MainActivity : ComponentActivity() {
     private var shizukuResultCallback: ((String) -> Unit)? = null
@@ -135,12 +137,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val localModel = LocalModel(applicationContext)
-        val modelFile = File(File(filesDir, "models"), "assistant.litertlm")
+        val savedModelPath = getSharedPreferences(MODEL_PREFS_NAME, MODE_PRIVATE)
+            .getString(ACTIVE_MODEL_PATH_KEY, null)
+        val savedModelFile = savedModelPath?.let { File(it) }?.takeIf { it.exists() }
+        val legacyModelFile = File(File(filesDir, "models"), "assistant.litertlm").takeIf { it.exists() }
+        val modelFile = savedModelFile ?: legacyModelFile
         setContent {
             MaterialTheme {
                 PilotApp(
                     model = localModel,
-                    existingModel = modelFile.takeIf { it.exists() },
+                    existingModel = modelFile,
                     accessibilityEnabled = { isScreenAccessEnabled() },
                     openAccessibilitySettings = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                     requestShizukuPermission = { requestShizukuPermission() },
@@ -333,12 +339,25 @@ private fun PilotApp(
                 modelStatus = "Đang nhập model vào bộ nhớ riêng…"
                 runCatching { model.importModel(uri) }
                     .onSuccess { file ->
-                        modelStatus = "Đang nạp model · ${file.length() / (1024 * 1024)} MB"
+                        modelStatus = "Đang nạp ${file.name} · ${file.length() / (1024 * 1024)} MB"
                         runCatching { model.load(file) }
-                            .onSuccess { modelReady = true; modelStatus = "Mô hình đã sẵn sàng · chạy ngoại tuyến" }
-                            .onFailure { modelReady = false; modelStatus = "Không nạp được mô hình: ${it.message ?: "không tương thích"}" }
+                            .onSuccess {
+                                activity.getSharedPreferences(MODEL_PREFS_NAME, 0).edit()
+                                    .putString(ACTIVE_MODEL_PATH_KEY, file.absolutePath).apply()
+                                modelReady = true
+                                modelStatus = "Mô hình đã sẵn sàng · chạy ngoại tuyến"
+                            }
+                            .onFailure {
+                                model.discardImportedModel(file)
+                                modelReady = model.isLoaded
+                                modelStatus = if (modelReady) {
+                                    "Không nạp được model mới: ${it.message ?: "không tương thích"}. Model đang dùng trước đó vẫn được giữ."
+                                } else {
+                                    "Không nạp được mô hình: ${it.message ?: "định dạng LiteRT-LM hoặc kiến trúc không tương thích"}"
+                                }
+                            }
                     }
-                    .onFailure { modelStatus = "Không nhập được model: ${it.message ?: "lỗi đọc tệp"}" }
+                    .onFailure { modelStatus = "Không nhập được model: ${it.message ?: "hãy chọn tệp .litertlm hợp lệ"}" }
                 busy = false
             }
         }
@@ -425,8 +444,17 @@ private fun PilotApp(
                         messages.add(ChatLine(false, visibleAnswer))
                         pendingActions = plan
                         pendingTargetPackage = if (plan.isNotEmpty()) contextualPackage else null
-                        if (planLine != null && plan.isEmpty()) {
-                            actionStatus = "Đã chặn kế hoạch: yêu cầu chưa rõ, nhãn không khớp màn hình hoặc có bước không an toàn."
+                        if (explicitlyRequested && plan.isEmpty()) {
+                            actionStatus = when {
+                                contextualScreen.isNullOrBlank() || contextualPackage.isNullOrBlank() ->
+                                    "Chưa có snapshot app đích. Nhấn “Chụp app khác”, chuyển sang app đó rồi quay lại LocalPilot trước khi yêu cầu thao tác."
+                                !appVisible ->
+                                    "LocalPilot cần ở foreground để tạo kế hoạch; hãy mở lại app rồi thử lại."
+                                planLine != null ->
+                                    "Đã chặn kế hoạch: nhãn không khớp snapshot, yêu cầu nhập chưa đủ rõ hoặc có bước không an toàn."
+                                else ->
+                                    "Model chưa tạo được kế hoạch UI hợp lệ. Thử yêu cầu một thao tác đơn giản trên nhãn/ô đang hiện."
+                            }
                         }
                     }
                     .onFailure {

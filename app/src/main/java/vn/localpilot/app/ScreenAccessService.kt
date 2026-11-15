@@ -112,7 +112,7 @@ class ScreenAccessService : AccessibilityService() {
             is UiAction.Type -> typeIntoField(step.label, step.text)
         }
         if (!success) {
-            finishPlan("Đã chạy $index/${actions.size} bước rồi dừng: nhãn/ô nhập không còn khớp hoặc ứng dụng từ chối thao tác.")
+            finishPlan("Dừng ở bước ${index + 1}/${actions.size}: không tìm thấy hoặc ứng dụng từ chối nhãn/ô “${step.label}”. Thử chụp lại màn hình; chỉ hỗ trợ điều khiển mà app đích công bố qua Trợ năng Android.")
             return
         }
         if (index + 1 == actions.size) {
@@ -201,8 +201,11 @@ class ScreenAccessService : AccessibilityService() {
         return false
     }
 
-    private fun inputHint(node: AccessibilityNodeInfo): String =
-        (node.hintText ?: node.contentDescription)?.toString()?.trim().orEmpty()
+    private fun inputHint(node: AccessibilityNodeInfo): String {
+        val accessibleHint = (node.hintText ?: node.contentDescription)?.toString()?.trim().orEmpty()
+        if (accessibleHint.isNotBlank()) return accessibleHint
+        return node.viewIdResourceName?.substringAfterLast('/')?.takeIf { it.isNotBlank() }?.let { "id:$it" }.orEmpty()
+    }
 
     companion object {
         private const val CAPTURE_DEBOUNCE_MS = 450L

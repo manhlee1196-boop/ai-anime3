@@ -15,47 +15,78 @@ class LocalModel(private val context: Context) {
     private var engine: Engine? = null
     var modelFile: File? = null
         private set
+    val isLoaded: Boolean get() = engine != null
 
     suspend fun importModel(uri: Uri): File = withContext(Dispatchers.IO) {
-        val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else "" }.orEmpty()
+        val providerName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else "" }.orEmpty().trim()
+        val displayName = providerName.ifBlank {
+            Uri.decode(uri.lastPathSegment.orEmpty()).substringAfterLast('/')
+        }
         require(displayName.endsWith(".litertlm", ignoreCase = true)) {
-            "Chỉ nhận model LiteRT-LM có phần mở rộng .litertlm."
+            "Chỉ nhận model LiteRT-LM có đuôi .litertlm (không nhận GGUF, .task hoặc model chỉ có tên khác)."
         }
         val directory = File(context.filesDir, "models").apply { mkdirs() }
-        val file = File(directory, "assistant.litertlm")
-        val temp = File(directory, "assistant.litertlm.part")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            temp.outputStream().buffered().use { output -> input.copyTo(output) }
-        } ?: error("Không mở được tệp mô hình đã chọn.")
-        if (temp.length() < 50L * 1024 * 1024) {
-            temp.delete()
-            error("Tệp quá nhỏ hoặc không phải model LiteRT-LM.")
-        }
-        if (file.exists()) file.delete()
-        check(temp.renameTo(file)) { "Không lưu được model vào bộ nhớ ứng dụng." }
-        modelFile = file
-        file
-    }
-
-    suspend fun load(file: File = modelFile ?: defaultModel()) = withContext(Dispatchers.IO) {
-        engine?.close()
-        engine = null
-        val candidate = Engine(
-            EngineConfig(
-                modelPath = file.absolutePath,
-                cacheDir = context.cacheDir.absolutePath
-            )
-        )
+        val stem = displayName.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9._-]"), "_").take(48).ifBlank { "model" }
+        val unique = "${System.currentTimeMillis()}-${System.nanoTime()}"
+        val file = File(directory, "$stem-$unique.litertlm")
+        val temp = File(directory, "$stem-$unique.part")
         try {
-            candidate.initialize()
-            engine = candidate
-            modelFile = file
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                temp.outputStream().buffered().use { output -> input.copyTo(output) }
+            } ?: error("Không mở được tệp mô hình đã chọn.")
+            require(temp.length() > 0L) { "Tệp mô hình rỗng." }
+            check(temp.renameTo(file)) { "Không lưu được model vào bộ nhớ ứng dụng." }
+            file
         } catch (error: Throwable) {
-            candidate.close()
+            temp.delete()
+            file.delete()
             throw error
         }
     }
+
+    suspend fun load(file: File = modelFile ?: defaultModel()) = withContext(Dispatchers.IO) {
+        val previousFile = modelFile
+        runCatching { engine?.close() }
+        engine = null
+        val candidate = try {
+            newEngine(file)
+        } catch (error: Throwable) {
+            restorePreviousModel(previousFile, file)
+            throw error
+        }
+        try {
+            candidate.initialize()
+        } catch (error: Throwable) {
+            runCatching { candidate.close() }
+            restorePreviousModel(previousFile, file)
+            throw error
+        }
+        engine = candidate
+        modelFile = file
+    }
+
+    fun discardImportedModel(file: File) {
+        if (file != modelFile) file.delete()
+    }
+
+    private fun restorePreviousModel(previousFile: File?, requestedFile: File) {
+        if (previousFile == null || previousFile == requestedFile || !previousFile.exists()) return
+        val restored = runCatching { newEngine(previousFile) }.getOrNull() ?: return
+        runCatching { restored.initialize() }
+            .onSuccess {
+                engine = restored
+                modelFile = previousFile
+            }
+            .onFailure { runCatching { restored.close() } }
+    }
+
+    private fun newEngine(file: File): Engine = Engine(
+        EngineConfig(
+            modelPath = file.absolutePath,
+            cacheDir = context.cacheDir.absolutePath
+        )
+    )
 
     suspend fun respond(userText: String, screenText: String?, recentConversation: String? = null): String =
         withContext(Dispatchers.IO) {
