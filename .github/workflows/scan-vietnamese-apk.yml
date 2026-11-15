@@ -1,0 +1,51 @@
+name: Scan Vietnamese APK
+
+on:
+  push:
+    tags:
+      - "mika-vi-scan-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scan-vietnamese-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  clamav:
+    name: Verify and scan published APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install ClamAV and update virus definitions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clamav
+          sudo freshclam
+          clamscan --version
+      - name: Download the exact GitHub Release APK and verify its SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="manhlee1196-boop/ai-anime3"
+          release_tag="mika-vi-v0.1.43"
+          apk_name="Mika-Vietnamese-preview-0.1.43.apk"
+          mkdir -p scan
+          gh release download "$release_tag" --repo "$repo" --pattern "$apk_name" --dir scan
+          digest="$(gh api "repos/${repo}/releases/tags/${release_tag}" --jq '.assets[] | select(.name == "Mika-Vietnamese-preview-0.1.43.apk") | .digest' | head -n 1)"
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "GitHub did not return a SHA-256 digest for the APK" >&2; exit 1 ;;
+          esac
+          echo "${digest#sha256:}  scan/${apk_name}" | sha256sum --check --strict
+      - name: Scan APK and embedded runtime with ClamAV
+        run: |
+          clamscan --infected --recursive --verbose \
+            --max-filesize=300M --max-scansize=512M --max-recursion=20 \
+            --max-files=200000 scan
