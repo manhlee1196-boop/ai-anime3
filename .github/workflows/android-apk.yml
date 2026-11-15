@@ -38,7 +38,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Assemble debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --no-daemon --stacktrace --console=plain :app:assembleDebug > gradle-build.log 2>&1
+          result=$?
+          if [ "$result" -ne 0 ]; then
+            tail -n 100 gradle-build.log
+            summary=$(grep -E '^e: |^FAILURE:|^\* What went wrong:|^> ' gradle-build.log | tail -n 12 | paste -sd ' | ' -)
+            summary=${summary//%/%25}
+            summary=${summary//$'\r'/%0D}
+            summary=${summary//$'\n'/%0A}
+            echo "::error title=Gradle build failed::$summary"
+            exit "$result"
+          fi
+          cat gradle-build.log
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
