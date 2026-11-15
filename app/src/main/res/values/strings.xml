@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">PocketPilot</string>
+    <string name="accessibility_description">Đọc nội dung đang hiển thị để tìm nút theo yêu cầu và thực hiện thao tác bạn đã xác nhận. Dữ liệu không được gửi khỏi thiết bị.</string>
+</resources>
