@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_disclosure">LocalPilot chỉ đọc nội dung trợ năng khi bạn nhấn “Đọc màn hình”. Ứng dụng chỉ chạm nhãn hoặc thay nội dung trường có nhãn sau khi hiển thị kế hoạch và bạn xác nhận. Nội dung được xử lý trên thiết bị, không ghi log hay gửi lên mạng. Bạn có thể tắt quyền này trong Cài đặt trợ năng.</string>
+</resources>

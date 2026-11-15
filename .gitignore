@@ -1,0 +1,15 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Generated packages and local on-device models
+*.apk
+*.aab
+*.task
+*.litertlm
+*.gguf
+*.tflite
