@@ -38,13 +38,17 @@ Workflow `.github/workflows/pocketcanvas-apk.yml` tự build APK debug khi có t
 2. Tải gói `sd15-mediapipe.zip` từ [cuesetac/sd15-mediapipe trên Hugging Face](https://huggingface.co/cuesetac/sd15-mediapipe) bằng trình duyệt. Chọn gói MediaPipe, không chọn GGUF/stable-diffusion.cpp.
 3. PocketCanvas → **Nhập gói .zip** → chọn ZIP. Model được giải nén vào thư mục riêng tư của app. Cần thêm dung lượng trống để giải nén gói lớn.
 4. Nhấn **Bật API cho LocalMind**. Giữ dịch vụ foreground đang chạy (có thông báo) khi chuyển sang LocalMind.
-5. Trong LocalMind, thêm server loại **OpenAI-compatible**:
+5. Dùng bản LocalMind có mục **Image generation** (cập nhật bản mới nhất nếu chưa thấy), rồi thêm server loại **OpenAI-compatible**:
    - Host: `127.0.0.1`; port: `8765`
    - API key: nhấn **Sao chép API key** trong PocketCanvas rồi dán vào LocalMind
    - Mục **Image Model IDs**: `pocketcanvas-sd15`
 6. Chọn model ảnh `pocketcanvas-sd15` trong LocalMind. LocalMind gửi prompt tới `POST /v1/images/generations`; PocketCanvas chạy model cục bộ và trả PNG dạng base64. Tắt API bằng nút trong app hoặc thông báo foreground.
 
 Lần tải model đầu tiên cần internet trong trình duyệt; sau khi nhập xong, sinh ảnh hoàn toàn offline. Không có trọng số model được commit vào repository vì kích thước lớn và điều khoản phân phối riêng. Đây là Stable Diffusion 1.5 đã chuyển đổi, **không phải model mới được huấn luyện**. App mặc định 10 bước và cho chỉnh 5–20 để giảm tải, nhưng 4 GB RAM không bảo đảm chạy ổn định trên mọi thiết bị; chipset và bộ nhớ trống cũng ảnh hưởng.
+
+### Nếu gặp `StableDiffusionIterateCalculator` / `clCreateImage` / `Invalid image size`
+
+`StableDiffusionIterateCalculator` cho biết MediaPipe thất bại khi chạy graph tạo ảnh, nhưng riêng dòng này chưa xác nhận nguyên nhân là OpenCL. Nếu Logcat có thêm `clCreateImage` hoặc `Invalid image size`, khi đó GPU/OpenCL là một khả năng đáng kiểm tra; driver, giới hạn GPU, tài nguyên khả dụng và gói model đều có thể liên quan. Kiểm tra ZIP MediaPipe đã tải đủ (không phải GGUF), đóng ứng dụng nền rồi thử lại. Lỗi khởi tạo graph thường không được khắc phục chỉ bằng cách giảm số bước. PocketCanvas ghi stack trace trong Logcat với tag `PocketCanvas`; thông báo lỗi hiển thị hãng/model và phiên bản Android để hỗ trợ chẩn đoán.
 
 Tham khảo [MediaPipe Image Generator cho Android](https://developers.google.com/mediapipe/solutions/vision/image_generator/android) và [mã nguồn LocalMind](https://github.com/abdulmominsakib/localmind). MediaPipe hỗ trợ prompt và LoRA; PocketCanvas hiện tích hợp text-to-image cơ bản, chưa huấn luyện LoRA.
 

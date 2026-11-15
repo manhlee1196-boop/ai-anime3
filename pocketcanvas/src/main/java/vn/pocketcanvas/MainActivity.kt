@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -353,9 +354,10 @@ class MainActivity : Activity() {
                     showStatus("Ảnh đã tạo trên điện thoại. Seed: $seed")
                 }
             } catch (error: Exception) {
+                Log.e("PocketCanvas", "Local image generation failed", error)
                 mainHandler.post {
                     setBusy(false)
-                    showStatus("Tạo ảnh thất bại: ${error.message ?: "hãy kiểm tra gói model và bộ nhớ trống"}")
+                    showStatus(ImageGenErrorMessages.explain(error))
                 }
             }
         }

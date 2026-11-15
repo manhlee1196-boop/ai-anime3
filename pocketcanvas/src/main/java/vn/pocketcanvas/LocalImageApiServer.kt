@@ -2,6 +2,7 @@ package vn.pocketcanvas
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -137,8 +138,10 @@ internal class LocalImageApiServer(
             sendJson(socket.getOutputStream(), 200, response)
             onStatus("LocalMind đã nhận ảnh tạo xong. Seed: $seed")
         } catch (error: Exception) {
-            sendError(socket.getOutputStream(), 500, "Không tạo được ảnh cục bộ: ${error.message ?: "lỗi model/bộ nhớ"}", "server_error")
-            onStatus("Tạo ảnh qua LocalMind thất bại; kiểm tra model và bộ nhớ trống.")
+            Log.e("PocketCanvas", "LocalMind image request failed", error)
+            val message = ImageGenErrorMessages.explain(error)
+            sendError(socket.getOutputStream(), 500, message, "server_error")
+            onStatus(message)
         }
     }
 
