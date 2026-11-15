@@ -307,7 +307,7 @@ private fun PilotApp(
     runShizukuCheck: ((String) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
+    val activity = context as? MainActivity
     val messages: SnapshotStateList<ChatLine> = remember { mutableStateListOf() }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(existingModel != null) }

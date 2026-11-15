@@ -260,7 +260,7 @@ class ScreenAccessService : AccessibilityService() {
             }
         }
 
-        fun queueApprovedPlan(actions: List<UiAction>, targetPackage: String?): Boolean {
+        internal fun queueApprovedPlan(actions: List<UiAction>, targetPackage: String?): Boolean {
             val service = instance() ?: return false
             if (targetPackage.isNullOrBlank() || actions.isEmpty() || actions.size > 5) return false
             if (actions.any { action ->
