@@ -2,8 +2,6 @@ package vn.pocketcanvas
 
 import android.app.Activity
 import android.content.Intent
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -39,9 +37,6 @@ class MainActivity : Activity() {
     private var generatedBitmap: Bitmap? = null
     private var modelDirectory: File? = null
     private lateinit var modelStatus: TextView
-    private lateinit var apiStatusText: TextView
-    private lateinit var apiDetailsText: TextView
-    private lateinit var apiButton: Button
     private lateinit var promptInput: EditText
     private lateinit var stepsLabel: TextView
     private lateinit var progress: ProgressBar
@@ -57,27 +52,14 @@ class MainActivity : Activity() {
         window.navigationBarColor = Color.rgb(244, 242, 250)
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         buildUi()
-        LocalImageApiService.statusListener = { message ->
-            runOnUiThread {
-                showStatus(message)
-                if (::apiStatusText.isInitialized) apiStatusText.text = message
-                if (message.startsWith("Không bật được API") || message == "Local API đã tắt.") {
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(API_ENABLED, false).apply()
-                    updateApiUi(false)
-                }
-            }
-        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .remove(LEGACY_API_ENABLED)
+            .remove(LEGACY_API_TOKEN)
+            .apply()
         findInstalledModel()
-        updateApiUi(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(API_ENABLED, false))
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::apiButton.isInitialized) updateApiUi(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(API_ENABLED, false))
     }
 
     override fun onDestroy() {
-        LocalImageApiService.statusListener = null
         worker.shutdown()
         super.onDestroy()
     }
@@ -137,41 +119,6 @@ class MainActivity : Activity() {
         modelActions.addView(secondaryButton("Tải model") { openModelPage() }, LinearLayout.LayoutParams(0, dp(44), 1f))
         modelCard.addView(modelActions)
         page.addView(modelCard, margin(bottom = 12))
-
-        val apiCard = card()
-        apiCard.addView(label("DÙNG MODEL TRONG LOCALMIND"), margin(bottom = 6))
-        apiCard.addView(TextView(this).apply {
-            text = "Bật endpoint ảnh cục bộ, sau đó thêm PocketCanvas vào LocalMind dưới dạng OpenAI-compatible server."
-            textSize = 13f
-            setTextColor(Color.rgb(92, 87, 109))
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }, margin(bottom = 8))
-        apiStatusText = TextView(this).apply {
-            text = "API đang tắt. Cài model trước khi bật."
-            textSize = 12f
-            setTextColor(Color.rgb(112, 106, 130))
-        }
-        apiCard.addView(apiStatusText, margin(bottom = 7))
-        apiDetailsText = TextView(this).apply {
-            textSize = 12f
-            setTextColor(Color.rgb(61, 57, 77))
-            setTextIsSelectable(true)
-            visibility = View.GONE
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            background = rounded(Color.rgb(247, 246, 251), dp(10), Color.rgb(231, 227, 240), dp(1))
-        }
-        apiCard.addView(apiDetailsText, margin(bottom = 8))
-        val apiActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        apiButton = primaryButton("Bật API cho LocalMind").apply {
-            isEnabled = false
-            alpha = 0.5f
-            setOnClickListener { toggleLocalApi() }
-        }
-        apiActions.addView(apiButton, LinearLayout.LayoutParams(0, dp(46), 1f))
-        apiActions.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
-        apiActions.addView(secondaryButton("Sao chép API key") { copyLocalMindConfig() }, LinearLayout.LayoutParams(0, dp(46), 1f))
-        apiCard.addView(apiActions)
-        page.addView(apiCard, margin(bottom = 17))
 
         page.addView(label("MÔ TẢ BỨC ẢNH"), margin(bottom = 7))
         promptInput = EditText(this).apply {
@@ -261,10 +208,6 @@ class MainActivity : Activity() {
     }
 
     private fun importModelZip(uri: Uri) {
-        if (getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(API_ENABLED, false)) {
-            showStatus("Hãy tắt LocalMind API trước khi thay model.")
-            return
-        }
         val displayName = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }.orEmpty()
@@ -398,75 +341,13 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun toggleLocalApi() {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val enabled = prefs.getBoolean(API_ENABLED, false)
-        if (enabled) {
-            stopService(Intent(this, LocalImageApiService::class.java))
-            prefs.edit().putBoolean(API_ENABLED, false).apply()
-            updateApiUi(false)
-            showStatus("Đã gửi yêu cầu tắt LocalMind API.")
-            return
-        }
-        val model = modelDirectory
-        if (model == null || !ModelPackage.isValid(model)) {
-            showStatus("Nhập model hợp lệ trước khi bật API cho LocalMind.")
-            return
-        }
-        val token = getOrCreateApiToken()
-        val intent = Intent(this, LocalImageApiService::class.java)
-            .putExtra(LocalImageApiService.EXTRA_MODEL_PATH, model.absolutePath)
-            .putExtra(LocalImageApiService.EXTRA_TOKEN, token)
-        try {
-            startForegroundService(intent)
-            prefs.edit().putBoolean(API_ENABLED, true).apply()
-            updateApiUi(true)
-            showStatus("Đang bật endpoint cục bộ…")
-        } catch (error: Exception) {
-            prefs.edit().putBoolean(API_ENABLED, false).apply()
-            updateApiUi(false)
-            showStatus("Không bật được local API: ${error.message ?: "kiểm tra quyền thông báo/dịch vụ"}")
-        }
-    }
-
-    private fun getOrCreateApiToken(): String {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        prefs.getString(API_TOKEN, null)?.let { return it }
-        val bytes = ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }
-        val token = android.util.Base64.encodeToString(
-            bytes,
-            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
-        )
-        prefs.edit().putString(API_TOKEN, token).apply()
-        return token
-    }
-
-    private fun updateApiUi(enabled: Boolean) {
-        if (!::apiButton.isInitialized || !::apiStatusText.isInitialized || !::apiDetailsText.isInitialized) return
-        val token = getOrCreateApiToken()
-        apiButton.text = if (enabled) "Tắt API LocalMind" else "Bật API cho LocalMind"
-        apiButton.isEnabled = modelDirectory != null
-        apiButton.alpha = if (apiButton.isEnabled) 1f else 0.5f
-        apiStatusText.text = if (enabled) LocalImageApiService.currentStatus else "API đang tắt. Chỉ lắng nghe trên 127.0.0.1."
-        apiDetailsText.text = "Loại server: OpenAI-compatible\nHost: 127.0.0.1\nPort: ${LocalImageApiServer.PORT}\nAPI path: /v1\nImage model ID: ${LocalImageApiServer.MODEL_ID}\nAPI key: $token"
-        apiDetailsText.visibility = if (enabled) View.VISIBLE else View.GONE
-    }
-
-    private fun copyLocalMindConfig() {
-        val token = getOrCreateApiToken()
-        val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("PocketCanvas API key", token))
-        showStatus("Đã sao chép API key. Dán vào server OpenAI-compatible trong LocalMind.")
-    }
-
     private fun setModelReady(directory: File) {
         modelDirectory = directory
         modelStatus.text = "Đã cài model MediaPipe. Lần chạy đầu sẽ nạp trọng số; cần đủ dung lượng trống."
         modelStatus.setTextColor(Color.rgb(44, 127, 88))
         generateButton.isEnabled = true
         generateButton.alpha = 1f
-        updateApiUi(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(API_ENABLED, false))
-        showStatus("Model đã sẵn sàng. Có thể sinh ảnh tại đây hoặc mở API cho LocalMind.")
+        showStatus("Model đã sẵn sàng. Nhập mô tả để tạo ảnh offline trên điện thoại.")
     }
 
     private fun setBusy(busy: Boolean, message: String? = null) {
@@ -545,8 +426,8 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS = "pocketcanvas"
         private const val MODEL_PATH = "model_path"
-        private const val API_ENABLED = "localmind_api_enabled"
-        private const val API_TOKEN = "localmind_api_token"
+        private const val LEGACY_API_ENABLED = "localmind_api_enabled"
+        private const val LEGACY_API_TOKEN = "localmind_api_token"
         private const val REQUEST_IMPORT = 1001
         private const val REQUEST_SAVE = 1002
         private const val MAX_UNPACKED_BYTES = 5L * 1024 * 1024 * 1024
