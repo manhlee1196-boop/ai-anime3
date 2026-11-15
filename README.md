@@ -38,7 +38,7 @@ Workflow `.github/workflows/pocketcanvas-apk.yml` tự build APK debug khi có t
 2. Tải gói `sd15-mediapipe.zip` từ [cuesetac/sd15-mediapipe trên Hugging Face](https://huggingface.co/cuesetac/sd15-mediapipe) bằng trình duyệt. Chọn gói MediaPipe, không chọn GGUF/stable-diffusion.cpp.
 3. PocketCanvas → **Nhập gói .zip** → chọn ZIP. Model được giải nén vào thư mục riêng tư của app. Cần thêm dung lượng trống để giải nén gói lớn.
 4. Nhấn **Bật API cho LocalMind**. Giữ dịch vụ foreground đang chạy (có thông báo) khi chuyển sang LocalMind.
-5. Dùng bản LocalMind có mục **Image generation** (cập nhật bản mới nhất nếu chưa thấy), rồi thêm server loại **OpenAI-compatible**:
+5. LocalMind cần có tính năng **Image generation**. Tính năng này có trên nhánh `main` của LocalMind (được thêm trong [commit hỗ trợ tạo ảnh](https://github.com/abdulmominsakib/localmind/commit/708e3b528aeceb8ef99db975aab589e936b8ccc6)); bản release chính thức mới nhất mình kiểm tra là `1.9.1+96` (21-10-2026), trước commit đó, nên có thể chưa hỗ trợ. Nếu LocalMind của bạn chưa có mục Image generation, cần dùng build LocalMind mới hơn có tính năng này. Sau đó thêm server loại **OpenAI-compatible**:
    - Host: `127.0.0.1`; port: `8765`
    - API key: nhấn **Sao chép API key** trong PocketCanvas rồi dán vào LocalMind
    - Mục **Image Model IDs**: `pocketcanvas-sd15`
