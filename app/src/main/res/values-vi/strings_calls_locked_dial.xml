@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calls_task_dial_now">Gọi ngay</string>
+    <string name="calls_task_dial_locked">Gọi sau khi khóa màn hình</string>
+    <string name="calls_task_dial_locked_note">Khóa điện thoại này trong vòng 45 giây. Mika sẽ thử gọi một lần bằng số điện thoại, SIM và nhiệm vụ này. Bạn có thể hủy từ thông báo. Tắt màn hình nhưng không thực sự khóa điện thoại sẽ không bắt đầu cuộc gọi.</string>
+    <string name="calls_task_dial_locked_confirm">Xác nhận và chờ khóa màn hình</string>
+</resources>

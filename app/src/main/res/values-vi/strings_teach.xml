@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="teach_title">Hướng dẫn Mika</string>
+    <string name="teach_menu">Hướng dẫn Mika</string>
+    <string name="teach_goal_label">Mục tiêu</string>
+    <string name="teach_goal_hint">Mika cần học điều gì? Viết một câu.</string>
+    <string name="teach_disclosure">Các bước chỉ được lưu trên điện thoại này và chỉ sau khi bạn chạm Bắt đầu hướng dẫn. Nếu đã thiết lập mô hình, khi tạo kỹ năng, bản tóm tắt đã lược bỏ thông tin nhạy cảm về mục tiêu và các bước sẽ được gửi đến mô hình đó. Mật khẩu, mã xác minh và thông tin thanh toán sẽ bị loại bỏ. Nếu chưa thiết lập mô hình, bản nháp được tạo trên điện thoại này và không tải lên đâu cả. Bản nháp chỉ được dùng sau khi bạn chấp nhận; bản nháp chưa được chạy thử.</string>
+    <string name="teach_continue">Tiếp tục</string>
+    <string name="teach_ready_body">Mika sẽ quan sát chứ không thao tác trên điện thoại. Bạn có thể tạm dừng, kết thúc hoặc hủy. Chưa có gì được ghi lại cho đến khi bạn chạm Bắt đầu hướng dẫn.</string>
+    <string name="teach_start">Bắt đầu hướng dẫn</string>
+    <string name="teach_learning">Đang học</string>
+    <string name="teach_paused">Đã tạm dừng</string>
+    <string name="teach_pause">Tạm dừng</string>
+    <string name="teach_resume">Tiếp tục</string>
+    <string name="teach_end">Kết thúc hướng dẫn</string>
+    <string name="teach_discard">Hủy</string>
+    <string name="teach_discard_body">Hủy lần hướng dẫn này và xóa các bước đã lưu?</string>
+    <string name="teach_review">Xem lại</string>
+    <string name="teach_correct">Sửa bước này</string>
+    <string name="teach_clarify">Bước này có ý nghĩa gì?</string>
+    <string name="teach_remove">Xóa</string>
+    <string name="teach_generate">Tạo bản nháp kỹ năng</string>
+    <string name="teach_busy">Một tác vụ đang chạy. Hãy chờ hoàn tất rồi mới hướng dẫn.</string>
+    <string name="teach_need_a11y">Trước khi hướng dẫn, hãy bật Trợ năng. Nếu không, Mika không thể thấy thao tác chạm.</string>
+    <string name="teach_interrupted">Đã dừng hướng dẫn vì ứng dụng khởi động lại hoặc Trợ năng bị tắt. Chưa ghi lại nội dung nào cho đến khi bạn chạm Tiếp tục.</string>
+    <string name="teach_need_goal">Trước tiên, hãy nhập mục tiêu.</string>
+    <string name="teach_secret_goal">Mục tiêu có vẻ chứa mật khẩu hoặc mã nên không được lưu.</string>
+    <string name="teach_draft_failed">Không ghi được bản nháp. Các bước vẫn còn ở đây.</string>
+    <string name="teach_draft_ready">Có bản nháp đang chờ trong Bộ nhớ và kỹ năng. Bản nháp chỉ được dùng sau khi bạn chấp nhận và chưa được chạy thử.</string>
+    <string name="teach_open_drafts">Xem lại bản nháp</string>
+    <string name="teach_no_steps">Không lưu lại bước nào.</string>
+    <string name="teach_blocked_task">Mika đang học từ bạn nên tác vụ này chưa được bắt đầu.</string>
+    <string name="teach_channel">Hướng dẫn</string>
+    <string name="teach_sensitive_note">Đã loại bỏ nội dung nhạy cảm.</string>
+    <string name="teach_insufficient_note">Không đủ thông tin giao diện. Đây không phải thao tác theo tọa độ.</string>
+    <string name="teach_notification">Mika không thao tác trên điện thoại.</string>
+    <string name="teach_no_visible">Không hiển thị được thanh Đang học nên chưa bắt đầu ghi. Không cần cấp quyền thông báo. Lớp phủ Trợ năng phải hiển thị cùng các nút Tạm dừng và Kết thúc.</string>
+    <string name="teach_watch_lost">Thanh Đang học đã biến mất nên quá trình hướng dẫn dừng lại. Không ghi thêm nội dung nào.</string>
+    <string name="teach_shelf_expand">Hiện Hướng dẫn Mika</string>
+    <string name="teach_shelf_collapse">Ẩn Hướng dẫn Mika</string>
+</resources>

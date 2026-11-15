@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notif_channel_prepare">Chuẩn bị chạy nền</string>
+    <string name="notif_preparing">Mika đang chuẩn bị</string>
+    <string name="notif_result_title">Kết quả tác vụ Mika</string>
+    <string name="parallel_second_display_failed">Không thể tạo màn hình ảo thứ hai nên hiện mỗi lần chỉ chạy được một tác vụ</string>
+    <string name="parallel_needs_14">Chạy đồng thời nhiều tác vụ cần Android 14 trở lên</string>
+    <string name="parallel_low_ram">Điện thoại này có ít bộ nhớ nên mỗi lần chỉ chạy một tác vụ</string>
+    <string name="skill_suspended">Kỹ năng này gần đây hoạt động không tốt nên đã tạm dừng</string>
+    <string name="skill_verified">Kỹ năng hoạt động tốt và được dùng thường xuyên: %1$s</string>
+    <string name="skill_learned">Mika đã học một kỹ năng: %1$s</string>
+    <string name="skill_app_draft">Mika ghi lại một số thông tin về %1$s để bạn xem xét</string>
+    <string name="skill_app_revised">Mika sửa ghi chú về %1$s để bạn xem xét</string>
+    <string name="recovered_result">Đã khôi phục kết quả tác vụ</string>
+    <string name="recover_delivery_failed">Tác vụ gần nhất đã hoàn tất nhưng không gửi được thông báo kết quả. Hãy kiểm tra cuộc trò chuyện.</string>
+    <string name="recover_maybe_delivered">Kết quả gần nhất có thể đã được gửi. Hãy kiểm tra cuộc trò chuyện trước để tránh thực hiện hai lần.</string>
+    <string name="recover_interrupted_turn">Tác vụ đã bị gián đoạn. Bạn có thể bắt đầu lại.</string>
+    <string name="recover_interrupted">%1$s: đã bị gián đoạn; bạn có thể khởi động lại trong cuộc trò chuyện</string>
+    <string name="gate_pick_app">“%1$s” hỏi cần dùng mục nào. Vui lòng chọn trên màn hình</string>
+    <string name="gate_pick_system">Hệ thống hỏi cần dùng mục nào. Vui lòng chọn trên màn hình</string>
+    <string name="gate_finish_app">“%1$s” cần bạn thao tác trên màn hình. Chạm Tiếp tục khi xong</string>
+    <string name="gate_finish_unknown">Ứng dụng vừa mở cần bạn thao tác trên màn hình. Chạm Tiếp tục khi xong</string>
+    <string name="gate_moved_away">Bạn đã mở ứng dụng này. Chạm Tiếp tục khi hoàn tất</string>
+    <string name="gate_move_back_failed">Không thể đưa ứng dụng về màn hình Mika. Chạm Tiếp tục để thử lại</string>
+    <string name="gate_shell_down">Mất kết nối điều khiển điện thoại. Chạm Tiếp tục khi kết nối lại (hoặc sửa trong Cài đặt)</string>
+    <plurals name="queue_ahead"><item quantity="other">Đang xếp hàng: còn %1$d tác vụ phía trước</item></plurals>
+    <string name="fail_no_main_model">Chưa có mô hình chính khả dụng. Thêm mô hình hỗ trợ gọi công cụ trong Cài đặt.</string>
+    <string name="fail_model_untested">Mô hình chính chưa vượt qua kiểm tra trên %1$s. Vào Cài đặt › Mô hình › %1$s rồi chạm “Kiểm tra lại”.</string>
+    <string name="fail_no_web">Thiết bị này không có tính năng web nên không thể kiểm tra điều kiện</string>
+    <string name="task_waiting_display">Đang xếp hàng: sẽ bắt đầu sau khi tác vụ khác hoàn tất</string>
+    <string name="task_no_phone_helper">Điều khiển điện thoại chưa sẵn sàng. Hãy hoàn tất “Thiết lập điều khiển điện thoại” trong Mika. Tác vụ web và tệp không bị ảnh hưởng.</string>
+    <string name="task_no_a11y">Dịch vụ trợ năng của Mika đang tắt. Hãy bật Mika trong mục Trợ năng của cài đặt hệ thống.</string>
+    <string name="task_a11y_not_running">Dịch vụ trợ năng của Mika đã bật nhưng Android chưa kết nối. Hãy tắt Mika rồi bật lại trong mục Trợ năng của cài đặt hệ thống. Nếu Android chặn, trước tiên hãy cho phép cài đặt bị hạn chế trong Thông tin ứng dụng của Mika.</string>
+    <string name="task_error">Lỗi tác vụ: %1$s</string>
+    <string name="task_app_blocked">“%1$s” đang bị chặn nên Mika không thể đọc hoặc thao tác. Cho phép ứng dụng trong Cài đặt › Quyền truy cập ứng dụng rồi thử lại.</string>
+    <string name="task_app_this_app">Ứng dụng này</string>
+    <string name="task_app_access_unavailable">Không thể đọc cài đặt quyền truy cập ứng dụng. Đặt lại trong Cài đặt › Quyền truy cập ứng dụng rồi thử lại.</string>
+    <string name="task_app_protected">Bạn cần tự thao tác trên màn hình này; Mika không thể tự động hóa.</string>
+    <string name="task_app_unverified">Không xác định được ứng dụng nào đang mở nên Mika chưa làm gì thêm. Hãy thử lại hoặc mở ứng dụng cần dùng trước.</string>
+    <string name="task_condition_interrupted">Đã gián đoạn kiểm tra điều kiện</string>
+    <string name="task_check_unfinished">Kiểm tra theo lịch chưa hoàn tất: %1$s</string>
+    <string name="task_may_make_sound">Ứng dụng này có thể phát âm thanh</string>
+    <string name="task_notif_title">Mika: %1$s</string>
+    <plurals name="task_active"><item quantity="other">Đang chạy %1$d tác vụ</item></plurals>
+    <plurals name="task_behind"><item quantity="other">Còn %1$d tác vụ cần bạn xử lý</item></plurals>
+    <string name="task_interrupted">Tác vụ đã bị gián đoạn. Bạn có thể bắt đầu lại</string>
+    <string name="task_takeover_queued">Hãy xử lý yêu cầu tiếp quản của tác vụ kia trước, rồi đến tác vụ này</string>
+    <string name="task_too_old">Điều khiển ứng dụng cần Android 12 trở lên. Trò chuyện, web và tác vụ môi trường lệnh vẫn dùng được.</string>
+    <string name="task_shell_died">Trợ lý điều khiển điện thoại đã ngắt kết nối và màn hình ảo đã đóng. Hãy thử lại khi kết nối được khôi phục.</string>
+    <string name="task_running">Đang chạy</string>
+    <string name="channel_task_accepted">Đã nhận yêu cầu — tác vụ của bạn đã được ghi nhận.</string>
+    <string name="task_step_note">Bước %1$d: %2$s</string>
+    <string name="task_wait_unlock">Đang chờ mở khóa</string>
+    <string name="task_wait_unlock_body">Sẽ tiếp tục sau khi bạn mở khóa điện thoại</string>
+    <string name="task_done">Đã hoàn tất tác vụ</string>
+    <string name="task_reason">Lý do: %1$s</string>
+    <string name="task_not_done">Tác vụ chưa hoàn tất</string>
+    <string name="task_stopped">Tác vụ đã dừng</string>
+    <string name="task_stopped_body">Bạn đã dừng tác vụ này</string>
+    <string name="gate_user_on_page">Bạn đang dùng trang này nên Mika đã tạm dừng</string>
+    <string name="task_no_phone_helper_usb">Trợ lý điện thoại đã dừng (thường sau khi khởi động lại). Mở Mika và chạy lại lệnh khởi động qua USB; bạn có thể sao chép lệnh trong “Thiết lập điều khiển điện thoại”. Tác vụ web và tệp không bị ảnh hưởng.</string>
+    <string name="drawer_screens">Màn hình nền</string>
+    <string name="screens_title">Màn hình nền</string>
+    <string name="screens_empty">Hiện không có tác vụ nào đang chạy.</string>
+    <string name="screens_note">Mỗi tác vụ đang chạy có màn hình nền riêng để màn hình của bạn luôn trống. Chạm vào tác vụ để quay lại cuộc trò chuyện.</string>
+    <string name="screens_using_app">Đang dùng %1$s</string>
+    <string name="screens_using_browser">Đang dùng trình duyệt</string>
+    <string name="screens_no_app">Chưa mở ứng dụng nào</string>
+    <string name="screens_app_unknown">Hiện không xác định được ứng dụng đang mở</string>
+    <string name="screens_preview">Hiện màn hình trực tiếp</string>
+    <string name="screens_hide_preview">Ẩn màn hình trực tiếp</string>
+    <string name="screens_waiting">Đang chờ</string>
+    <string name="screens_needs_you">Mika cần bạn</string>
+    <string name="screens_zoom">Phóng to màn hình này</string>
+</resources>

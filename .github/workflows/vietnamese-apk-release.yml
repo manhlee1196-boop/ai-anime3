@@ -1,0 +1,101 @@
+name: Vietnamese APK release
+
+on:
+  push:
+    tags:
+      - "mika-vi-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vietnamese-apk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish side-by-side Vietnamese APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Test and build the side-by-side APK
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug -PdevInstall --stacktrace
+      - name: Prepare APK and release notes
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          version_code="$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)"
+          if [[ -z "$version" || -z "$version_code" ]]; then
+            echo "Could not read versionName/versionCode from app/build.gradle.kts" >&2
+            exit 1
+          fi
+          expected_tag="mika-vi-v${version}"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Tag $GITHUB_REF_NAME must match the app version tag $expected_tag" >&2
+            exit 1
+          fi
+
+          apk_name="Mika-Vietnamese-preview-${version}.apk"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/${apk_name}"
+          (cd dist && sha256sum "$apk_name" > SHA256SUMS.txt)
+          cat > dist/RELEASE_NOTES.md <<EOF
+          ## Mika Tiếng Việt — bản xem trước cộng đồng
+
+          - Phiên bản ứng dụng: ${version} (version code ${version_code})
+          - Tên gói: \`com.wangzan101.mika.dev\`; có thể cài song song với Mika chính thức.
+          - Đây là APK thử nghiệm ký bằng khóa debug, không phải bản phát hành chính thức và không thể cập nhật đè lên ứng dụng Mika chính thức.
+          - Trình cập nhật trong ứng dụng vẫn theo dõi bản chính thức của Mika, không cập nhật bản Việt hóa này. Chữ ký debug trên runner có thể thay đổi giữa các lần build; khi cài bản xem trước mới, có thể cần gỡ bản xem trước cũ trước.
+          - Tải APK, mở tệp trên điện thoại Android và xác nhận cài đặt. Nếu được nhắc, cho phép ứng dụng tải tệp đó cài ứng dụng không rõ nguồn gốc.
+
+          Kiểm tra SHA-256 bằng tệp \`SHA256SUMS.txt\` đi kèm.
+          EOF
+
+          echo "apk_name=${apk_name}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## APK tiếng Việt đã sẵn sàng"
+            echo "- Phiên bản: ${version}"
+            echo "- APK: \`${apk_name}\`"
+            echo "- Gói cài đặt riêng: \`com.wangzan101.mika.dev\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ steps.package.outputs.apk_name }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/${APK_NAME}" \
+            dist/SHA256SUMS.txt \
+            --title "Mika Tiếng Việt v${VERSION}" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --prerelease \
+            --verify-tag
+      - name: Upload Android unit-test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vietnamese-apk-test-results-${{ github.sha }}
+          path: |
+            app/build/test-results/testDebugUnitTest
+            app/build/reports/tests/testDebugUnitTest
+          retention-days: 7
+          if-no-files-found: ignore

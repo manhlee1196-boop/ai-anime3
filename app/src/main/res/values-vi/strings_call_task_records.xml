@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calls_record_brief">Mô tả nhiệm vụ</string>
+    <string name="calls_record_goal">Kết quả mong muốn</string>
+    <string name="calls_record_questions">Câu hỏi cần hỏi</string>
+    <string name="calls_record_context">Thông tin nền</string>
+    <string name="calls_record_constraints">Giới hạn về lời hứa và hành động</string>
+    <string name="calls_record_reuse">Dùng làm nhiệm vụ mới</string>
+    <string name="calls_record_result_unconfirmed">Cuộc gọi đã kết thúc. Hãy xem bản chép lời để xác nhận kết quả; đánh dấu đã xử lý không có nghĩa là mục tiêu đã đạt được.</string>
+</resources>

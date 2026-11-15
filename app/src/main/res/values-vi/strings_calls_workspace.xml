@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calls_default_sim_settings">SIM gọi đi mặc định</string>
+    <string name="calls_device_and_permissions">Thiết bị và quyền</string>
+    <string name="calls_edit_rule">Chỉnh sửa</string>
+    <string name="calls_nav_receive">Trả lời</string>
+    <string name="calls_nav_task">Gọi đi</string>
+    <string name="calls_pause_enable_first">Hãy bật tự động trả lời trước khi tạm dừng.</string>
+    <string name="calls_rule_delay_summary">Độ trễ trả lời: %1$d giây</string>
+    <string name="calls_rule_pause">Tạm dừng</string>
+    <string name="calls_rule_scope">AI sẽ trả lời những ai</string>
+    <string name="calls_sim_ask_each_time">Không chọn SIM ưu tiên</string>
+    <string name="calls_task_back_to_edit">Quay lại chỉnh sửa</string>
+    <string name="calls_task_confirm_dial">Xác nhận và gọi</string>
+    <string name="calls_task_confirm_note">Mika sẽ dùng nội dung tóm tắt này cho cuộc gọi. Cuộc gọi dùng SIM đã chọn và có thể phát sinh phí của nhà mạng và dịch vụ giọng nói thời gian thực.</string>
+    <string name="calls_task_constraints">Những điều không được hứa hẹn</string>
+    <string name="calls_task_context">Thông tin bổ sung</string>
+    <string name="calls_task_filled">Đã thêm</string>
+    <string name="calls_task_goal">Cuộc gọi này cần đạt được điều gì? (bắt buộc)</string>
+    <string name="calls_task_goal_example">Ví dụ: xác nhận còn chỗ vào thứ Sáu và ghi lại giá.</string>
+    <string name="calls_task_limit">%1$d / %2$d ký tự</string>
+    <string name="calls_task_number_hint">Nhập số điện thoại thông thường gồm 7–15 chữ số.</string>
+    <string name="calls_task_one_off">Nội dung tóm tắt chỉ áp dụng cho cuộc gọi này. Tìm cuộc gọi và phần tóm tắt trong mục Lịch sử.</string>
+    <string name="calls_task_optional">Không bắt buộc</string>
+    <string name="calls_task_pick_sim">Chọn SIM cho cuộc gọi này</string>
+    <string name="calls_task_questions">Câu hỏi cần hỏi</string>
+    <string name="calls_task_questions_hint">Mỗi dòng một câu hỏi</string>
+    <string name="calls_task_questions_limit">Tối đa %1$d câu hỏi, mỗi câu không quá %2$d ký tự.</string>
+    <string name="calls_task_replace_action">Thay bản nháp</string>
+    <string name="calls_task_replace_note">Thao tác này thay bản nháp cuộc gọi hiện tại bằng nhiệm vụ trong Lịch sử. Không thực hiện cuộc gọi.</string>
+    <string name="calls_task_replace_title">Thay bản nháp này?</string>
+    <string name="calls_task_review">Xem lại nhiệm vụ cuộc gọi</string>
+    <string name="calls_task_review_blocked">Để gọi, điện thoại phải sẵn sàng và đang rảnh, đồng thời đã chọn SIM.</string>
+    <string name="calls_task_sim_override_summary">Cuộc gọi này: %1$s · SIM ưu tiên: %2$s</string>
+    <string name="calls_voice_settings">Giọng nói</string>
+</resources>

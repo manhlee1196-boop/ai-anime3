@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="jev_title">Mô hình ra quyết định · Jev</string>
+    <string name="jev_row_sub">Tùy chọn chọn ý định và định tuyến</string>
+    <string name="jev_enabled">Dùng mô hình ra quyết định</string>
+    <string name="jev_privacy">Khi bật, yêu cầu, ngữ cảnh hội thoại gần đây và các tuyến ứng viên sẽ được gửi đến nhà cung cấp đã cấu hình để xác định ý định và chọn tuyến. Nếu xảy ra lỗi, Mika dùng mô hình hiện tại. Cài đặt mô hình chính, thị giác và gọn nhẹ vẫn riêng biệt.</string>
+    <string name="jev_provider">Nhà cung cấp</string>
+    <string name="jev_endpoint">Điểm cuối</string>
+    <string name="jev_model">ID mô hình</string>
+    <string name="jev_endpoint_note">Nhập URL điểm cuối SystemOne đầy đủ. Bắt buộc dùng HTTPS, trừ dịch vụ HTTP cục bộ. API key được mã hóa và lưu trên thiết bị này.</string>
+    <string name="jev_invalid">Nhập điểm cuối và ID mô hình hợp lệ. Để bật hoặc kiểm tra, cần có API key.</string>
+    <string name="jev_apply_note">Lưu để áp dụng công tắc và cài đặt kết nối cho các tác vụ mới.</string>
+    <string name="jev_test">Kiểm tra kết nối</string>
+    <string name="jev_test_note">Phép thử chỉ gửi một câu chào cố định và hai lựa chọn đến điểm cuối này. Không gửi hội thoại, màn hình hoặc ký ức của bạn; không lưu thay đổi và không bật dịch vụ.</string>
+    <string name="jev_test_success">Kết nối hoạt động; lựa chọn giả lập đã chính xác.</string>
+    <string name="jev_test_failed">Kiểm tra thất bại. Hãy kiểm tra điểm cuối, mô hình, API key và mạng.</string>
+    <string name="jev_saved">Đã lưu. Tác vụ mới sẽ dùng các cài đặt này.</string>
+    <string name="jev_save_failed">Không lưu được. Các cài đặt đã lưu trước đó không thay đổi.</string>
+</resources>

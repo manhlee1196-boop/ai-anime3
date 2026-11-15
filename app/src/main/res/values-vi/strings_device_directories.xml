@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="device_dirs_title">Thư mục trên thiết bị</string>
+    <string name="device_dirs_explanation">Gợi ý thư mục giúp Mika tìm tệp. Thêm gợi ý không cấp quyền truy cập; cần cấp quyền riêng cho từng thư mục đã lưu.</string>
+    <string name="device_dirs_authorize">Cấp quyền truy cập thư mục</string>
+    <string name="device_dirs_recursive">Bao gồm thư mục con</string>
+    <string name="device_dirs_not_synced">Chưa đồng bộ quyền</string>
+    <string name="device_dirs_synced">Đã đồng bộ quyền</string>
+    <string name="device_dirs_retry_sync">Thử đồng bộ lại</string>
+    <string name="device_dirs_edit_path">Chỉnh sửa đường dẫn thư mục rồi thử lại.</string>
+    <string name="device_dirs_not_authorized">Chưa được cấp quyền</string>
+    <string name="device_dirs_write_failed">Không lưu được cài đặt thư mục. Hãy khởi động lại ứng dụng rồi thử lại.</string>
+    <string name="device_dirs_add">Thêm gợi ý thư mục</string>
+    <string name="device_dirs_edit">Gợi ý thư mục</string>
+    <string name="device_dirs_name">Tên</string>
+    <string name="device_dirs_path">Đường dẫn trên thiết bị</string>
+    <string name="device_dirs_description">Mô tả</string>
+    <string name="device_dirs_invalid">Nhập tên và đường dẫn bộ nhớ dùng chung chưa được sử dụng.</string>
+    <string name="device_dirs_delete">Xóa gợi ý</string>
+    <string name="device_dirs_save">Lưu</string>
+    <string name="device_dirs_cancel">Hủy</string>
+    <string name="device_dirs_available">Có thể truy cập</string>
+    <string name="device_dirs_missing">Không tìm thấy thư mục</string>
+    <string name="device_dirs_denied">Bị từ chối quyền truy cập</string>
+    <string name="device_dirs_unknown">Không có trạng thái</string>
+    <string name="device_dirs_entry">Gợi ý thư mục</string>
+    <string name="device_dirs_entry_sub">Giúp Mika tìm tệp đã tải xuống</string>
+    <string name="device_dirs_source_preset">Đặt sẵn</string>
+    <string name="device_dirs_source_user">Bạn đã chỉnh sửa</string>
+    <string name="device_dirs_source_mika">Mika đã chỉnh sửa</string>
+</resources>

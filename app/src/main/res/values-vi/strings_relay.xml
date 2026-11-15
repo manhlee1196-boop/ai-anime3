@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="relay_transport">Từ xa</string>
+    <string name="relay_pair_title">Ghép nối cổng kết nối từ xa</string>
+    <string name="relay_pair_sub">Tạo mã ghép nối trên trang web của cổng kết nối, rồi nhập địa chỉ và mã bên dưới.</string>
+    <string name="relay_gateway">Cổng kết nối</string>
+    <string name="relay_code">Mã ghép nối</string>
+    <string name="relay_code_hint">Mã dùng một lần từ cổng kết nối của bạn</string>
+    <string name="relay_pair">Ghép nối cổng kết nối</string>
+    <string name="relay_busy">Vui lòng chờ…</string>
+    <string name="relay_enable">Cho phép truy cập từ xa</string>
+    <string name="relay_disabled">Đã ghép nối. Truy cập từ xa đang tắt</string>
+    <string name="relay_online">Đã kết nối cổng kết nối. Đang chờ yêu cầu CLI / MCP</string>
+    <string name="relay_connecting">Đang kết nối với cổng kết nối từ xa…</string>
+    <string name="relay_offline">Mất kết nối. Đang tự động kết nối lại</string>
+    <string name="relay_unauthorized">Ghép nối đã hết hạn hoặc bị thu hồi. Hãy ghép nối lại cổng kết nối.</string>
+    <string name="relay_copy_address">Sao chép địa chỉ MCP</string>
+    <string name="relay_client_help">Sao chép cấu hình vào ứng dụng MCP trên máy tính để kết nối.</string>
+    <string name="relay_unpair">Hủy ghép nối cổng kết nối</string>
+    <string name="relay_unpair_body">Ngắt kết nối điện thoại này khỏi cổng kết nối. Cần có kết nối Internet. Mã truy cập điện thoại không thay đổi.</string>
+    <string name="relay_failed">Không hoàn tất được. Hãy kiểm tra địa chỉ cổng kết nối, kết nối Internet và mã ghép nối. Nếu hủy ghép nối thất bại, quyền truy cập vẫn đang tắt; hãy thử lại hoặc thu hồi điện thoại từ cổng kết nối.</string>
+    <string name="relay_notif_body">Đã bật truy cập từ xa. Mở Mika để kiểm tra kết nối cổng kết nối.</string>
+    <string name="relay_incompatible">Hãy cập nhật Mika và cổng kết nối lên các phiên bản tương thích</string>
+    <string name="relay_copy_gateway">Sao chép địa chỉ cổng kết nối</string>
+    <string name="relay_cli_help">Lưu mã truy cập vào tệp trên máy tính, rồi chạy lệnh kết nối ở trên.</string>
+    <string name="relay_intro">Cổng kết nối chuyển tiếp các yêu cầu CLI và MCP vốn thường được gửi qua Wi-Fi / mạng LAN đến điện thoại để truy cập từ xa. Hãy triển khai cổng này trên máy chủ công khai của riêng bạn trước khi ghép nối.</string>
+    <string name="relay_device_access">Cho phép đánh thức và mở khóa qua cổng kết nối</string>
+    <string name="relay_device_access_sub">Mặc định tắt. Đồng thời cần bật “Cho phép đánh thức và mở khóa từ xa” trên trang này. Khi cả hai mục đều bật, bất kỳ ai có mã truy cập đều có thể đánh thức và mở khóa điện thoại này qua Internet.</string>
+</resources>

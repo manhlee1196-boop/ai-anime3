@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="report_title">Báo cáo tác vụ</string>
+    <string name="report_entry_hint">Kết quả · Chi tiết · Ảnh chụp màn hình</string>
+    <string name="report_no_answer">Không lưu câu trả lời cuối cùng cho tác vụ này.</string>
+    <string name="report_screens">Ảnh chụp màn hình quan trọng</string>
+    <string name="report_view_step">Bước %1$d · Mở phát lại</string>
+    <string name="report_local_note">Được lưu cục bộ cùng bản ghi lần chạy. Ảnh chụp màn hình có thể chứa nội dung trang; chỉ giữ lại 30 lần chạy mới nhất.</string>
+    <string name="playback_title">Phát lại thao tác</string>
+    <string name="playback_empty">Không ghi ảnh chụp màn hình cho tác vụ này.</string>
+    <string name="playback_legacy">Bản ghi cũ: chỉ có ảnh chụp màn hình, không có dấu mốc thao tác.</string>
+    <string name="playback_approximate">Mũi tên chỉ hướng cuộn, không chỉ chính xác vị trí chạm.</string>
+    <string name="playback_marks">Vòng tròn đỏ: chạm · Mũi tên: vuốt</string>
+    <string name="playback_progress">Tiến trình phát lại</string>
+    <string name="playback_pause">Tạm dừng</string>
+    <string name="playback_play">Phát</string>
+    <string name="playback_previous">Trước</string>
+    <string name="playback_next">Tiếp theo</string>
+    <string name="playback_image">Ảnh chụp màn hình tác vụ đã ghi</string>
+    <string name="playback_missing">Không có ảnh chụp màn hình</string>
+    <string name="report_export">Xuất</string>
+    <string name="report_saved">Đã lưu báo cáo</string>
+    <string name="report_save_failed">Không lưu được. Hãy kiểm tra bản ghi và vị trí lưu rồi thử lại.</string>
+    <string name="report_close">Đóng</string>
+    <string name="report_final_page">Trang cuối cùng được ghi lại</string>
+    <string name="playback_stage_start">Bắt đầu</string>
+    <string name="playback_stage_input">Nhập và tìm kiếm</string>
+    <string name="playback_skipped">Đã bỏ qua khung hình không khả dụng: %1$d.</string>
+    <string name="playback_no_mark">Không ghi lại dấu mốc thao tác này.</string>
+    <string name="playback_error_unknown">Lỗi: không ghi lại lý do cụ thể.</string>
+    <string name="playback_result">Kết quả thao tác</string>
+    <string name="playback_element_click">Vòng tròn chỉ vị trí gần đúng của phần tử, không phải điểm chạm thực tế.</string>
+</resources>

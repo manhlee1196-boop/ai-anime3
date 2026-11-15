@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_model_rate_limited">Dịch vụ mô hình đang giới hạn tần suất yêu cầu, kể cả sau khi thử lại. Vui lòng thử lại sau hoặc kiểm tra giới hạn của tài khoản.</string>
+</resources>

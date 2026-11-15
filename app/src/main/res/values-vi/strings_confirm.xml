@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="confirm_note">Mọi thao tác làm phát sinh chi phí đều cần bạn xác nhận mỗi lần.</string>
+    <string name="confirm_pay">Thanh toán</string>
+    <string name="confirm_delete">Xóa</string>
+    <string name="confirm_order">Đặt hàng</string>
+    <string name="confirm_submit">Gửi</string>
+    <string name="confirm_other">Thao tác khác</string>
+    <string name="confirm_root">Lệnh quyền root</string>
+    <string name="confirm_root_where">toàn bộ điện thoại (root)</string>
+    <string name="confirm_title">Cần bạn xác nhận: %1$s</string>
+    <string name="confirm_in_app">Trong %1$s</string>
+    <string name="confirm_target">Đến: %1$s</string>
+    <string name="confirm_content">Nội dung: %1$s</string>
+</resources>

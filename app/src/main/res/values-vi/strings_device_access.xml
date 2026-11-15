@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="device_access_group">Đánh thức và mở khóa từ xa</string>
+    <string name="device_access_title">Cho phép đánh thức và mở khóa từ xa</string>
+    <string name="device_access_sub">Máy tính có mã MCP của bạn có thể đánh thức và mở khóa điện thoại này.</string>
+    <string name="device_access_credential">Thông tin mở khóa màn hình</string>
+    <string name="device_access_no_credential">Chưa cấu hình · chỉ vuốt hoặc không đặt khóa màn hình</string>
+    <string name="device_access_pin_saved">Đã lưu mã PIN · chạm để thay thế</string>
+    <string name="device_access_password_saved">Đã lưu mật khẩu · chạm để thay thế</string>
+    <string name="device_access_blocked">Đã tạm dừng mở khóa · hãy kiểm tra và lưu lại thông tin mở khóa trên điện thoại này</string>
+    <string name="device_access_clear">Xóa thông tin mở khóa đã lưu</string>
+    <string name="device_access_foot">Mặc định tắt. Thông tin xác thực được mã hóa và lưu trên điện thoại này, không bao giờ gửi cho mô hình hoặc máy tính. Nếu nhập sai một lần, các lần thử tiếp theo sẽ bị tạm dừng. Sau khi khởi động lại, trước tiên hãy tự mở khóa điện thoại một lần. Cần thiết lập điều khiển điện thoại.</string>
+    <string name="device_access_pin">Mã PIN</string>
+    <string name="device_access_password">Mật khẩu</string>
+    <string name="device_access_value">Thông tin mở khóa</string>
+    <string name="device_access_value_hint">Nhập thông tin mở khóa màn hình hiện tại</string>
+    <string name="device_access_repeat">Xác nhận</string>
+    <string name="device_access_repeat_hint">Nhập lại</string>
+    <string name="device_access_save">Lưu thông tin mở khóa</string>
+    <string name="device_access_pin_hint">Dùng mã PIN hiện tại gồm 4–16 chữ số. Lưu lại sẽ cho phép thử thêm một lần sau khi có lỗi.</string>
+    <string name="device_access_password_hint">Dùng mật khẩu hiện tại gồm 4–64 ký tự: chữ cái tiếng Anh, chữ số, dấu cách và ký hiệu ASCII thông dụng. Không hỗ trợ ký tự khác và hình vẽ mở khóa.</string>
+    <string name="device_access_save_failed">Không lưu được. Hãy kiểm tra dung lượng điện thoại rồi thử lại.</string>
+</resources>

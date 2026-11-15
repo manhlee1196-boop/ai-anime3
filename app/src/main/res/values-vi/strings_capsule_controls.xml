@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capsule_edge_reveal">Hiện viên nổi</string>
+    <string name="capsule_hide_at_edge">Tự ẩn ở cạnh màn hình</string>
+    <string name="capsule_hide_fullscreen">Ẩn viên nổi khi toàn màn hình</string>
+    <string name="capsule_tile_label">Viên nổi Mika</string>
+    <string name="capsule_tile_enabled">Có trong Cài đặt nhanh</string>
+    <string name="capsule_tile_setup">Mở Mika và thiết lập điều khiển điện thoại để dùng viên nổi.</string>
+    <string name="pip_size_smaller">Thu nhỏ cửa sổ xem trước</string>
+    <string name="pip_size_larger">Phóng to cửa sổ xem trước</string>
+    <string name="pip_size_reset">Đặt lại kích thước xem trước</string>
+</resources>
